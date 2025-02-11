@@ -1,0 +1,23 @@
+/* Custom styles */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* Optional: Anpassungen für die Navigation */
+.navbar {
+    padding: 0.5rem 1rem;
+}
+
+.language-switcher select {
+    min-width: 120px;
+} 

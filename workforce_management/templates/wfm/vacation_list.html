@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Urlaub" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>{% trans "Urlaub" %}</h2>
+    <a href="{% url 'wfm:vacation-request' %}" class="btn btn-primary">
+        {% trans "Urlaub beantragen" %}
+    </a>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>{% trans "Von" %}</th>
+                <th>{% trans "Bis" %}</th>
+                <th>{% trans "Status" %}</th>
+                <th>{% trans "Notizen" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for vacation in vacations %}
+            <tr>
+                <td>{{ vacation.start_date }}</td>
+                <td>{{ vacation.end_date }}</td>
+                <td>
+                    <span class="badge {% if vacation.status == 'APPROVED' %}bg-success
+                                     {% elif vacation.status == 'REJECTED' %}bg-danger
+                                     {% else %}bg-warning{% endif %}">
+                        {{ vacation.get_status_display }}
+                    </span>
+                </td>
+                <td>{{ vacation.notes|default:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center">{% trans "Keine Urlaubsanträge vorhanden" %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 

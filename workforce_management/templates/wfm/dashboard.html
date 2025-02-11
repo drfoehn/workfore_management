@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% trans "Dashboard" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Zeiterfassung Card -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">{% trans "Zeiterfassung" %}</h5>
+            </div>
+            <div class="card-body">
+                <a href="{% url 'wfm:working-hours-add' %}" class="btn btn-primary mb-3">
+                    {% trans "Zeit erfassen" %}
+                </a>
+                <a href="{% url 'wfm:working-hours-list' %}" class="btn btn-outline-primary mb-3">
+                    {% trans "Übersicht" %}
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Urlaub Card -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">{% trans "Urlaub" %}</h5>
+            </div>
+            <div class="card-body">
+                <a href="{% url 'wfm:vacation-request' %}" class="btn btn-primary mb-3">
+                    {% trans "Urlaub beantragen" %}
+                </a>
+                <a href="{% url 'wfm:vacation-list' %}" class="btn btn-outline-primary mb-3">
+                    {% trans "Urlaubsübersicht" %}
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
