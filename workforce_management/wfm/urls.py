@@ -26,4 +26,7 @@ urlpatterns = [
     path('api/working-hours/<str:date>/save/', views.save_working_hours, name='api-save-working-hours'),
     path('api/vacation/request/', views.api_vacation_request, name='api-vacation-request'),
     path('api/time-compensation/request/', views.api_time_compensation_request, name='api-time-compensation-request'),
+    path('therapist/monthly-overview/', views.TherapistMonthlyOverviewView.as_view(), name='therapist-monthly-overview'),
+    path('api/therapist/booking/', views.api_therapist_booking, name='api-therapist-booking'),
+    path('api/therapist/booking/used/', views.api_therapist_booking_used, name='api-therapist-booking-used'),
 ] 

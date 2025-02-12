@@ -11,14 +11,23 @@ from datetime import datetime
 class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ('OWNER', _('Ordinationsinhaber/in')),
-        ('EMPLOYEE', _('Mitarbeiter/in')),
+        ('ASSISTANT', _('Ordinationsassistenz')),
+        ('THERAPIST', _('Therapeut/in')),
     ]
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='EMPLOYEE')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='ASSISTANT')
     hourly_rate = models.DecimalField(
         max_digits=6, 
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))],
         verbose_name=_("Stundenlohn"),
+        null=True,
+        blank=True
+    )
+    room_rate = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name=_("Raummiete pro Stunde"),
         null=True,
         blank=True
     )
@@ -39,20 +48,9 @@ class ScheduleTemplate(models.Model):
     weekday = models.IntegerField(choices=WEEKDAY_CHOICES, verbose_name=_("Wochentag"))
     start_time = models.TimeField(verbose_name=_("Beginn"))
     end_time = models.TimeField(verbose_name=_("Ende"))
-    shift_type = models.CharField(
-        max_length=20,
-        choices=[
-            ('MORNING', _('Vormittag')),
-            ('AFTERNOON', _('Nachmittag')),
-            ('EVENING', _('Abend')),
-            ('OTHER', _('Sonstige')),
-        ],
-        default='MORNING',
-        verbose_name=_("Schicht")
-    )
     
     class Meta:
-        unique_together = ['employee', 'weekday', 'shift_type']
+        unique_together = ['employee', 'weekday']
         verbose_name = _("Arbeitszeit-Vorlage")
         verbose_name_plural = _("Arbeitszeit-Vorlagen")
 
@@ -75,16 +73,6 @@ class WorkingHours(models.Model):
     start_time = models.TimeField(verbose_name=_("Beginn"))
     end_time = models.TimeField(verbose_name=_("Ende"))
     break_duration = models.DurationField(verbose_name=_("Pausendauer"), default='0:00:00')
-    shift_type = models.CharField(
-        max_length=20,
-        choices=[
-            ('MORNING', _('Vormittag')),
-            ('AFTERNOON', _('Nachmittag')),
-            ('EVENING', _('Abend')),
-            ('OTHER', _('Sonstige')),
-        ],
-        verbose_name=_("Schicht"),
-    )
     notes = models.TextField(blank=True, null=True, verbose_name=_("Anmerkungen"))
 
     class Meta:
@@ -93,7 +81,7 @@ class WorkingHours(models.Model):
         ordering = ['-date', '-start_time']
         constraints = [
             models.UniqueConstraint(
-                fields=['employee', 'date', 'shift_type'],
+                fields=['employee', 'date'],
                 name='unique_shift_per_day'
             )
         ]
@@ -202,3 +190,113 @@ class TimeCompensation(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.date} ({self.hours}h)"
+
+class TherapistBooking(models.Model):
+    """Raumbuchungen für Therapeuten"""
+    STATUS_CHOICES = [
+        ('RESERVED', _('Reserviert')),
+        ('USED', _('Verwendet')),
+        ('CANCELLED', _('Storniert')),
+    ]
+
+    therapist = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('Therapeut/in'),
+        limit_choices_to={'role': 'THERAPIST'}
+    )
+    date = models.DateField(_('Datum'))
+    start_time = models.TimeField(_('Von'))
+    end_time = models.TimeField(_('Bis'))
+    status = models.CharField(
+        _('Status'),
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='RESERVED'
+    )
+    actual_hours = models.DecimalField(
+        _('Tatsächlich verwendete Stunden'),
+        max_digits=4,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+    notes = models.TextField(
+        _('Anmerkungen'),
+        blank=True,
+        null=True
+    )
+    created_at = models.DateTimeField(
+        _('Erstellt am'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('Aktualisiert am'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('Raumbuchung')
+        verbose_name_plural = _('Raumbuchungen')
+        ordering = ['-date', 'start_time']
+
+    def __str__(self):
+        return f"{self.therapist} - {self.date} ({self.start_time}-{self.end_time})"
+
+    @property
+    def hours(self):
+        """Berechnet die gebuchten Stunden"""
+        start = datetime.combine(self.date, self.start_time)
+        end = datetime.combine(self.date, self.end_time)
+        duration = end - start
+        return round(duration.total_seconds() / 3600, 2)  # Konvertierung in Stunden
+
+    @property
+    def difference(self):
+        """Berechnet die Differenz zwischen gebuchten und tatsächlichen Stunden"""
+        if self.actual_hours is None:
+            return 0
+        return round(self.actual_hours - self.hours, 2)
+
+class TherapistScheduleTemplate(models.Model):
+    """Vorlage für die Standard-Raumbuchungen"""
+    WEEKDAY_CHOICES = [
+        (0, _('Montag')),
+        (1, _('Dienstag')),
+        (2, _('Mittwoch')),
+        (3, _('Donnerstag')),
+        (4, _('Freitag')),
+        (5, _('Samstag')),
+        (6, _('Sonntag')),
+    ]
+    
+    therapist = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        verbose_name=_("Therapeut/in"),
+        limit_choices_to={'role': 'THERAPIST'}
+    )
+    weekday = models.IntegerField(
+        choices=WEEKDAY_CHOICES,
+        verbose_name=_("Wochentag")
+    )
+    start_time = models.TimeField(verbose_name=_("Beginn"))
+    end_time = models.TimeField(verbose_name=_("Ende"))
+    
+    class Meta:
+        unique_together = ['therapist', 'weekday']
+        verbose_name = _("Raumbuchungs-Vorlage")
+        verbose_name_plural = _("Raumbuchungs-Vorlagen")
+        ordering = ['weekday', 'start_time']
+
+    def __str__(self):
+        return f"{self.therapist} - {self.get_weekday_display()} ({self.start_time}-{self.end_time})"
+
+    @property
+    def hours(self):
+        """Berechnet die Stunden"""
+        start = datetime.combine(datetime.today(), self.start_time)
+        end = datetime.combine(datetime.today(), self.end_time)
+        duration = end - start
+        return round(duration.total_seconds() / 3600, 2)
+

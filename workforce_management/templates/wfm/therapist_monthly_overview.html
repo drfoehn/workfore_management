@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{% trans "Monatsübersicht Therapeut" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-info text-white">
+        <div class="row align-items-center">
+            <div class="col">
+                <h5 class="mb-0">{% trans "Raumnutzung" %}</h5>
+            </div>
+            <div class="col text-end">
+                <span class="badge bg-light text-dark">
+                    {% trans "Stundensatz" %}: {{ request.user.room_rate|floatformat:2 }} €/h
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">{{ month_name }} {{ year }}</h2>
+            <div class="btn-group">
+                <a href="?month={{ month|add:"-1" }}&year={% if month == 1 %}{{ year|add:"-1" }}{% else %}{{ year }}{% endif %}" 
+                   class="btn btn-outline-primary">
+                    &laquo; {% trans "Vorheriger Monat" %}
+                </a>
+                <a href="?month={{ month|add:"1" }}&year={% if month == 12 %}{{ year|add:"1" }}{% else %}{{ year }}{% endif %}" 
+                   class="btn btn-outline-primary">
+                    {% trans "Nächster Monat" %} &raquo;
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>{% trans "Datum" %}</th>
+                        <th class="text-end">{% trans "Reserviert (Std)" %}</th>
+                        <th class="text-end">{% trans "Verwendet (Std)" %}</th>
+                        <th class="text-end">{% trans "Differenz" %}</th>
+                        <th class="text-center">{% trans "Status" %}</th>
+                        <th class="text-center">{% trans "Aktionen" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in days %}
+                    <tr>
+                        <td>{{ day.date|date:"D, d.m.Y" }}</td>
+                        <td class="text-end">{{ day.total_hours|floatformat:2 }}</td>
+                        <td class="text-end">{{ day.used_hours|floatformat:2 }}</td>
+                        <td class="text-end {% if day.difference > 0 %}text-success{% endif %}">
+                            {% if day.difference > 0 %}
+                                +{{ day.difference|floatformat:2 }}
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if day.bookings %}
+                                {% for booking in day.bookings %}
+                                    {% if booking.status == 'USED' %}
+                                        <span class="badge bg-success" title="{% trans 'Verwendet' %}">
+                                            {{ booking.start_time|time:"H:i" }}-{{ booking.end_time|time:"H:i" }}
+                                            ({{ booking.actual_hours|default:booking.hours|floatformat:2 }}h)
+                                            <i class="bi bi-check-lg ms-1"></i>
+                                        </span>
+                                    {% elif booking.status == 'CANCELLED' %}
+                                        <span class="badge bg-danger" title="{% trans 'Storniert' %}">
+                                            {{ booking.start_time|time:"H:i" }}-{{ booking.end_time|time:"H:i" }}
+                                            <i class="bi bi-x-lg ms-1"></i>
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-warning" title="{% trans 'Reserviert' %}">
+                                            {{ booking.start_time|time:"H:i" }}-{{ booking.end_time|time:"H:i" }}
+                                            ({{ booking.hours|floatformat:2 }}h)
+                                            <i class="bi bi-clock ms-1"></i>
+                                        </span>
+                                    {% endif %}
+                                    {% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            {% elif day.schedule %}
+                                {% for template in day.schedule %}
+                                    <span class="badge bg-light text-dark">
+                                        {{ template.start_time|time:"H:i" }}-{{ template.end_time|time:"H:i" }}
+                                        ({{ template.hours|floatformat:2 }}h)
+                                        <i class="bi bi-calendar ms-1"></i>
+                                    </span>
+                                    {% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if day.bookings %}
+                                <button class="btn btn-sm btn-outline-primary"
+                                        onclick="openUsedHoursModal('{{ day.date|date:'Y-m-d' }}', {{ day.total_hours|stringformat:'f' }}, '{{ day.bookings.0.start_time|time:'H:i' }}-{{ day.bookings.0.end_time|time:'H:i' }}')"
+                                        title="{% trans 'Verwendete Stunden bearbeiten' %}">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            {% elif day.schedule %}
+                                <button class="btn btn-sm btn-outline-primary"
+                                        onclick="openUsedHoursModal('{{ day.date|date:'Y-m-d' }}', {{ day.total_hours|stringformat:'f' }}, '{{ day.schedule.0.start_time|time:'H:i' }}-{{ day.schedule.0.end_time|time:'H:i' }}')"
+                                        title="{% trans 'Verwendete Stunden bearbeiten' %}">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-dark">
+                    <tr>
+                        <th>{% trans "Summe" %}</th>
+                        <th class="text-end">{{ total_hours|floatformat:2 }}</th>
+                        <th class="text-end">{{ used_hours|floatformat:2 }}</th>
+                        <th class="text-end {% if total_difference > 0 %}text-success{% endif %}">
+                            {% if total_difference > 0 %}
+                                +{{ total_difference|floatformat:2 }} h
+                            {% else %}
+                                0,00 h
+                            {% endif %}
+                        </th>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <th colspan="5" class="text-end">{% trans "Zu zahlender Betrag" %}</th>
+                        <th class="text-end">{{ total_amount|floatformat:2 }} €</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für verwendete Stunden -->
+<div class="modal fade" id="usedHoursModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">{% trans "Verwendete Stunden eintragen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="usedHoursForm" method="post">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Datum" %}</h6>
+                        <input type="text" class="form-control" id="usedHoursDate" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchter Zeitraum" %}</h6>
+                        <input type="text" class="form-control" id="bookedTimeRange" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchte Stunden" %}</h6>
+                        <input type="text" class="form-control" id="bookedHours" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Tatsächlich verwendete Stunden" %}</h6>
+                        <input type="number" class="form-control" name="actual_hours" step="0.5" required>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Anmerkungen" %}</h6>
+                        <textarea class="form-control" name="notes" rows="3" placeholder="{% trans 'Optionale Anmerkungen' %}"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-success" onclick="submitUsedHours()">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentDate;
+
+function formatDate(dateStr) {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}.${month}.${year}`;
+}
+
+function openUsedHoursModal(date, hours, timeRange) {
+    currentDate = date;
+    document.getElementById('usedHoursDate').value = formatDate(date);
+    document.getElementById('bookedTimeRange').value = timeRange;
+    document.getElementById('bookedHours').value = hours;
+    document.querySelector('#usedHoursForm [name="actual_hours"]').value = hours;
+    
+    new bootstrap.Modal(document.getElementById('usedHoursModal')).show();
+}
+
+function submitUsedHours() {
+    const form = document.getElementById('usedHoursForm');
+    const data = {
+        date: currentDate,
+        actual_hours: form.querySelector('[name="actual_hours"]').value,
+        notes: form.querySelector('[name="notes"]').value
+    };
+    
+    fetch('{% url "wfm:api-therapist-booking-used" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+        },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern der verwendeten Stunden');
+        }
+    })
+    .catch(error => {
+        alert('Ein Fehler ist aufgetreten: ' + error.message);
+    });
+}
+</script>
+{% endblock %} 
