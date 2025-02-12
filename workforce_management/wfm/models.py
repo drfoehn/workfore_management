@@ -3,6 +3,10 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils.translation import gettext_lazy as _
 from decimal import Decimal
+from django.forms import DateField as FormDateField
+from datetime import timedelta
+from django.core.exceptions import ValidationError
+from datetime import datetime
 
 class CustomUser(AbstractUser):
     ROLE_CHOICES = [
@@ -52,28 +56,41 @@ class ScheduleTemplate(models.Model):
         verbose_name = _("Arbeitszeit-Vorlage")
         verbose_name_plural = _("Arbeitszeit-Vorlagen")
 
+class GermanDateField(models.DateField):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def formfield(self, **kwargs):
+        defaults = {
+            'form_class': FormDateField,
+            'input_formats': ['%d.%m.%Y', '%Y-%m-%d']
+        }
+        defaults.update(kwargs)
+        return super().formfield(**defaults)
+
 class WorkingHours(models.Model):
     """Tatsächlich geleistete Arbeitsstunden"""
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     date = models.DateField()
-    start_time = models.TimeField(verbose_name="Beginn")
-    end_time = models.TimeField(verbose_name="Ende")
-    break_duration = models.DurationField(verbose_name="Pausendauer", default='0:30:00')
+    start_time = models.TimeField(verbose_name=_("Beginn"))
+    end_time = models.TimeField(verbose_name=_("Ende"))
+    break_duration = models.DurationField(verbose_name=_("Pausendauer"), default='0:00:00')
     shift_type = models.CharField(
         max_length=20,
         choices=[
-            ('MORNING', 'Vormittag'),
-            ('AFTERNOON', 'Nachmittag'),
-            ('EVENING', 'Abend'),
-            ('OTHER', 'Sonstige'),
+            ('MORNING', _('Vormittag')),
+            ('AFTERNOON', _('Nachmittag')),
+            ('EVENING', _('Abend')),
+            ('OTHER', _('Sonstige')),
         ],
-        default='MORNING',
-        verbose_name="Schicht"
+        verbose_name=_("Schicht"),
     )
-    notes = models.TextField(blank=True, null=True, verbose_name="Anmerkungen")
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Anmerkungen"))
 
     class Meta:
-        # Erlaubt mehrere Einträge pro Tag, aber verhindert Überlappungen
+        verbose_name = _('Arbeitszeit')
+        verbose_name_plural = _('Arbeitszeiten')
+        ordering = ['-date', '-start_time']
         constraints = [
             models.UniqueConstraint(
                 fields=['employee', 'date', 'shift_type'],
@@ -137,3 +154,51 @@ class MonthlyReport(models.Model):
     
     class Meta:
         unique_together = ['employee', 'month', 'year']
+
+class TimeCompensation(models.Model):
+    """Zeitausgleich"""
+    STATUS_CHOICES = [
+        ('REQUESTED', 'Beantragt'),
+        ('APPROVED', 'Genehmigt'),
+        ('REJECTED', 'Abgelehnt'),
+    ]
+
+    employee = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('Mitarbeiter')
+    )
+    date = models.DateField(_('Datum'))
+    hours = models.DecimalField(
+        _('Stunden'),
+        max_digits=4,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    notes = models.TextField(
+        _('Anmerkungen'),
+        blank=True,
+        null=True
+    )
+    status = models.CharField(
+        _('Status'),
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='REQUESTED'
+    )
+    created_at = models.DateTimeField(
+        _('Erstellt am'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('Aktualisiert am'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('Zeitausgleich')
+        verbose_name_plural = _('Zeitausgleiche')
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.employee} - {self.date} ({self.hours}h)"

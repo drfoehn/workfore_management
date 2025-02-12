@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{% trans "Monatsübersicht" %} - {{ block.super }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-info text-white">
+        <div class="row align-items-center">
+            <div class="col">
+                <h5 class="mb-0">{% trans "Verfügbare Zeiten" %}</h5>
+            </div>
+            <div class="col text-end">
+                <span class="badge bg-light text-dark">
+                    {% trans "Urlaub" %}: {{ vacation_days_remaining }}/{{ vacation_days_total }} {% trans "Tage" %}
+                    <button class="btn btn-sm btn-success ms-2" onclick="openVacationModal()">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </span>
+                <span class="badge bg-light text-dark ms-2">
+                    {% trans "Zeitausgleich" %}: {{ overtime_total|floatformat:2 }} {% trans "Stunden" %}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">{{ month_name }} {{ year }}</h2>
+            <div class="btn-group">
+                <a href="?month={{ month|add:"-1" }}&year={% if month == 1 %}{{ year|add:"-1" }}{% else %}{{ year }}{% endif %}" 
+                   class="btn btn-outline-primary">
+                    &laquo; {% trans "Vorheriger Monat" %}
+                </a>
+                <a href="?month={{ month|add:"1" }}&year={% if month == 12 %}{{ year|add:"1" }}{% else %}{{ year }}{% endif %}" 
+                   class="btn btn-outline-primary">
+                    {% trans "Nächster Monat" %} &raquo;
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>{% trans "Datum" %}</th>
+                        <th class="text-end">{% trans "Soll (Std)" %}</th>
+                        <th class="text-end">{% trans "Ist (Std)" %}</th>
+                        <th class="text-center">{% trans "Urlaub" %}</th>
+                        <th class="text-center">{% trans "ZA" %}</th>
+                        <th class="text-end">{% trans "Differenz" %}</th>
+                        <th class="text-center">{% trans "Aktionen" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in days %}
+                    <tr>
+                        <td>{{ day.date|date:"D, d.m.Y" }}</td>
+                        <td class="text-end">{{ day.scheduled|floatformat:2 }}</td>
+                        <td class="text-end">{{ day.actual|floatformat:2 }}</td>
+                        <td class="text-center">
+                            {% if day.vacation %}
+                                {% if day.vacation.status == 'APPROVED' %}
+                                    <span class="badge bg-success" title="{% trans 'Genehmigt' %}">
+                                        <i class="fas fa-check"></i>
+                                    </span>
+                                {% elif day.vacation.status == 'REJECTED' %}
+                                    <span class="badge bg-danger" title="{% trans 'Abgelehnt' %}">
+                                        <i class="fas fa-times"></i>
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-warning" title="{% trans 'Ausstehend' %}">
+                                        <i class="fas fa-question"></i>
+                                    </span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if day.time_compensation %}
+                                {% if day.time_compensation.status == 'APPROVED' %}
+                                    <span class="badge bg-success" title="{% trans 'Genehmigt' %}">
+                                        {{ day.time_compensation.hours|floatformat:2 }} h
+                                        <i class="fas fa-check ms-1"></i>
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-warning" title="{% trans 'Ausstehend' %}">
+                                        {{ day.time_compensation.hours|floatformat:2 }} h
+                                        <i class="fas fa-question ms-1"></i>
+                                    </span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="text-end {% if day.difference < 0 %}text-danger{% elif day.difference > 0 %}text-success{% endif %}">
+                            {{ day.difference|floatformat:2 }}
+                        </td>
+                        <td class="text-center">
+                            <a href="#" onclick="openTimeEntry('{{ day.date|date:'Y-m-d' }}', '{{ day.scheduled }}')" 
+                               class="btn btn-sm btn-outline-primary" 
+                               title="{% trans 'Zeit erfassen/bearbeiten' %}">
+                                <i class="fas fa-clock"></i>
+                            </a>
+                            {% with time_comp=day.time_compensation %}
+                                {% if time_comp %}
+                                    <a href="#" onclick="openTimeCompModal('{{ day.date|date:'Y-m-d' }}')"
+                                       class="btn btn-sm btn-outline-info" 
+                                       title="{% trans 'Zeitausgleich bearbeiten' %}">
+                                        <i class="fas fa-balance-scale"></i>
+                                    </a>
+                                {% else %}
+                                    <a href="#" onclick="openTimeCompModal('{{ day.date|date:'Y-m-d' }}')"
+                                       class="btn btn-sm btn-outline-info" 
+                                       title="{% trans 'Zeitausgleich nehmen' %}">
+                                        <i class="fas fa-balance-scale"></i>
+                                    </a>
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-dark">
+                    <tr>
+                        <th>{% trans "Summe" %}</th>
+                        <th class="text-end">{{ total_scheduled|floatformat:2 }}</th>
+                        <th class="text-end">{{ total_actual|floatformat:2 }}</th>
+                        <td></td>
+                        <th class="text-end {% if total_difference < 0 %}text-danger{% elif total_difference > 0 %}text-success{% endif %}">
+                            {{ total_difference|floatformat:2 }}
+                        </th>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Zeiterfassung -->
+<div class="modal fade" id="timeEntryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">{% trans "Zeit erfassen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="timeEntryForm" method="post">
+                    {% csrf_token %}
+                    <!-- Datum -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Datum" %}</h6>
+                        <input type="text" class="form-control" id="displayDate" readonly>
+                    </div>
+
+                    <!-- Soll-Zeiten -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Soll-Arbeitszeiten" %}</h6>
+                        <div id="scheduleTimes" class="list-group mb-2">
+                            <!-- Wird dynamisch gefüllt -->
+                        </div>
+                        <div class="text-end mt-2">
+                            <strong>{% trans "Gesamt" %}: </strong>
+                            <span id="totalScheduled" class="badge bg-primary"></span>
+                        </div>
+                    </div>
+
+                    <!-- Ist-Zeiten -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Tatsächliche Arbeitszeit" %}</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">{% trans "Von" %}</label>
+                                <input type="time" class="form-control" name="start_time" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{% trans "Bis" %}</label>
+                                <input type="time" class="form-control" name="end_time" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pause -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Pause" %}</h6>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="break_duration" value="30" min="0">
+                            <span class="input-group-text">{% trans "Minuten" %}</span>
+                        </div>
+                    </div>
+
+                    <!-- Notizen -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Notizen" %}</h6>
+                        <textarea class="form-control" name="notes" rows="3" placeholder="{% trans 'Optionale Anmerkungen' %}"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-primary" onclick="submitTimeEntry()">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Urlaubsantrag -->
+<div class="modal fade" id="vacationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">{% trans "Urlaub beantragen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="vacationForm" method="post">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Urlaubszeitraum" %}</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">{% trans "Von" %}</label>
+                                <input type="date" class="form-control" name="start_date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{% trans "Bis" %}</label>
+                                <input type="date" class="form-control" name="end_date" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Anmerkungen" %}</h6>
+                        <textarea class="form-control" name="notes" rows="3" placeholder="{% trans 'Optionale Anmerkungen' %}"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-success" onclick="submitVacation()">{% trans "Beantragen" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Zeitausgleich -->
+<div class="modal fade" id="timeCompModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">{% trans "Zeitausgleich beantragen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="timeCompForm" method="post">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Datum" %}</h6>
+                        <input type="text" class="form-control" id="timeCompDisplayDate" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Stunden" %}</h6>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="hours" step="0.5" required>
+                            <span class="input-group-text">h</span>
+                        </div>
+                        <small class="text-muted">{% trans "Verfügbar" %}: <span id="availableHours"></span> h</small>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Anmerkungen" %}</h6>
+                        <textarea class="form-control" name="notes" rows="3" placeholder="{% trans 'Optionale Anmerkungen' %}"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-info" onclick="submitTimeComp()">{% trans "Beantragen" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentDate; // Global Variable für das aktuelle Datum
+
+function formatDate(dateStr) {
+    // Konvertiere von YYYY-MM-DD zu DD.MM.YYYY
+    const [year, month, day] = dateStr.split('-');
+    return `${day}.${month}.${year}`;
+}
+
+function parseDate(dateStr) {
+    // Konvertiere von DD.MM.YYYY zu YYYY-MM-DD
+    const [day, month, year] = dateStr.split('.');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
+function openTimeEntry(date, scheduled) {
+    currentDate = date;
+    document.getElementById('displayDate').value = formatDate(date);
+    
+    // Vorhandene Daten laden
+    fetch(`{% url 'wfm:api-get-working-hours' date='0000-00-00' %}`.replace('0000-00-00', date))
+        .then(response => response.json())
+        .then(data => {
+            // Soll-Zeiten anzeigen
+            const scheduleContainer = document.getElementById('scheduleTimes');
+            if (data.schedule && data.schedule.length > 0) {
+                scheduleContainer.innerHTML = data.schedule.map(time => `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>${time.start} - ${time.end}</span>
+                        <span class="badge bg-primary">${time.hours} h</span>
+                    </div>
+                `).join('');
+                document.getElementById('totalScheduled').textContent = data.total_scheduled.toFixed(2) + ' h';
+            } else {
+                scheduleContainer.innerHTML = `
+                    <div class="alert alert-info mb-0">
+                        {% trans "Keine Soll-Arbeitszeit eingetragen" %}
+                    </div>`;
+                document.getElementById('totalScheduled').textContent = '0.00 h';
+            }
+
+            if (data.exists) {
+                document.querySelector('[name="start_time"]').value = data.start_time;
+                document.querySelector('[name="end_time"]').value = data.end_time;
+                document.querySelector('[name="break_duration"]').value = data.break_duration;
+                document.querySelector('[name="notes"]').value = data.notes;
+            } else {
+                document.querySelector('[name="start_time"]').value = '';
+                document.querySelector('[name="end_time"]').value = '';
+                document.querySelector('[name="break_duration"]').value = '30';
+                document.querySelector('[name="notes"]').value = '';
+            }
+        });
+    
+    new bootstrap.Modal(document.getElementById('timeEntryModal')).show();
+}
+
+function submitTimeEntry() {
+    const form = document.getElementById('timeEntryForm');
+    
+    // Nur die Arbeitszeit-Daten senden
+    const data = {
+        start_time: form.querySelector('[name="start_time"]').value,
+        end_time: form.querySelector('[name="end_time"]').value,
+        break_duration: form.querySelector('[name="break_duration"]').value,
+        notes: form.querySelector('[name="notes"]').value
+    };
+    
+    fetch(`{% url 'wfm:api-save-working-hours' date='0000-00-00' %}`.replace('0000-00-00', currentDate), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+        },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern der Daten');
+        }
+    })
+    .catch(error => {
+        alert('Ein Fehler ist aufgetreten: ' + error.message);
+    });
+}
+
+function openVacationModal() {
+    const modal = new bootstrap.Modal(document.getElementById('vacationModal'));
+    modal.show();
+}
+
+function submitVacation() {
+    const form = document.getElementById('vacationForm');
+    const data = {
+        start_date: form.querySelector('[name="start_date"]').value,
+        end_date: form.querySelector('[name="end_date"]').value,
+        notes: form.querySelector('[name="notes"]').value
+    };
+    
+    fetch('{% url "wfm:api-vacation-request" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+        },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern des Urlaubsantrags');
+        }
+    })
+    .catch(error => {
+        alert('Ein Fehler ist aufgetreten: ' + error.message);
+    });
+}
+
+function openTimeCompModal(date, scheduled) {
+    currentDate = date;
+    document.getElementById('timeCompDisplayDate').value = formatDate(date);
+    document.querySelector('#timeCompForm [name="hours"]').value = scheduled;
+    document.getElementById('availableHours').textContent = '{{ overtime_total|floatformat:2 }}';
+    
+    new bootstrap.Modal(document.getElementById('timeCompModal')).show();
+}
+
+function submitTimeComp() {
+    const form = document.getElementById('timeCompForm');
+    const data = {
+        date: currentDate,
+        hours: form.querySelector('[name="hours"]').value,
+        notes: form.querySelector('[name="notes"]').value
+    };
+    
+    fetch('{% url "wfm:api-time-compensation-request" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+        },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern des Zeitausgleichs');
+        }
+    })
+    .catch(error => {
+        alert('Ein Fehler ist aufgetreten: ' + error.message);
+    });
+}
+</script>
+{% endblock %} 
