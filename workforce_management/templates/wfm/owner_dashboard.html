@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Admin-Dashboard" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2 d-md-block bg-light sidebar">
+            <div class="position-sticky pt-3">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#pending">
+                            <i class="bi bi-clock"></i> {% trans "Offene Anträge" %}
+                            {% if pending_vacations or pending_time_comps %}
+                                <span class="badge bg-danger">
+                                    {{ pending_vacations.count|add:pending_time_comps.count }}
+                                </span>
+                            {% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#bookings">
+                            <i class="bi bi-calendar"></i> {% trans "Buchungen" %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#employees">
+                            <i class="bi bi-people"></i> {% trans "Mitarbeiter" %}
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Main content -->
+        <div class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <!-- Offene Anträge -->
+            <section id="pending" class="mb-5">
+                <h2 class="border-bottom pb-2">{% trans "Offene Anträge" %}</h2>
+                
+                <!-- Urlaubsanträge -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">{% trans "Urlaubsanträge" %}</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if pending_vacations %}
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>{% trans "Mitarbeiter" %}</th>
+                                            <th>{% trans "Zeitraum" %}</th>
+                                            <th>{% trans "Tage" %}</th>
+                                            <th>{% trans "Aktionen" %}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for vacation in pending_vacations %}
+                                            <tr>
+                                                <td>{{ vacation.employee.get_full_name }}</td>
+                                                <td>{{ vacation.start_date }} - {{ vacation.end_date }}</td>
+                                                <td>{{ vacation.days }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-success" 
+                                                            onclick="approveVacation({{ vacation.id }})">
+                                                        <i class="bi bi-check"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger"
+                                                            onclick="rejectVacation({{ vacation.id }})">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">{% trans "Keine offenen Urlaubsanträge" %}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Zeitausgleichsanträge -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">{% trans "Zeitausgleichsanträge" %}</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if pending_time_comps %}
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>{% trans "Mitarbeiter" %}</th>
+                                            <th>{% trans "Datum" %}</th>
+                                            <th>{% trans "Stunden" %}</th>
+                                            <th>{% trans "Aktionen" %}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for tc in pending_time_comps %}
+                                            <tr>
+                                                <td>{{ tc.employee.get_full_name }}</td>
+                                                <td>{{ tc.date }}</td>
+                                                <td>{{ tc.hours }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-success"
+                                                            onclick="approveTimeComp({{ tc.id }})">
+                                                        <i class="bi bi-check"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger"
+                                                            onclick="rejectTimeComp({{ tc.id }})">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">{% trans "Keine offenen Zeitausgleichsanträge" %}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
+            <!-- Weitere Sektionen... -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function approveVacation(id) {
+    if (confirm('{% trans "Urlaubsantrag genehmigen?" %}')) {
+        updateVacationStatus(id, 'APPROVED');
+    }
+}
+
+function rejectVacation(id) {
+    if (confirm('{% trans "Urlaubsantrag ablehnen?" %}')) {
+        updateVacationStatus(id, 'REJECTED');
+    }
+}
+
+function updateVacationStatus(id, status) {
+    fetch(`{% url 'wfm:api-vacation-status' %}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+        },
+        body: JSON.stringify({
+            vacation_id: id,
+            status: status
+        }),
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error);
+        }
+    })
+    .catch(error => {
+        alert('Ein Fehler ist aufgetreten: ' + error);
+    });
+}
+
+// Ähnliche Funktionen für Zeitausgleich...
+</script>
+{% endblock %} 

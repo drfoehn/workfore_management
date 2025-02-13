@@ -1,0 +1,815 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Kalender" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group">
+                {% if request.user.role == 'THERAPIST' %}
+                    <a href="{% url 'wfm:therapist-monthly-overview' %}?month={{ month }}&year={{ year }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-list"></i> {% trans "Liste" %}
+                    </a>
+                {% else %}
+                    <a href="{% url 'wfm:monthly-overview' %}?month={{ month }}&year={{ year }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-list"></i> {% trans "Liste" %}
+                    </a>
+                {% endif %}
+                <a href="{% url 'wfm:calendar' %}?month={{ month }}&year={{ year }}" 
+                   class="btn btn-primary active">
+                    <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
+                </a>
+            </div>
+            <h2 class="mb-0" id="currentDate">{{ month_name }} {{ year }}</h2>
+            <div class="btn-group">
+                <button class="btn btn-outline-primary" onclick="changeView('month')" id="monthViewBtn">
+                    {% trans "Monat" %}
+                </button>
+                <button class="btn btn-outline-primary" onclick="changeView('week')" id="weekViewBtn">
+                    {% trans "Woche" %}
+                </button>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-outline-primary" onclick="previousPeriod()">
+                    &laquo; {% trans "Zurück" %}
+                </button>
+                <button class="btn btn-outline-primary" onclick="nextPeriod()">
+                    {% trans "Vor" %} &raquo;
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Monatsansicht -->
+        <div id="monthView" class="calendar-view">
+            <div class="calendar-grid">
+                <div class="calendar-header">
+                    <div>{% trans "Mo" %}</div>
+                    <div>{% trans "Di" %}</div>
+                    <div>{% trans "Mi" %}</div>
+                    <div>{% trans "Do" %}</div>
+                    <div>{% trans "Fr" %}</div>
+                    <div>{% trans "Sa" %}</div>
+                    <div>{% trans "So" %}</div>
+                </div>
+                <div class="calendar-body" id="monthGrid">
+                    <!-- Wird durch JavaScript gefüllt -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Wochenansicht -->
+        <div id="weekView" class="calendar-view d-none">
+            <div class="week-grid">
+                <div class="time-column">
+                    {% for hour in hours %}
+                        <div class="hour-cell">
+                            {{ hour|stringformat:"02d" }}:00
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="week-days" id="weekGrid">
+                    <!-- Wird durch JavaScript gefüllt -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Event Details Modal -->
+<div class="modal fade" id="eventModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{% trans "Details" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="eventDetails">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Schließen" %}</button>
+                <button type="button" class="btn btn-primary d-none" id="editEventBtn">{% trans "Bearbeiten" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Therapeuten-Buchungen -->
+<div class="modal fade" id="usedHoursModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">{% trans "Verwendete Stunden eintragen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="usedHoursForm" method="post">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Datum" %}</h6>
+                        <input type="text" class="form-control" id="usedHoursDate" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchte Stunden" %}</h6>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="bookedHours" readonly>
+                            <span class="input-group-text">{% trans "Stunden" %}</span>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Tatsächlich verwendete Stunden" %}</h6>
+                        <div class="row g-2">
+                            <div class="col">
+                                <div class="input-group">
+                                    <select class="form-select" id="actualHours">
+                                        {% for i in "0123456789"|make_list %}
+                                            <option value="{{ i }}">{{ i }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <span class="input-group-text">{% trans "Stunden" %}</span>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="input-group">
+                                    <select class="form-select" id="actualMinutes">
+                                        <option value="0">00</option>
+                                        <option value="15">15</option>
+                                        <option value="30">30</option>
+                                        <option value="45">45</option>
+                                    </select>
+                                    <span class="input-group-text">{% trans "Minuten" %}</span>
+                                </div>
+                            </div>
+                            <input type="hidden" name="actual_hours" required>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Anmerkungen" %}</h6>
+                        <textarea class="form-control" name="notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-success" onclick="submitUsedHours()">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Arbeitszeiten -->
+<div class="modal fade" id="timeEntryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">{% trans "Zeit erfassen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- ... Rest des Arbeitszeit-Modals ... -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.calendar-grid {
+    display: grid;
+    gap: 1px;
+    background: #dee2e6;
+    border: 1px solid #dee2e6;
+}
+
+.calendar-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #f8f9fa;
+    text-align: center;
+    font-weight: bold;
+    padding: 10px 0;
+}
+
+.calendar-body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: white;
+}
+
+.calendar-day {
+    min-height: 100px;
+    padding: 5px;
+    background: white;
+    border: 1px solid #dee2e6;
+}
+
+.calendar-day.other-month {
+    background: #f8f9fa;
+}
+
+.calendar-day.today {
+    background: #fff3cd;
+}
+
+.day-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.day-number {
+    font-weight: bold;
+}
+
+.event {
+    margin: 2px 0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.event.working-hours {
+    background: #cfe2ff;
+    color: #084298;
+}
+
+.event.vacation {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.event.time-comp {
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.event.booking {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.week-grid {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 1px;
+    background: #dee2e6;
+    border: 1px solid #dee2e6;
+}
+
+.time-column {
+    background: #f8f9fa;
+    padding-top: 31px; /* Höhe des week-day-header */
+}
+
+.hour-cell {
+    height: 60px;
+    padding: 5px;
+    text-align: right;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.week-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: white;
+}
+
+.week-day {
+    border-left: 1px solid #dee2e6;
+}
+
+.week-day-header {
+    text-align: center;
+    padding: 5px;
+    font-weight: bold;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    height: 31px; /* Fixe Höhe für Header */
+}
+
+.week-day-grid {
+    position: relative;
+    height: 840px; /* 14 Stunden * 60px */
+}
+
+.week-slot {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 60px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.week-events-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.week-events-container .event {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    text-align: center;
+    padding: 2px;
+    z-index: 1;
+    border-radius: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+}
+
+.week-day {
+    min-width: 150px;
+}
+
+.more-events {
+    color: #0d6efd;
+    cursor: pointer;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+/* Legende Styles */
+.badge {
+    padding: 0.5rem 1rem;
+}
+
+.badge.working-hours {
+    background: #cfe2ff;
+    color: #084298;
+}
+
+.badge.vacation {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.badge.time-comp {
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.badge.booking {
+    background: #f8d7da;
+    color: #842029;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentView = 'month';
+let currentDate = new Date();
+let currentEvents = [];
+
+// Am Anfang des JavaScript-Blocks, nach den Variablen-Deklarationen
+function formatDate(dateStr) {
+    // Konvertiere von YYYY-MM-DD zu DD.MM.YYYY
+    const [year, month, day] = dateStr.split('-');
+    return `${day}.${month}.${year}`;
+}
+
+function parseDate(dateStr) {
+    // Konvertiere von DD.MM.YYYY zu YYYY-MM-DD
+    const [day, month, year] = dateStr.split('.');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
+// Nach den anderen Hilfsfunktionen
+function formatHoursToHHMM(decimalHours) {
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+// Initialisierung
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek'
+        },
+        slotMinTime: '07:00:00',
+        slotMaxTime: '20:00:00',
+        allDaySlot: false,
+        locale: 'de',
+        events: function(info, successCallback, failureCallback) {
+            fetch(`{% url 'wfm:api-calendar-events' %}?year=${info.start.getFullYear()}&month=${info.start.getMonth() + 1}`)
+                .then(response => response.json())
+                .then(data => {
+                    successCallback(data.events);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    failureCallback(error);
+                });
+        },
+        eventClick: function(info) {
+            if (info.event.extendedProps.type === 'booking') {
+                openUsedHoursModal(
+                    info.event.start,
+                    info.event.extendedProps.hours,
+                    `${info.event.start.toTimeString().slice(0,5)}-${info.event.end.toTimeString().slice(0,5)}`,
+                    info.event.extendedProps
+                );
+            }
+        },
+        eventContent: function(arg) {
+            let event = arg.event;
+            let content = document.createElement('div');
+            
+            if (event.extendedProps.type === 'booking') {
+                let status = event.extendedProps.status;
+                let statusIcon = '';
+                
+                if (status === 'USED') {
+                    statusIcon = '<i class="bi bi-check-lg"></i>';
+                } else if (status === 'CANCELLED') {
+                    statusIcon = '<i class="bi bi-x-lg"></i>';
+                } else {
+                    statusIcon = '<i class="bi bi-clock"></i>';
+                }
+                
+                content.innerHTML = `
+                    <div class="fc-content">
+                        <div class="fc-title">${event.title}</div>
+                        <div class="fc-status">${statusIcon}</div>
+                    </div>
+                `;
+            }
+            
+            return { domNodes: [content] };
+        }
+    });
+    calendar.render();
+});
+
+function changeView(view) {
+    currentView = view;
+    document.getElementById('monthView').classList.toggle('d-none', view !== 'month');
+    document.getElementById('weekView').classList.toggle('d-none', view !== 'week');
+    document.getElementById('monthViewBtn').classList.toggle('active', view === 'month');
+    document.getElementById('weekViewBtn').classList.toggle('active', view === 'week');
+    updateCalendar();
+}
+
+function previousPeriod() {
+    if (currentView === 'month') {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+    } else {
+        currentDate.setDate(currentDate.getDate() - 7);
+    }
+    loadEvents(currentDate);
+}
+
+function nextPeriod() {
+    if (currentView === 'month') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    } else {
+        currentDate.setDate(currentDate.getDate() + 7);
+    }
+    loadEvents(currentDate);
+}
+
+function loadEvents(date) {
+    // API-Aufruf für Events
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    
+    fetch(`/api/calendar-events/?year=${year}&month=${month}`)
+        .then(response => response.json())
+        .then(data => {
+            currentEvents = data.events;
+            updateCalendar();
+        });
+}
+
+function updateCalendar() {
+    if (currentView === 'month') {
+        renderMonth();
+    } else {
+        renderWeek();
+    }
+    updateHeader();
+}
+
+function renderMonth() {
+    const grid = document.getElementById('monthGrid');
+    grid.innerHTML = '';
+    
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    
+    // Startposition (0 = Montag, 6 = Sonntag)
+    let startDay = firstDay.getDay() - 1;
+    if (startDay === -1) startDay = 6;
+    
+    // Vormonat
+    for (let i = 0; i < startDay; i++) {
+        const day = new Date(firstDay);
+        day.setDate(day.getDate() - (startDay - i));
+        addDayToGrid(day, true);
+    }
+    
+    // Aktueller Monat
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+        const day = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
+        addDayToGrid(day, false);
+    }
+    
+    // Nächster Monat
+    const remainingDays = 42 - (startDay + lastDay.getDate()); // 42 = 6 Wochen
+    for (let i = 1; i <= remainingDays; i++) {
+        const day = new Date(lastDay);
+        day.setDate(day.getDate() + i);
+        addDayToGrid(day, true);
+    }
+}
+
+function addDayToGrid(date, otherMonth) {
+    const grid = document.getElementById('monthGrid');
+    const dayDiv = document.createElement('div');
+    dayDiv.className = `calendar-day${otherMonth ? ' other-month' : ''}`;
+    
+    // Header mit Datum
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    header.innerHTML = `<span class="day-number">${date.getDate()}</span>`;
+    dayDiv.appendChild(header);
+    
+    // Events für diesen Tag
+    const dayEvents = currentEvents.filter(event => {
+        const eventDate = new Date(event.start);
+        return eventDate.toDateString() === date.toDateString();
+    });
+    
+    dayEvents.forEach(event => {
+        const eventDiv = document.createElement('div');
+        eventDiv.className = `event ${event.type}`;
+        eventDiv.style.backgroundColor = event.color;
+        eventDiv.style.color = getContrastColor(event.color);
+        
+        const startTime = new Date(event.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const endTime = new Date(event.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        eventDiv.innerHTML = `${startTime}-${endTime} ${event.nickname}`;
+        eventDiv.onclick = (e) => {
+            if (event.editable) {
+                e.stopPropagation();
+                if (event.type === 'booking') {
+                    openUsedHoursModal(event.start.split('T')[0], event.hours, `${startTime}-${endTime}`, event);
+                } else if (event.type === 'working_hours') {
+                    openTimeEntry(event.start.split('T')[0], event.scheduled);
+                }
+            } else {
+                showEventDetails(event);
+            }
+        };
+        dayDiv.appendChild(eventDiv);
+    });
+    
+    grid.appendChild(dayDiv);
+}
+
+function getContrastColor(hexcolor) {
+    // Konvertiere Hex zu RGB
+    const r = parseInt(hexcolor.substr(1,2), 16);
+    const g = parseInt(hexcolor.substr(3,2), 16);
+    const b = parseInt(hexcolor.substr(5,2), 16);
+    
+    // Berechne Helligkeit
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return (yiq >= 128) ? 'black' : 'white';
+}
+
+function showEventDetails(event) {
+    const modal = document.getElementById('eventModal');
+    const details = document.getElementById('eventDetails');
+    const editBtn = document.getElementById('editEventBtn');
+    
+    const startTime = new Date(event.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const endTime = new Date(event.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    details.innerHTML = `
+        <div class="mb-3">
+            <strong>${event.title}</strong>
+        </div>
+        <div>
+            <i class="bi bi-clock"></i> ${startTime} - ${endTime}
+        </div>
+    `;
+    
+    // Edit-Button anzeigen/verstecken und Klick-Handler setzen
+    if (event.editable) {
+        editBtn.classList.remove('d-none');
+        editBtn.onclick = () => {
+            if (event.type === 'booking') {
+                openUsedHoursModal(event.start.split('T')[0], event.hours, `${startTime}-${endTime}`, event);
+            } else if (event.type === 'working_hours') {
+                openTimeEntry(event.start.split('T')[0], event.scheduled);
+            }
+            bootstrap.Modal.getInstance(modal).hide();
+        };
+    } else {
+        editBtn.classList.add('d-none');
+    }
+    
+    new bootstrap.Modal(modal).show();
+}
+
+function updateHeader() {
+    const monthNames = [
+        "Januar", "Februar", "März", "April", "Mai", "Juni",
+        "Juli", "August", "September", "Oktober", "November", "Dezember"
+    ];
+    document.getElementById('currentDate').textContent = 
+        `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+}
+
+function renderWeek() {
+    const weekGrid = document.getElementById('weekGrid');
+    weekGrid.innerHTML = '';
+    
+    // Berechne Start- und Endtag der Woche (Montag bis Sonntag)
+    const weekStart = new Date(currentDate);
+    weekStart.setDate(currentDate.getDate() - currentDate.getDay() + 1);
+    if (weekStart.getDay() === 0) weekStart.setDate(weekStart.getDate() - 7);
+    
+    // Erstelle Spalten für jeden Tag
+    for (let i = 0; i < 7; i++) {
+        const currentDay = new Date(weekStart);
+        currentDay.setDate(weekStart.getDate() + i);
+        
+        const dayColumn = document.createElement('div');
+        dayColumn.className = 'week-day';
+        
+        // Header für den Tag
+        const header = document.createElement('div');
+        header.className = 'week-day-header';
+        const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+        header.innerHTML = `${dayNames[i]}, ${currentDay.getDate()}.${currentDay.getMonth() + 1}.`;
+        dayColumn.appendChild(header);
+        
+        // Grid für die Stunden
+        const grid = document.createElement('div');
+        grid.className = 'week-day-grid';
+        
+        // Events für diesen Tag
+        const dayEvents = currentEvents.filter(event => {
+            const eventDate = new Date(event.start);
+            return eventDate.toDateString() === currentDay.toDateString();
+        });
+        
+        // Container für die Events
+        const eventsContainer = document.createElement('div');
+        eventsContainer.className = 'week-events-container';
+        
+        // Events positionieren
+        dayEvents.forEach(event => {
+            const eventDiv = document.createElement('div');
+            eventDiv.className = `event ${event.type}`;
+            eventDiv.style.backgroundColor = event.color;
+            eventDiv.style.color = getContrastColor(event.color);
+            
+            // In der Wochenansicht nur den Nickname anzeigen
+            eventDiv.innerHTML = event.nickname;
+            eventDiv.onclick = (e) => {
+                if (event.editable) {
+                    e.stopPropagation();
+                    if (event.type === 'booking') {
+                        openUsedHoursModal(event.start.split('T')[0], event.hours, `${event.start.split('T')[1]}-${event.end.split('T')[1]}`, event);
+                    } else if (event.type === 'working_hours') {
+                        openTimeEntry(event.start.split('T')[0], event.scheduled);
+                    }
+                } else {
+                    showEventDetails(event);
+                }
+            };
+            
+            // Position und Höhe des Events berechnen
+            const startTime = new Date(event.start);
+            const endTime = new Date(event.end);
+            
+            const dayStart = new Date(startTime).setHours(7, 0, 0, 0);
+            const totalMinutes = 14 * 60; // 14 Stunden in Minuten
+            
+            const startMinutes = (startTime.getHours() - 7) * 60 + startTime.getMinutes();
+            const duration = (endTime.getHours() - startTime.getHours()) * 60 + (endTime.getMinutes() - startTime.getMinutes());
+            
+            const top = (startMinutes / totalMinutes) * 100;
+            const height = (duration / totalMinutes) * 100;
+            
+            eventDiv.style.top = `${top}%`;
+            eventDiv.style.height = `${height}%`;
+            
+            eventsContainer.appendChild(eventDiv);
+        });
+        
+        // Stunden-Slots erstellen
+        for (let hour = 7; hour < 21; hour++) {
+            const slot = document.createElement('div');
+            slot.className = 'week-slot';
+            grid.appendChild(slot);
+        }
+        
+        grid.appendChild(eventsContainer);
+        dayColumn.appendChild(grid);
+        weekGrid.appendChild(dayColumn);
+    }
+}
+
+function openUsedHoursModal(date, hours, timeRange, event) {
+    document.getElementById('usedHoursDate').value = formatDate(date);
+    document.getElementById('usedHoursForm').dataset.bookingId = event.booking_id;
+    
+    // Zeige die gebuchten Stunden im Format HH:MM
+    const formattedBookedHours = formatHoursToHHMM(hours || 0);
+    document.getElementById('bookedHours').value = formattedBookedHours;
+    
+    // Verwende actual_hours falls vorhanden, sonst die gebuchten Stunden
+    const actualHours = event.actual_hours !== null ? event.actual_hours : hours;
+    
+    // Setze die Dropdown-Werte basierend auf den tatsächlichen Stunden
+    const hoursValue = Math.floor(actualHours || 0);
+    const minutesValue = Math.round(((actualHours || 0) % 1) * 60);
+    
+    // Runde Minuten auf nächste verfügbare Option (0, 15, 30, 45)
+    const roundedMinutes = Math.round(minutesValue / 15) * 15;
+    
+    document.getElementById('actualHours').value = hoursValue;
+    document.getElementById('actualMinutes').value = roundedMinutes;
+    
+    // Event-Listener für die Dropdowns
+    document.getElementById('actualHours').onchange = updateActualHours;
+    document.getElementById('actualMinutes').onchange = updateActualHours;
+    
+    // Initial setzen
+    updateActualHours();
+    
+    new bootstrap.Modal(document.getElementById('usedHoursModal')).show();
+}
+
+function updateActualHours() {
+    const hours = parseInt(document.getElementById('actualHours').value);
+    const minutes = parseInt(document.getElementById('actualMinutes').value);
+    const decimalHours = hours + (minutes / 60);
+    document.querySelector('[name="actual_hours"]').value = decimalHours.toFixed(2);
+}
+
+function submitUsedHours() {
+    const form = document.getElementById('usedHoursForm');
+    const date = parseDate(document.getElementById('usedHoursDate').value);
+    const bookingId = form.dataset.bookingId;
+    
+    const data = {
+        booking_id: bookingId,
+        date: date,
+        actual_hours: parseFloat(form.querySelector('[name="actual_hours"]').value),
+        notes: form.querySelector('[name="notes"]').value
+    };
+    
+    fetch('{% url "wfm:api-therapist-booking-used" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+        },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern der verwendeten Stunden');
+        }
+    })
+    .catch(error => {
+        alert('Ein Fehler ist aufgetreten: ' + error.message);
+    });
+}
+
+function openTimeEntry(date, scheduled) {
+    window.location.href = `{% url 'wfm:working-hours-check' %}?date=${date}`;
+}
+</script>
+{% endblock %}

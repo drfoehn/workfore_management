@@ -4,41 +4,93 @@
 {% block title %}{% trans "Arbeitszeiten" %} - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>{% trans "Arbeitszeiten" %}</h2>
-    <a href="{% url 'wfm:working-hours-add' %}" class="btn btn-primary">
-        {% trans "Neue Zeit erfassen" %}
-    </a>
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
+        <a href="{% url 'wfm:working-hours-add' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> {% trans "Neue Arbeitszeit" %}
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>{% trans "Datum" %}</th>
+                        <th>{% trans "Mitarbeiter" %}</th>
+                        <th>{% trans "Nickname" %}</th>
+                        <th>{% trans "Von" %}</th>
+                        <th>{% trans "Bis" %}</th>
+                        <th>{% trans "Pause" %}</th>
+                        <th>{% trans "Stunden" %}</th>
+                        <th>{% trans "Aktionen" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for wh in working_hours %}
+                        <tr>
+                            <td>{{ wh.date }}</td>
+                            <td>{{ wh.employee.get_full_name }}</td>
+                            <td>
+                                <span class="badge" style="background-color: {{ wh.employee.color }}">
+                                    {{ wh.employee.username }}
+                                </span>
+                            </td>
+                            <td>{{ wh.start_time|time:"H:i" }}</td>
+                            <td>{{ wh.end_time|time:"H:i" }}</td>
+                            <td>{{ wh.break_duration }}</td>
+                            <td>{{ wh.hours|floatformat:2 }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{% url 'wfm:working-hours-edit' wh.id %}" 
+                                       class="btn btn-sm btn-outline-primary"
+                                       title="{% trans 'Bearbeiten' %}">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button type="button" 
+                                            class="btn btn-sm btn-outline-danger"
+                                            onclick="deleteWorkingHours({{ wh.id }})"
+                                            title="{% trans 'Löschen' %}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center">{% trans "Keine Arbeitszeiten gefunden" %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
+{% endblock %}
 
-<div class="table-responsive">
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>{% trans "Datum" %}</th>
-                <th>{% trans "Von" %}</th>
-                <th>{% trans "Bis" %}</th>
-                <th>{% trans "Pause" %}</th>
-                <th>{% trans "Schicht" %}</th>
-                <th>{% trans "Notizen" %}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for hours in working_hours %}
-            <tr>
-                <td>{{ hours.date }}</td>
-                <td>{{ hours.start_time }}</td>
-                <td>{{ hours.end_time }}</td>
-                <td>{{ hours.break_duration }}</td>
-                <td>{{ hours.get_shift_type_display }}</td>
-                <td>{{ hours.notes|default:"-" }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="6" class="text-center">{% trans "Keine Arbeitszeiten erfasst" %}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+{% block extra_js %}
+<script>
+function deleteWorkingHours(id) {
+    if (confirm('{% trans "Arbeitszeit wirklich löschen?" %}')) {
+        fetch(`/api/working-hours/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || '{% trans "Fehler beim Löschen" %}');
+            }
+        })
+        .catch(error => {
+            alert('{% trans "Ein Fehler ist aufgetreten" %}: ' + error);
+        });
+    }
+}
+</script>
 {% endblock %} 

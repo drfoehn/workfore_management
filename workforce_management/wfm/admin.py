@@ -15,14 +15,14 @@ from .models import (
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'hourly_rate', 'room_rate')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'hourly_rate', 'room_rate', 'color')
     list_filter = ('role', 'is_active')
     search_fields = ('username', 'email', 'first_name', 'last_name')
     
     # Basis-Felder von UserAdmin
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
-        (_('Persönliche Informationen'), {'fields': ('first_name', 'last_name', 'email')}),
+        (_('Persönliche Informationen'), {'fields': ('first_name', 'last_name', 'email', 'color')}),
         (_('Berechtigungen'), {'fields': ('role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         (_('Vergütung'), {'fields': ('hourly_rate', 'room_rate')}),
         (_('Wichtige Daten'), {'fields': ('last_login', 'date_joined')}),
@@ -38,7 +38,7 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(TherapistBooking)
 class TherapistBookingAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'date', 'start_time', 'end_time', 'status', 'created_at')
+    list_display = ('therapist', 'date', 'start_time', 'end_time', 'status')
     list_filter = ('status', 'date', 'therapist')
     search_fields = ('therapist__username', 'notes')
     date_hierarchy = 'date'

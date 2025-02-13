@@ -23,6 +23,16 @@
 <div class="card">
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group">
+                <a href="{% url 'wfm:therapist-monthly-overview' %}?month={{ month }}&year={{ year }}" 
+                   class="btn btn-primary active">
+                    <i class="bi bi-list"></i> {% trans "Liste" %}
+                </a>
+                <a href="{% url 'wfm:calendar' %}?month={{ month }}&year={{ year }}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
+                </a>
+            </div>
             <h2 class="mb-0">{{ month_name }} {{ year }}</h2>
             <div class="btn-group">
                 <a href="?month={{ month|add:"-1" }}&year={% if month == 1 %}{{ year|add:"-1" }}{% else %}{{ year }}{% endif %}" 
@@ -97,7 +107,9 @@
                         <td class="text-center">
                             {% if day.bookings %}
                                 <button class="btn btn-sm btn-outline-primary"
-                                        onclick="openUsedHoursModal('{{ day.date|date:'Y-m-d' }}', {{ day.total_hours|stringformat:'f' }}, '{{ day.bookings.0.start_time|time:'H:i' }}-{{ day.bookings.0.end_time|time:'H:i' }}')"
+                                        onclick="openUsedHoursModal('{{ day.date|date:'Y-m-d' }}', {{ day.total_hours|stringformat:'f' }})"
+                                        data-date="{{ day.date|date:'Y-m-d' }}"
+                                        data-booking-id="{{ day.bookings.0.id }}"
                                         title="{% trans 'Verwendete Stunden bearbeiten' %}">
                                     <i class="bi bi-pencil"></i>
                                 </button>
@@ -158,15 +170,41 @@
                     </div>
                     <div class="mb-4">
                         <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchte Stunden" %}</h6>
-                        <input type="text" class="form-control" id="bookedHours" readonly>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="bookedHours" readonly>
+                            <span class="input-group-text">{% trans "Stunden" %}</span>
+                        </div>
                     </div>
                     <div class="mb-4">
                         <h6 class="border-bottom pb-2 fw-bold">{% trans "Tatsächlich verwendete Stunden" %}</h6>
-                        <input type="number" class="form-control" name="actual_hours" step="0.5" required>
+                        <div class="row g-2">
+                            <div class="col">
+                                <div class="input-group">
+                                    <select class="form-select" id="actualHours">
+                                        {% for i in "0123456789"|make_list %}
+                                            <option value="{{ i }}">{{ i }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <span class="input-group-text">{% trans "Stunden" %}</span>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="input-group">
+                                    <select class="form-select" id="actualMinutes">
+                                        <option value="0">00</option>
+                                        <option value="15">15</option>
+                                        <option value="30">30</option>
+                                        <option value="45">45</option>
+                                    </select>
+                                    <span class="input-group-text">{% trans "Minuten" %}</span>
+                                </div>
+                            </div>
+                            <input type="hidden" name="actual_hours" required>
+                        </div>
                     </div>
                     <div class="mb-4">
                         <h6 class="border-bottom pb-2 fw-bold">{% trans "Anmerkungen" %}</h6>
-                        <textarea class="form-control" name="notes" rows="3" placeholder="{% trans 'Optionale Anmerkungen' %}"></textarea>
+                        <textarea class="form-control" name="notes" rows="3"></textarea>
                     </div>
                 </form>
             </div>
@@ -181,41 +219,118 @@
 
 {% block extra_js %}
 <script>
-let currentDate;
-
-function formatDate(dateStr) {
-    const [year, month, day] = dateStr.split('-');
-    return `${day}.${month}.${year}`;
+function formatHoursToHHMM(decimalHours) {
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
-function openUsedHoursModal(date, hours, timeRange) {
-    currentDate = date;
-    document.getElementById('usedHoursDate').value = formatDate(date);
-    document.getElementById('bookedTimeRange').value = timeRange;
-    document.getElementById('bookedHours').value = hours;
-    document.querySelector('#usedHoursForm [name="actual_hours"]').value = hours;
+function updateActualHours() {
+    const hours = parseInt(document.getElementById('actualHours').value);
+    const minutes = parseInt(document.getElementById('actualMinutes').value);
+    const decimalHours = hours + (minutes / 60);
+    document.querySelector('[name="actual_hours"]').value = decimalHours.toFixed(2);
+}
+
+function openUsedHoursModal(date, hours) {
+    document.getElementById('usedHoursDate').value = date;
+    
+    // Zeige die gebuchten Stunden im Format HH:MM
+    const formattedBookedHours = formatHoursToHHMM(hours || 0);
+    document.getElementById('bookedHours').value = formattedBookedHours;
+    
+    // Hole die Buchung für dieses Datum
+    fetch(`{% url 'wfm:api-therapist-booking-used' %}?date=${date}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Keine Buchung gefunden');
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Received data:', data); // Debug-Ausgabe
+            
+            // Zeige den Zeitraum
+            if (data.start_time && data.end_time) {
+                document.getElementById('bookedTimeRange').value = `${data.start_time}-${data.end_time}`;
+            }
+            
+            // Verwende actual_hours falls vorhanden, sonst die gebuchten Stunden
+            const actualHours = data.actual_hours !== null ? data.actual_hours : hours;
+            
+            // Setze die Dropdown-Werte basierend auf den tatsächlichen Stunden
+            const hoursValue = Math.floor(actualHours || 0);
+            const minutesValue = Math.round(((actualHours || 0) % 1) * 60);
+            
+            // Runde Minuten auf nächste verfügbare Option (0, 15, 30, 45)
+            const roundedMinutes = Math.round(minutesValue / 15) * 15;
+            
+            document.getElementById('actualHours').value = hoursValue.toString();
+            document.getElementById('actualMinutes').value = roundedMinutes.toString();
+            
+            // Setze Notizen wenn vorhanden
+            if (data.notes) {
+                document.querySelector('[name="notes"]').value = data.notes;
+            }
+            
+            // Event-Listener für die Dropdowns
+            document.getElementById('actualHours').onchange = updateActualHours;
+            document.getElementById('actualMinutes').onchange = updateActualHours;
+            
+            // Initial setzen
+            updateActualHours();
+            
+            // Auch die Buchungs-ID aus dem Button holen
+            const bookingId = document.querySelector(`[data-date="${date}"]`).dataset.bookingId;
+            document.getElementById('usedHoursForm').dataset.bookingId = bookingId;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Fallback auf die übergebenen Werte
+            const hoursValue = Math.floor(hours || 0);
+            const minutesValue = Math.round(((hours || 0) % 1) * 60);
+            document.getElementById('actualHours').value = hoursValue.toString();
+            document.getElementById('actualMinutes').value = Math.round(minutesValue / 15) * 15;
+            updateActualHours();
+            
+            // Auch die Buchungs-ID aus dem Button holen
+            const bookingId = document.querySelector(`[data-date="${date}"]`).dataset.bookingId;
+            document.getElementById('usedHoursForm').dataset.bookingId = bookingId;
+        });
     
     new bootstrap.Modal(document.getElementById('usedHoursModal')).show();
 }
 
 function submitUsedHours() {
     const form = document.getElementById('usedHoursForm');
+    const date = document.getElementById('usedHoursDate').value;
+    const bookingId = form.dataset.bookingId;
+    
     const data = {
-        date: currentDate,
-        actual_hours: form.querySelector('[name="actual_hours"]').value,
+        booking_id: bookingId,
+        date: date,
+        actual_hours: parseFloat(form.querySelector('[name="actual_hours"]').value),
         notes: form.querySelector('[name="notes"]').value
     };
+    
+    const csrfToken = document.querySelector('[name="csrfmiddlewaretoken"]').value;
     
     fetch('{% url "wfm:api-therapist-booking-used" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+            'X-CSRFToken': csrfToken,
+            'Accept': 'application/json'
         },
         body: JSON.stringify(data),
-        credentials: 'include'
+        credentials: 'same-origin'
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             location.reload();
@@ -224,6 +339,7 @@ function submitUsedHours() {
         }
     })
     .catch(error => {
+        console.error('Error:', error);
         alert('Ein Fehler ist aufgetreten: ' + error.message);
     });
 }

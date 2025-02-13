@@ -29,4 +29,8 @@ urlpatterns = [
     path('therapist/monthly-overview/', views.TherapistMonthlyOverviewView.as_view(), name='therapist-monthly-overview'),
     path('api/therapist/booking/', views.api_therapist_booking, name='api-therapist-booking'),
     path('api/therapist/booking/used/', views.api_therapist_booking_used, name='api-therapist-booking-used'),
+    path('calendar/', views.CalendarView.as_view(), name='calendar'),
+    path('api/calendar/events/', views.api_calendar_events, name='api-calendar-events'),
+    path('owner/dashboard/', views.OwnerDashboardView.as_view(), name='owner-dashboard'),
+    path('api/working-hours/<int:pk>/delete/', views.delete_working_hours, name='api-working-hours-delete'),
 ] 

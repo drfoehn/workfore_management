@@ -7,6 +7,8 @@ from django.forms import DateField as FormDateField
 from datetime import timedelta
 from django.core.exceptions import ValidationError
 from datetime import datetime
+from django.conf import settings
+from datetime import date
 
 class CustomUser(AbstractUser):
     ROLE_CHOICES = [
@@ -31,6 +33,21 @@ class CustomUser(AbstractUser):
         null=True,
         blank=True
     )
+    color = models.CharField(
+        max_length=7,
+        default='#3498DB',
+        verbose_name=_("Anzeigefarbe"),
+        help_text=_("Farbe für die Anzeige in Kalendern und Listen")
+    )
+
+    def save(self, *args, **kwargs):
+        if not self.color:
+            colors = [
+                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
+                '#D4A5A5', '#9B59B6', '#3498DB', '#E67E22', '#2ECC71'
+            ]
+            self.color = colors[self.id % len(colors)] if self.id else colors[0]
+        super().save(*args, **kwargs)
 
 class ScheduleTemplate(models.Model):
     """Vorlage für die Soll-Arbeitszeiten"""
@@ -200,63 +217,51 @@ class TherapistBooking(models.Model):
     ]
 
     therapist = models.ForeignKey(
-        CustomUser,
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        verbose_name=_('Therapeut/in'),
         limit_choices_to={'role': 'THERAPIST'}
     )
-    date = models.DateField(_('Datum'))
-    start_time = models.TimeField(_('Von'))
-    end_time = models.TimeField(_('Bis'))
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
     status = models.CharField(
-        _('Status'),
         max_length=10,
         choices=STATUS_CHOICES,
         default='RESERVED'
     )
+    notes = models.TextField(blank=True)
     actual_hours = models.DecimalField(
-        _('Tatsächlich verwendete Stunden'),
         max_digits=4,
         decimal_places=2,
         null=True,
         blank=True
     )
-    notes = models.TextField(
-        _('Anmerkungen'),
-        blank=True,
-        null=True
-    )
-    created_at = models.DateTimeField(
-        _('Erstellt am'),
-        auto_now_add=True
-    )
-    updated_at = models.DateTimeField(
-        _('Aktualisiert am'),
-        auto_now=True
+    hours = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal('0.00')
     )
 
     class Meta:
-        verbose_name = _('Raumbuchung')
-        verbose_name_plural = _('Raumbuchungen')
-        ordering = ['-date', 'start_time']
+        ordering = ['date', 'start_time']
+        
+    def clean(self):
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            raise ValidationError('Endzeit muss nach Startzeit liegen')
+        
+        # Berechne die Stunden bei Änderungen
+        if self.start_time and self.end_time:
+            start = datetime.combine(self.date, self.start_time)
+            end = datetime.combine(self.date, self.end_time)
+            duration = end - start
+            self.hours = Decimal(str(duration.total_seconds() / 3600))
+            
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.therapist} - {self.date} ({self.start_time}-{self.end_time})"
-
-    @property
-    def hours(self):
-        """Berechnet die gebuchten Stunden"""
-        start = datetime.combine(self.date, self.start_time)
-        end = datetime.combine(self.date, self.end_time)
-        duration = end - start
-        return round(duration.total_seconds() / 3600, 2)  # Konvertierung in Stunden
-
-    @property
-    def difference(self):
-        """Berechnet die Differenz zwischen gebuchten und tatsächlichen Stunden"""
-        if self.actual_hours is None:
-            return 0
-        return round(self.actual_hours - self.hours, 2)
 
 class TherapistScheduleTemplate(models.Model):
     """Vorlage für die Standard-Raumbuchungen"""
@@ -271,32 +276,37 @@ class TherapistScheduleTemplate(models.Model):
     ]
     
     therapist = models.ForeignKey(
-        CustomUser,
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        verbose_name=_("Therapeut/in"),
         limit_choices_to={'role': 'THERAPIST'}
     )
-    weekday = models.IntegerField(
-        choices=WEEKDAY_CHOICES,
-        verbose_name=_("Wochentag")
+    weekday = models.IntegerField(choices=WEEKDAY_CHOICES)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    hours = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal('0.00')
     )
-    start_time = models.TimeField(verbose_name=_("Beginn"))
-    end_time = models.TimeField(verbose_name=_("Ende"))
-    
+
     class Meta:
-        unique_together = ['therapist', 'weekday']
-        verbose_name = _("Raumbuchungs-Vorlage")
-        verbose_name_plural = _("Raumbuchungs-Vorlagen")
         ordering = ['weekday', 'start_time']
+        
+    def clean(self):
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            raise ValidationError('Endzeit muss nach Startzeit liegen')
+        
+        # Berechne die Stunden bei Änderungen
+        if self.start_time and self.end_time:
+            start = datetime.combine(date.today(), self.start_time)
+            end = datetime.combine(date.today(), self.end_time)
+            duration = end - start
+            self.hours = Decimal(str(duration.total_seconds() / 3600))
+            
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.therapist} - {self.get_weekday_display()} ({self.start_time}-{self.end_time})"
-
-    @property
-    def hours(self):
-        """Berechnet die Stunden"""
-        start = datetime.combine(datetime.today(), self.start_time)
-        end = datetime.combine(datetime.today(), self.end_time)
-        duration = end - start
-        return round(duration.total_seconds() / 3600, 2)
 

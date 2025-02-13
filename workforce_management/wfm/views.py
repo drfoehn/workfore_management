@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.views.generic import ListView, DetailView, CreateView, UpdateView, View
+from django.views.generic import ListView, DetailView, CreateView, UpdateView, View, TemplateView
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 from .models import (
@@ -12,10 +12,11 @@ from .models import (
     ScheduleTemplate,
     TimeCompensation,
     TherapistBooking,
-    TherapistScheduleTemplate
+    TherapistScheduleTemplate,
+    CustomUser
 )
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
-from django.db.models import Sum
+from django.db.models import Sum, Count
 from django.db.models.functions import ExtractMonth, ExtractYear
 from datetime import datetime, timedelta
 import calendar
@@ -734,101 +735,245 @@ def api_therapist_booking(request):
 @login_required
 @ensure_csrf_cookie
 def api_therapist_booking_used(request):
-    if request.method == 'POST':
-        if request.user.role != 'THERAPIST':
-            return JsonResponse({
-                'success': False,
-                'error': 'Nur für Therapeuten verfügbar'
-            })
-
-        try:
-            data = json.loads(request.body.decode('utf-8'))
-            date = datetime.strptime(data['date'], '%Y-%m-%d').date()
-            # Wenn keine actual_hours angegeben wurden, verwende die gebuchten Stunden
-            actual_hours = data.get('actual_hours')
-            if actual_hours is None:
-                # Hole die gebuchten Stunden aus der Vorlage oder existierenden Buchungen
-                bookings = TherapistBooking.objects.filter(
-                    therapist=request.user,
-                    date=date,
-                    status='RESERVED'
-                )
-                if bookings.exists():
-                    actual_hours = str(sum(booking.hours for booking in bookings))
-                else:
-                    schedule = TherapistScheduleTemplate.objects.filter(
-                        therapist=request.user,
-                        weekday=date.weekday()
-                    )
-                    if schedule.exists():
-                        actual_hours = str(sum(template.hours for template in schedule))
-                    else:
-                        return JsonResponse({
-                            'success': False,
-                            'error': 'Keine Vorlage oder Reservierung für dieses Datum gefunden'
-                        })
-
-            actual_hours = Decimal(str(actual_hours))
-
-            # Hole existierende Buchungen
-            bookings = TherapistBooking.objects.filter(
+    if request.method == 'GET':
+        date = request.GET.get('date')
+        if date:
+            # Suche zuerst nach einer USED Buchung
+            booking = TherapistBooking.objects.filter(
                 therapist=request.user,
                 date=date,
-                status='RESERVED'
-            )
-
-            # Wenn keine Buchungen existieren, erstelle sie aus der Vorlage
-            if not bookings.exists():
-                schedule = TherapistScheduleTemplate.objects.filter(
-                    therapist=request.user,
-                    weekday=date.weekday()
-                )
-                
-                if not schedule.exists():
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'Keine Vorlage oder Reservierung für dieses Datum gefunden'
-                    })
-                
-                # Erstelle Buchungen aus der Vorlage
-                for template in schedule:
-                    TherapistBooking.objects.create(
-                        therapist=request.user,
-                        date=date,
-                        start_time=template.start_time,
-                        end_time=template.end_time,
-                        status='RESERVED',
-                        actual_hours=Decimal(str(template.hours))  # Setze actual_hours direkt
-                    )
-                
-                # Hole die neu erstellten Buchungen
-                bookings = TherapistBooking.objects.filter(
+                status='USED'
+            ).first()
+            
+            # Wenn keine USED Buchung gefunden wurde, suche nach RESERVED
+            if not booking:
+                booking = TherapistBooking.objects.filter(
                     therapist=request.user,
                     date=date,
                     status='RESERVED'
-                )
-
-            # Berechne die Gesamtstunden der Reservierungen
-            total_reserved = sum(Decimal(str(booking.hours)) for booking in bookings)
-
-            # Verteile die tatsächlichen Stunden proportional auf die Buchungen
-            for booking in bookings:
-                proportion = Decimal(str(booking.hours)) / total_reserved
-                booking.actual_hours = round(actual_hours * proportion, 2)
-                booking.status = 'USED'
-                booking.notes = (booking.notes or '') + '\n' + (data.get('notes', '') if data.get('notes') else '')
-                booking.save()
+                ).first()
+            
+            if booking:
+                return JsonResponse({
+                    'booking_id': booking.id,
+                    'actual_hours': float(booking.actual_hours) if booking.actual_hours is not None else None,
+                    'notes': booking.notes,
+                    'start_time': booking.start_time.strftime('%H:%M'),
+                    'end_time': booking.end_time.strftime('%H:%M')
+                })
+            
+        return JsonResponse({
+            'error': 'Keine Buchung gefunden'
+        }, status=404)
+        
+    elif request.method == 'POST':
+        data = json.loads(request.body)
+        booking_id = data.get('booking_id')
+        
+        try:
+            booking = TherapistBooking.objects.get(
+                id=booking_id,
+                therapist=request.user
+            )
+            
+            booking.actual_hours = data.get('actual_hours')
+            booking.notes = data.get('notes')
+            booking.status = 'USED'  # Status auf USED setzen
+            booking.save()
             
             return JsonResponse({'success': True})
             
+        except TherapistBooking.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Buchung nicht gefunden'
+            }, status=404)
         except Exception as e:
-            print("Error:", str(e))
             return JsonResponse({
                 'success': False,
                 'error': str(e)
-            })
+            }, status=500)
     
     return JsonResponse({
         'success': False,
         'error': 'Ungültige Anfrage'
-    })
+    }, status=400)
+
+class CalendarView(LoginRequiredMixin, TemplateView):
+    template_name = 'wfm/calendar_view.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        year = int(self.request.GET.get('year', datetime.now().year))
+        month = int(self.request.GET.get('month', datetime.now().month))
+        
+        context.update({
+            'year': year,
+            'month': month,
+            'month_name': calendar.month_name[month],
+            'hours': range(7, 21)  # Erzeugt Liste von 7 bis 20
+        })
+        
+        return context
+
+@login_required
+def api_calendar_events(request):
+    year = int(request.GET.get('year', datetime.now().year))
+    month = int(request.GET.get('month', datetime.now().month))
+    
+    events = []
+    
+    if request.user.role == 'THERAPIST':
+        # Hole alle Buchungen für den Therapeuten
+        bookings = TherapistBooking.objects.filter(
+            therapist=request.user,
+            date__year=year,
+            date__month=month
+        ).select_related('therapist')
+        
+        for booking in bookings:
+            events.append({
+                'id': f'booking_{booking.id}',
+                'booking_id': booking.id,
+                'title': f'{booking.hours} Stunden',  # Zeige die Stunden im Titel
+                'start': f'{booking.date}T{booking.start_time}',
+                'end': f'{booking.date}T{booking.end_time}',
+                'type': 'booking',
+                'status': booking.status,
+                'color': generate_color_for_user(booking.therapist.id),
+                'editable': True,
+                'hours': float(booking.hours),  # Konvertiere Decimal zu float
+                'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
+                'notes': booking.notes
+            })
+    else:
+        working_hours = WorkingHours.objects.filter(
+            employee=request.user,
+            date__year=year,
+            date__month=month
+        ).select_related('employee')
+        
+        for wh in working_hours:
+            # Berechne die Stunden für die Arbeitszeit
+            start = datetime.combine(wh.date, wh.start_time)
+            end = datetime.combine(wh.date, wh.end_time)
+            duration = end - start - wh.break_duration
+            hours = duration.total_seconds() / 3600
+            
+            events.append({
+                'id': f'work_{wh.id}',
+                'title': wh.employee.get_full_name() or wh.employee.username,
+                'nickname': wh.employee.username,
+                'start': f'{wh.date}T{wh.start_time}',
+                'end': f'{wh.date}T{wh.end_time}',
+                'type': 'working_hours',
+                'color': generate_color_for_user(wh.employee.id),
+                'editable': True,
+                'hours': round(hours, 2),
+                'editUrl': f'/working-hours/check/?date={wh.date}'
+            })
+        
+        vacations = Vacation.objects.filter(
+            employee=request.user,
+            start_date__year=year,
+            start_date__month=month
+        )
+        
+        time_comps = TimeCompensation.objects.filter(
+            employee=request.user,
+            date__year=year,
+            date__month=month
+        )
+        
+        for vacation in vacations:
+            events.append({
+                'id': f'vacation_{vacation.id}',
+                'title': f'{vacation.employee.get_full_name()} (Urlaub)',
+                'start': vacation.start_date.isoformat(),
+                'end': (vacation.end_date + timedelta(days=1)).isoformat(),
+                'type': 'vacation',
+                'allDay': True
+            })
+        
+        for tc in time_comps:
+            events.append({
+                'id': f'timecomp_{tc.id}',
+                'title': f'{tc.employee.get_full_name()} (ZA)',
+                'start': tc.date.isoformat(),
+                'end': (tc.date + timedelta(days=1)).isoformat(),
+                'type': 'time_comp',
+                'allDay': True
+            })
+    
+    return JsonResponse({'events': events})
+
+def generate_color_for_user(user_id):
+    """Generiert eine konsistente Farbe für einen Benutzer"""
+    colors = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
+        '#D4A5A5', '#9B59B6', '#3498DB', '#E67E22', '#2ECC71'
+    ]
+    return colors[user_id % len(colors)]
+
+class OwnerDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+    template_name = 'wfm/owner_dashboard.html'
+    
+    def test_func(self):
+        return self.request.user.role == 'OWNER'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Offene Anträge
+        context['pending_vacations'] = Vacation.objects.filter(
+            status='PENDING'
+        ).select_related('employee').order_by('start_date')
+        
+        context['pending_time_comps'] = TimeCompensation.objects.filter(
+            status='PENDING'
+        ).select_related('employee').order_by('date')
+        
+        # Aktuelle Buchungen
+        context['recent_bookings'] = TherapistBooking.objects.filter(
+            date__gte=timezone.now().date()
+        ).select_related('therapist').order_by('date', 'start_time')[:10]
+        
+        # Mitarbeiter-Statistiken
+        context['therapists'] = CustomUser.objects.filter(
+            role='THERAPIST'
+        ).annotate(
+            booking_count=Count('therapistbooking'),
+            total_hours=Sum('therapistbooking__hours')
+        )
+        
+        context['assistants'] = CustomUser.objects.filter(
+            role='ASSISTANT'
+        ).annotate(
+            vacation_count=Count('vacation'),
+            working_hours=Sum('workinghours__hours')
+        )
+        
+        return context
+
+@login_required
+def delete_working_hours(request, pk):
+    if request.method == 'POST':
+        try:
+            working_hours = WorkingHours.objects.get(pk=pk)
+            if request.user.role == 'OWNER' or working_hours.employee == request.user:
+                working_hours.delete()
+                return JsonResponse({'success': True})
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': _('Keine Berechtigung')
+                }, status=403)
+        except WorkingHours.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': _('Arbeitszeit nicht gefunden')
+            }, status=404)
+    return JsonResponse({
+        'success': False,
+        'error': _('Ungültige Anfrage')
+    }, status=400)
