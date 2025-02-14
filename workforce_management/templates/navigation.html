@@ -21,19 +21,26 @@
                                 <i class="bi bi-calendar3"></i> Kalender
                             </a>
                         </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-gear"></i> Verwaltung
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'admin:index' %}">
+                        
+                                <li class="nav-item">
+                                    <a class="nav-link" href="{% url 'admin:index' %}">
                                         <i class="bi bi-tools"></i> Admin-Bereich
                                     </a>
                                 </li>
+                             
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-gear"></i> Verwaltung Assistenzen
+                            </a>
+                            <ul class="dropdown-menu">
                                 <li>
                                     <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}">
-                                        <i class="bi bi-clock"></i> Arbeitszeiten
+                                        <i class="bi bi-clock"></i> Arbeitszeiten - Liste
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{% url 'wfm:assistant-calendar' %}">
+                                        <i class="bi bi-clock"></i> Arbeitszeiten - Kalender
                                     </a>
                                 </li>
                                 <li>

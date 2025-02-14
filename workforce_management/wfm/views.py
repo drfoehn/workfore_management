@@ -18,7 +18,7 @@ from .models import (
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count
 from django.db.models.functions import ExtractMonth, ExtractYear
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import calendar
 from django.db import models
 from decimal import Decimal  # Am Anfang der Datei hinzufügen
@@ -45,9 +45,71 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
     context_object_name = 'working_hours'
 
     def get_queryset(self):
-        if self.request.user.role == 'OWNER':
-            return WorkingHours.objects.all()
-        return WorkingHours.objects.filter(employee=self.request.user)
+        queryset = WorkingHours.objects.select_related('employee')
+        
+        # if self.request.user.role == 'OWNER':
+            # Filter für bestimmte Assistenz
+        assistant_id = self.request.GET.get('assistant')
+        if assistant_id:
+            queryset = queryset.filter(employee_id=assistant_id)
+        else:
+            queryset = queryset.filter(employee__role='ASSISTANT')
+        # else:
+            # queryset = queryset.filter(employee=self.request.user)
+            
+        return queryset.order_by('-date', 'start_time')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Liste aller Assistenten für Filter
+        # if self.request.user.role == 'OWNER':
+        context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
+        
+        # Hole den ausgewählten Assistenten als Objekt
+        assistant_id = self.request.GET.get('assistant')
+        if assistant_id:
+            context['selected_assistant'] = CustomUser.objects.filter(id=assistant_id).first()
+        
+        # Berechne die Stunden für jeden Eintrag
+        for wh in context['working_hours']:
+            # Soll-Stunden (aus Vorlage oder Standard)
+            template = ScheduleTemplate.objects.filter(
+                employee=wh.employee,
+                weekday=wh.date.weekday()
+            ).first()
+            
+            if template:
+                # Benutze die berechneten Stunden aus dem Template
+                wh.soll_hours = template.hours
+            else:
+                # Standard 8 Stunden wenn kein Template existiert
+                wh.soll_hours = Decimal('8.0')
+            
+            # Ist-Stunden
+            duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
+            if wh.break_duration:
+                duration -= wh.break_duration
+            wh.ist_hours = Decimal(str(duration.total_seconds() / 3600))
+            
+            # Urlaub und Zeitausgleich für diesen Tag
+            wh.vacation = Vacation.objects.filter(
+                employee=wh.employee,
+                start_date__lte=wh.date,
+                end_date__gte=wh.date,
+                status='APPROVED'
+            ).exists()
+            
+            wh.time_comp = TimeCompensation.objects.filter(
+                employee=wh.employee,
+                date=wh.date,
+                status='APPROVED'
+            ).exists()
+            
+            # Differenz
+            wh.difference = wh.ist_hours - wh.soll_hours
+            
+        return context
 
 class WorkingHoursCreateOrUpdateView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
@@ -208,6 +270,8 @@ class MonthlyOverviewView(LoginRequiredMixin, ListView):
         
         for day in range(1, num_days + 1):
             date = datetime(year, month, day).date()
+            
+
             
             # Soll-Stunden
             schedule = ScheduleTemplate.objects.filter(
@@ -818,94 +882,92 @@ class CalendarView(LoginRequiredMixin, TemplateView):
 
 @login_required
 def api_calendar_events(request):
-    year = int(request.GET.get('year', datetime.now().year))
-    month = int(request.GET.get('month', datetime.now().month))
-    
-    events = []
-    
-    if request.user.role == 'THERAPIST':
-        # Hole alle Buchungen für den Therapeuten
-        bookings = TherapistBooking.objects.filter(
-            therapist=request.user,
-            date__year=year,
-            date__month=month
-        ).select_related('therapist')
+    try:
+        year = int(request.GET.get('year', datetime.now().year))
+        month = int(request.GET.get('month', datetime.now().month))
+        calendar_type = request.GET.get('calendar_type', 'default')
+        assistant_id = request.GET.get('assistant')
+        event_types = request.GET.get('types', '').split(',')
         
-        for booking in bookings:
-            events.append({
-                'id': f'booking_{booking.id}',
-                'booking_id': booking.id,
-                'title': f'{booking.hours} Stunden',  # Zeige die Stunden im Titel
-                'start': f'{booking.date}T{booking.start_time}',
-                'end': f'{booking.date}T{booking.end_time}',
-                'type': 'booking',
-                'status': booking.status,
-                'color': generate_color_for_user(booking.therapist.id),
-                'editable': True,
-                'hours': float(booking.hours),  # Konvertiere Decimal zu float
-                'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
-                'notes': booking.notes
-            })
-    else:
-        working_hours = WorkingHours.objects.filter(
-            employee=request.user,
-            date__year=year,
-            date__month=month
-        ).select_related('employee')
+        events = []
         
-        for wh in working_hours:
-            # Berechne die Stunden für die Arbeitszeit
-            start = datetime.combine(wh.date, wh.start_time)
-            end = datetime.combine(wh.date, wh.end_time)
-            duration = end - start - wh.break_duration
-            hours = duration.total_seconds() / 3600
+        if calendar_type == 'assistant':
+            # Basis-Query für Assistenten
+            assistant_query = CustomUser.objects.filter(role='ASSISTANT')
+            if assistant_id:
+                assistant_query = assistant_query.filter(id=assistant_id)
             
-            events.append({
-                'id': f'work_{wh.id}',
-                'title': wh.employee.get_full_name() or wh.employee.username,
-                'nickname': wh.employee.username,
-                'start': f'{wh.date}T{wh.start_time}',
-                'end': f'{wh.date}T{wh.end_time}',
-                'type': 'working_hours',
-                'color': generate_color_for_user(wh.employee.id),
-                'editable': True,
-                'hours': round(hours, 2),
-                'editUrl': f'/working-hours/check/?date={wh.date}'
-            })
+            # Arbeitszeiten
+            if 'working_hours' in event_types:
+                working_hours = WorkingHours.objects.filter(
+                    date__year=year,
+                    date__month=month,
+                    employee__in=assistant_query
+                ).select_related('employee')
+                
+                for wh in working_hours:
+                    duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
+                    if wh.break_duration:
+                        duration -= wh.break_duration
+                    hours = duration.total_seconds() / 3600
+                    
+                    events.append({
+                        'id': f'work_{wh.id}',
+                        'title': f'{wh.employee.username} ({hours:.1f}h)',
+                        'start': f'{wh.date}T{wh.start_time}',
+                        'end': f'{wh.date}T{wh.end_time}',
+                        'type': 'working_hours',
+                        'color': wh.employee.color,
+                        'editable': True
+                    })
+            
+            # Urlaub
+            if 'vacation' in event_types:
+                vacations = Vacation.objects.filter(
+                    employee__in=assistant_query,
+                    start_date__year=year,
+                    start_date__month=month,
+                    status='APPROVED'
+                ).select_related('employee')
+                
+                for vacation in vacations:
+                    events.append({
+                        'id': f'vacation_{vacation.id}',
+                        'title': f'{vacation.employee.username} - Urlaub',
+                        'start': vacation.start_date.isoformat(),
+                        'end': (vacation.end_date + timedelta(days=1)).isoformat(),
+                        'type': 'vacation',
+                        'color': vacation.employee.color,
+                        'allDay': True
+                    })
+            
+            # Zeitausgleich
+            if 'time_comp' in event_types:
+                time_comps = TimeCompensation.objects.filter(
+                    employee__in=assistant_query,
+                    date__year=year,
+                    date__month=month,
+                    status='APPROVED'
+                ).select_related('employee')
+                
+                for tc in time_comps:
+                    events.append({
+                        'id': f'timecomp_{tc.id}',
+                        'title': f'{tc.employee.username} - Zeitausgleich',
+                        'start': tc.date.isoformat(),
+                        'end': (tc.date + timedelta(days=1)).isoformat(),
+                        'type': 'time_comp',
+                        'color': tc.employee.color,
+                        'allDay': True
+                    })
         
-        vacations = Vacation.objects.filter(
-            employee=request.user,
-            start_date__year=year,
-            start_date__month=month
-        )
+        return JsonResponse({'events': events})
         
-        time_comps = TimeCompensation.objects.filter(
-            employee=request.user,
-            date__year=year,
-            date__month=month
-        )
-        
-        for vacation in vacations:
-            events.append({
-                'id': f'vacation_{vacation.id}',
-                'title': f'{vacation.employee.get_full_name()} (Urlaub)',
-                'start': vacation.start_date.isoformat(),
-                'end': (vacation.end_date + timedelta(days=1)).isoformat(),
-                'type': 'vacation',
-                'allDay': True
-            })
-        
-        for tc in time_comps:
-            events.append({
-                'id': f'timecomp_{tc.id}',
-                'title': f'{tc.employee.get_full_name()} (ZA)',
-                'start': tc.date.isoformat(),
-                'end': (tc.date + timedelta(days=1)).isoformat(),
-                'type': 'time_comp',
-                'allDay': True
-            })
-    
-    return JsonResponse({'events': events})
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'events': []
+        }, status=500)
 
 def generate_color_for_user(user_id):
     """Generiert eine konsistente Farbe für einen Benutzer"""
@@ -946,12 +1008,25 @@ class OwnerDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
             total_hours=Sum('therapistbooking__hours')
         )
         
-        context['assistants'] = CustomUser.objects.filter(
-            role='ASSISTANT'
-        ).annotate(
-            vacation_count=Count('vacation'),
-            working_hours=Sum('workinghours__hours')
+        # Für Assistenten müssen wir die Stunden manuell berechnen
+        assistants = CustomUser.objects.filter(role='ASSISTANT').annotate(
+            vacation_count=Count('vacation')
         )
+        
+        for assistant in assistants:
+            # Berechne die Gesamtstunden für jeden Assistenten
+            working_hours = WorkingHours.objects.filter(employee=assistant)
+            total_hours = Decimal('0.0')
+            
+            for wh in working_hours:
+                duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
+                if wh.break_duration:
+                    duration -= wh.break_duration
+                total_hours += Decimal(str(duration.total_seconds() / 3600))
+            
+            assistant.working_hours = total_hours
+            
+        context['assistants'] = assistants
         
         return context
 
@@ -977,3 +1052,163 @@ def delete_working_hours(request, pk):
         'success': False,
         'error': _('Ungültige Anfrage')
     }, status=400)
+
+@login_required
+def api_therapist_booking_detail(request, pk):
+    if request.user.role != 'OWNER':
+        return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+        
+    try:
+        booking = TherapistBooking.objects.get(pk=pk)
+        return JsonResponse({
+            'id': booking.id,
+            'status': booking.status,
+            'hours': float(booking.hours),
+            'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
+            'notes': booking.notes
+        })
+    except TherapistBooking.DoesNotExist:
+        return JsonResponse({'error': 'Buchung nicht gefunden'}, status=404)
+
+@login_required
+def api_therapist_booking_update(request):
+    if request.method != 'POST' or request.user.role != 'OWNER':
+        return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+        
+    try:
+        data = json.loads(request.body)
+        booking = TherapistBooking.objects.get(id=data['booking_id'])
+        
+        booking.status = data['status']
+        booking.actual_hours = data['actual_hours']
+        booking.notes = data['notes']
+        booking.save()
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+class AssistantCalendarView(LoginRequiredMixin, TemplateView):
+    template_name = 'wfm/assistant_calendar.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        year = int(self.request.GET.get('year', datetime.now().year))
+        month = int(self.request.GET.get('month', datetime.now().month))
+        
+        # Hole alle Assistenten für den Filter
+        context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
+        context['selected_assistant'] = self.request.GET.get('assistant')
+        context['selected_types'] = self.request.GET.getlist('types', ['working_hours', 'vacation', 'time_comp'])
+        
+        context.update({
+            'year': year,
+            'month': month,
+            'month_name': calendar.month_name[month],
+            'hours': range(7, 21)  # 7:00 bis 20:00
+        })
+        
+        return context
+
+class TherapistBookingListView(LoginRequiredMixin, OwnerRequiredMixin, ListView):
+    model = TherapistBooking
+    template_name = 'wfm/therapist_booking_list.html'
+    context_object_name = 'bookings'
+    
+    def get_queryset(self):
+        return TherapistBooking.objects.select_related('therapist').order_by('-date', 'start_time')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Berechne die Gesamtstunden für jeden Therapeuten
+        therapists = CustomUser.objects.filter(role='THERAPIST').annotate(
+            total_hours=Sum('therapistbooking__hours'),
+            total_bookings=Count('therapistbooking')
+        )
+        context['therapists'] = therapists
+        return context
+
+@login_required
+def api_working_hours_detail(request, pk):
+    """API-Endpunkt zum Abrufen der Details einer Arbeitszeit"""
+    try:
+        working_hours = WorkingHours.objects.get(pk=pk)
+        if request.user.role != 'OWNER' and working_hours.employee != request.user:
+            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+            
+        return JsonResponse({
+            'id': working_hours.id,
+            'date': working_hours.date.isoformat(),
+            'start_time': working_hours.start_time.strftime('%H:%M'),
+            'end_time': working_hours.end_time.strftime('%H:%M'),
+            'break_duration': working_hours.break_duration.total_seconds() / 60 if working_hours.break_duration else 0,
+            'employee': {
+                'id': working_hours.employee.id,
+                'username': working_hours.employee.username,
+                'color': working_hours.employee.color
+            }
+        })
+    except WorkingHours.DoesNotExist:
+        return JsonResponse({'error': 'Arbeitszeit nicht gefunden'}, status=404)
+
+@login_required
+def api_working_hours_update(request):
+    """API-Endpunkt zum Aktualisieren einer Arbeitszeit"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Nur POST-Anfragen erlaubt'}, status=405)
+        
+    try:
+        data = json.loads(request.body)
+        working_hours = WorkingHours.objects.get(id=data['id'])
+        
+        if request.user.role != 'OWNER' and working_hours.employee != request.user:
+            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+            
+        working_hours.date = parse_date(data['date'])
+        working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+        working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+        working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
+        working_hours.save()
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def api_vacation_status(request):
+    """API-Endpunkt zum Ändern des Urlaubsstatus"""
+    if request.method != 'POST' or request.user.role != 'OWNER':
+        return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+        
+    try:
+        data = json.loads(request.body)
+        vacation = Vacation.objects.get(id=data['vacation_id'])
+        
+        # Status aktualisieren
+        vacation.status = data['status']
+        vacation.save()
+        
+        # Wenn der Urlaub genehmigt wurde, aktualisiere die Urlaubstage
+        if vacation.status == 'APPROVED':
+            duration = (vacation.end_date - vacation.start_date).days + 1
+            entitlement = VacationEntitlement.objects.get(
+                employee=vacation.employee,
+                year=vacation.start_date.year
+            )
+            entitlement.days_taken += duration
+            entitlement.save()
+        
+        return JsonResponse({
+            'success': True,
+            'status': vacation.status,
+            'vacation_id': vacation.id
+        })
+        
+    except Vacation.DoesNotExist:
+        return JsonResponse({
+            'error': 'Urlaub nicht gefunden'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)

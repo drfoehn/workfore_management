@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 import random
 from wfm.models import (
+    ScheduleTemplate,
     TherapistBooking, 
     TherapistScheduleTemplate,
     WorkingHours,
@@ -117,6 +118,13 @@ class Command(BaseCommand):
                         end_time = time(16, 30)
                         break_duration = timedelta(minutes=30)
                         
+                        ScheduleTemplate.objects.create(
+                            employee=assistant,
+                            weekday=current_date.weekday(),
+                            start_time=start_time,
+                            end_time=end_time
+                        )
+
                         WorkingHours.objects.create(
                             employee=assistant,
                             date=current_date,
@@ -148,3 +156,17 @@ class Command(BaseCommand):
             )
         
         self.stdout.write(self.style.SUCCESS('Demo-Daten erfolgreich erstellt!')) 
+                end_date=end_date,
+                status='APPROVED'
+            )
+            
+            # Zeitausgleich in 3 Wochen
+            za_date = today + timedelta(days=21)
+            TimeCompensation.objects.create(
+                employee=assistant,
+                date=za_date,
+                hours=Decimal('8.00'),
+                status='APPROVED'
+            )
+        
+        self.stdout.write(self.style.SUCCESS('Demo-Daten erfolgreich erstellt!'))

@@ -1,184 +1,12 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load static %}
 
 {% block title %}{% trans "Kalender" %} - {{ block.super }}{% endblock %}
 
-{% block content %}
-<div class="card">
-    <div class="card-header">
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="btn-group">
-                {% if request.user.role == 'THERAPIST' %}
-                    <a href="{% url 'wfm:therapist-monthly-overview' %}?month={{ month }}&year={{ year }}" 
-                       class="btn btn-outline-primary">
-                        <i class="bi bi-list"></i> {% trans "Liste" %}
-                    </a>
-                {% else %}
-                    <a href="{% url 'wfm:monthly-overview' %}?month={{ month }}&year={{ year }}" 
-                       class="btn btn-outline-primary">
-                        <i class="bi bi-list"></i> {% trans "Liste" %}
-                    </a>
-                {% endif %}
-                <a href="{% url 'wfm:calendar' %}?month={{ month }}&year={{ year }}" 
-                   class="btn btn-primary active">
-                    <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
-                </a>
-            </div>
-            <h2 class="mb-0" id="currentDate">{{ month_name }} {{ year }}</h2>
-            <div class="btn-group">
-                <button class="btn btn-outline-primary" onclick="changeView('month')" id="monthViewBtn">
-                    {% trans "Monat" %}
-                </button>
-                <button class="btn btn-outline-primary" onclick="changeView('week')" id="weekViewBtn">
-                    {% trans "Woche" %}
-                </button>
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-outline-primary" onclick="previousPeriod()">
-                    &laquo; {% trans "Zurück" %}
-                </button>
-                <button class="btn btn-outline-primary" onclick="nextPeriod()">
-                    {% trans "Vor" %} &raquo;
-                </button>
-            </div>
-        </div>
-    </div>
-    <div class="card-body">
-        <!-- Monatsansicht -->
-        <div id="monthView" class="calendar-view">
-            <div class="calendar-grid">
-                <div class="calendar-header">
-                    <div>{% trans "Mo" %}</div>
-                    <div>{% trans "Di" %}</div>
-                    <div>{% trans "Mi" %}</div>
-                    <div>{% trans "Do" %}</div>
-                    <div>{% trans "Fr" %}</div>
-                    <div>{% trans "Sa" %}</div>
-                    <div>{% trans "So" %}</div>
-                </div>
-                <div class="calendar-body" id="monthGrid">
-                    <!-- Wird durch JavaScript gefüllt -->
-                </div>
-            </div>
-        </div>
-
-        <!-- Wochenansicht -->
-        <div id="weekView" class="calendar-view d-none">
-            <div class="week-grid">
-                <div class="time-column">
-                    {% for hour in hours %}
-                        <div class="hour-cell">
-                            {{ hour|stringformat:"02d" }}:00
-                        </div>
-                    {% endfor %}
-                </div>
-                <div class="week-days" id="weekGrid">
-                    <!-- Wird durch JavaScript gefüllt -->
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Event Details Modal -->
-<div class="modal fade" id="eventModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">{% trans "Details" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="eventDetails">
-                <!-- Wird dynamisch gefüllt -->
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Schließen" %}</button>
-                <button type="button" class="btn btn-primary d-none" id="editEventBtn">{% trans "Bearbeiten" %}</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal für Therapeuten-Buchungen -->
-<div class="modal fade" id="usedHoursModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title">{% trans "Verwendete Stunden eintragen" %}</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="usedHoursForm" method="post">
-                    {% csrf_token %}
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Datum" %}</h6>
-                        <input type="text" class="form-control" id="usedHoursDate" readonly>
-                    </div>
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchte Stunden" %}</h6>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="bookedHours" readonly>
-                            <span class="input-group-text">{% trans "Stunden" %}</span>
-                        </div>
-                    </div>
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Tatsächlich verwendete Stunden" %}</h6>
-                        <div class="row g-2">
-                            <div class="col">
-                                <div class="input-group">
-                                    <select class="form-select" id="actualHours">
-                                        {% for i in "0123456789"|make_list %}
-                                            <option value="{{ i }}">{{ i }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <span class="input-group-text">{% trans "Stunden" %}</span>
-                                </div>
-                            </div>
-                            <div class="col">
-                                <div class="input-group">
-                                    <select class="form-select" id="actualMinutes">
-                                        <option value="0">00</option>
-                                        <option value="15">15</option>
-                                        <option value="30">30</option>
-                                        <option value="45">45</option>
-                                    </select>
-                                    <span class="input-group-text">{% trans "Minuten" %}</span>
-                                </div>
-                            </div>
-                            <input type="hidden" name="actual_hours" required>
-                        </div>
-                    </div>
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Anmerkungen" %}</h6>
-                        <textarea class="form-control" name="notes" rows="3"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                <button type="button" class="btn btn-success" onclick="submitUsedHours()">{% trans "Speichern" %}</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal für Arbeitszeiten -->
-<div class="modal fade" id="timeEntryModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">{% trans "Zeit erfassen" %}</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <!-- ... Rest des Arbeitszeit-Modals ... -->
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
 {% block extra_css %}
+<!-- FullCalendar CSS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.css' rel='stylesheet' />
 <style>
 .calendar-grid {
     display: grid;
@@ -368,10 +196,166 @@
     background: #f8d7da;
     color: #842029;
 }
+
+.fc-event {
+    cursor: pointer;
+}
+.fc-content {
+    padding: 2px 4px;
+}
+.fc-status {
+    float: right;
+    margin-left: 5px;
+}
 </style>
 {% endblock %}
 
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group">
+                {% if request.user.role == 'THERAPIST' %}
+                    <a href="{% url 'wfm:therapist-monthly-overview' %}?month={{ month }}&year={{ year }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-list"></i> {% trans "Liste" %}
+                    </a>
+                {% else %}
+                    <a href="{% url 'wfm:monthly-overview' %}?month={{ month }}&year={{ year }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-list"></i> {% trans "Liste" %}
+                    </a>
+                {% endif %}
+                <a href="{% url 'wfm:calendar' %}?month={{ month }}&year={{ year }}" 
+                   class="btn btn-primary active">
+                    <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
+                </a>
+            </div>
+            <h2 class="mb-0" id="currentDate">{{ month_name }} {{ year }}</h2>
+            <div class="btn-group">
+                <button class="btn btn-outline-primary" onclick="changeView('month')" id="monthViewBtn">
+                    {% trans "Monat" %}
+                </button>
+                <button class="btn btn-outline-primary" onclick="changeView('week')" id="weekViewBtn">
+                    {% trans "Woche" %}
+                </button>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-outline-primary" onclick="previousPeriod()">
+                    &laquo; {% trans "Zurück" %}
+                </button>
+                <button class="btn btn-outline-primary" onclick="nextPeriod()">
+                    {% trans "Vor" %} &raquo;
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="calendar"></div>
+    </div>
+</div>
+
+<!-- Event Details Modal -->
+<div class="modal fade" id="eventModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{% trans "Details" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="eventDetails">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Schließen" %}</button>
+                <button type="button" class="btn btn-primary d-none" id="editEventBtn">{% trans "Bearbeiten" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Therapeuten-Buchungen -->
+<div class="modal fade" id="usedHoursModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">{% trans "Verwendete Stunden eintragen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="usedHoursForm" method="post">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Datum" %}</h6>
+                        <input type="text" class="form-control" id="usedHoursDate" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchte Stunden" %}</h6>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="bookedHours" readonly>
+                            <span class="input-group-text">{% trans "Stunden" %}</span>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Tatsächlich verwendete Stunden" %}</h6>
+                        <div class="row g-2">
+                            <div class="col">
+                                <div class="input-group">
+                                    <select class="form-select" id="actualHours">
+                                        {% for i in "0123456789"|make_list %}
+                                            <option value="{{ i }}">{{ i }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <span class="input-group-text">{% trans "Stunden" %}</span>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="input-group">
+                                    <select class="form-select" id="actualMinutes">
+                                        <option value="0">00</option>
+                                        <option value="15">15</option>
+                                        <option value="30">30</option>
+                                        <option value="45">45</option>
+                                    </select>
+                                    <span class="input-group-text">{% trans "Minuten" %}</span>
+                                </div>
+                            </div>
+                            <input type="hidden" name="actual_hours" required>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Anmerkungen" %}</h6>
+                        <textarea class="form-control" name="notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-success" onclick="submitUsedHours()">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Arbeitszeiten -->
+<div class="modal fade" id="timeEntryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">{% trans "Zeit erfassen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- ... Rest des Arbeitszeit-Modals ... -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
 {% block extra_js %}
+<!-- FullCalendar JS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
 <script>
 let currentView = 'month';
 let currentDate = new Date();
@@ -405,22 +389,36 @@ document.addEventListener('DOMContentLoaded', function() {
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
-            right: 'dayGridMonth,timeGridWeek'
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
         slotMinTime: '07:00:00',
         slotMaxTime: '20:00:00',
         allDaySlot: false,
         locale: 'de',
         events: function(info, successCallback, failureCallback) {
-            fetch(`{% url 'wfm:api-calendar-events' %}?year=${info.start.getFullYear()}&month=${info.start.getMonth() + 1}`)
-                .then(response => response.json())
-                .then(data => {
-                    successCallback(data.events);
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    failureCallback(error);
-                });
+            // Korrekte URL mit Django URL-Template-Tag
+            const url = `{% url 'wfm:api-calendar-events' %}?year=${info.start.getFullYear()}&month=${info.start.getMonth() + 1}`;
+            
+            fetch(url, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Events geladen:', data);  // Debug-Ausgabe
+                successCallback(data.events);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                failureCallback(error);
+            });
         },
         eventClick: function(info) {
             if (info.event.extendedProps.type === 'booking') {
@@ -452,6 +450,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="fc-content">
                         <div class="fc-title">${event.title}</div>
                         <div class="fc-status">${statusIcon}</div>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = `
+                    <div class="fc-content">
+                        <div class="fc-title">${event.title}</div>
                     </div>
                 `;
             }

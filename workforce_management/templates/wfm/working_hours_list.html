@@ -7,9 +7,36 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
-        <a href="{% url 'wfm:working-hours-add' %}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> {% trans "Neue Arbeitszeit" %}
-        </a>
+        <div class="d-flex gap-2">
+            {% comment %} {% if user.role == 'OWNER' %} {% endcomment %}
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        {% if selected_assistant %}
+                            {{ selected_assistant.get_full_name|default:selected_assistant.username }}
+                        {% else %}
+                            {% trans "Alle Assistenzen" %}
+                        {% endif %}
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}">
+                                {% trans "Alle Assistenzen" %}
+                            </a>
+                        </li>
+                        {% for assistant in assistants %}
+                            <li>
+                                <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}?assistant={{ assistant.id }}">
+                                    {{ assistant.get_full_name|default:assistant.username }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% comment %} {% endif %} {% endcomment %}
+            <a href="{% url 'wfm:working-hours-add' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> {% trans "Neue Arbeitszeit" %}
+            </a>
+        </div>
     </div>
     <div class="card-body">
         <div class="table-responsive">
@@ -17,12 +44,16 @@
                 <thead>
                     <tr>
                         <th>{% trans "Datum" %}</th>
-                        <th>{% trans "Mitarbeiter" %}</th>
-                        <th>{% trans "Nickname" %}</th>
+                        {% comment %} {% if user.role == 'OWNER' %} {% endcomment %}
+                            <th>{% trans "Mitarbeiter" %}</th>
+                        {% comment %} {% endif %} {% endcomment %}
                         <th>{% trans "Von" %}</th>
                         <th>{% trans "Bis" %}</th>
-                        <th>{% trans "Pause" %}</th>
-                        <th>{% trans "Stunden" %}</th>
+                        <th>{% trans "Soll (Std)" %}</th>
+                        <th>{% trans "Ist (Std)" %}</th>
+                        <th>{% trans "Urlaub" %}</th>
+                        <th>{% trans "ZA" %}</th>
+                        <th>{% trans "Differenz" %}</th>
                         <th>{% trans "Aktionen" %}</th>
                     </tr>
                 </thead>
@@ -30,16 +61,30 @@
                     {% for wh in working_hours %}
                         <tr>
                             <td>{{ wh.date }}</td>
-                            <td>{{ wh.employee.get_full_name }}</td>
-                            <td>
-                                <span class="badge" style="background-color: {{ wh.employee.color }}">
-                                    {{ wh.employee.username }}
-                                </span>
-                            </td>
+                            {% comment %} {% if user.role == 'OWNER' %} {% endcomment %}
+                                <td>
+                                    <span class="badge" style="background-color: {{ wh.employee.color }}">
+                                        {{ wh.employee.username }}
+                                    </span>
+                                </td>
+                            {% comment %} {% endif %} {% endcomment %}
                             <td>{{ wh.start_time|time:"H:i" }}</td>
                             <td>{{ wh.end_time|time:"H:i" }}</td>
-                            <td>{{ wh.break_duration }}</td>
-                            <td>{{ wh.hours|floatformat:2 }}</td>
+                            <td>{{ wh.soll_hours|floatformat:2 }}</td>
+                            <td>{{ wh.ist_hours|floatformat:2 }}</td>
+                            <td>
+                                {% if wh.vacation %}
+                                    <i class="bi bi-check-circle text-success"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if wh.time_comp %}
+                                    <i class="bi bi-check-circle text-success"></i>
+                                {% endif %}
+                            </td>
+                            <td class="{% if wh.difference < 0 %}text-danger{% elif wh.difference > 0 %}text-success{% endif %}">
+                                {{ wh.difference|floatformat:2 }}
+                            </td>
                             <td>
                                 <div class="btn-group">
                                     <a href="{% url 'wfm:working-hours-edit' wh.id %}" 
@@ -58,7 +103,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center">{% trans "Keine Arbeitszeiten gefunden" %}</td>
+                            <td colspan="10" class="text-center">{% trans "Keine Arbeitszeiten gefunden" %}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -76,8 +121,7 @@ function deleteWorkingHours(id) {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
-            },
-            credentials: 'same-origin'
+            }
         })
         .then(response => response.json())
         .then(data => {
@@ -86,9 +130,6 @@ function deleteWorkingHours(id) {
             } else {
                 alert(data.error || '{% trans "Fehler beim Löschen" %}');
             }
-        })
-        .catch(error => {
-            alert('{% trans "Ein Fehler ist aufgetreten" %}: ' + error);
         });
     }
 }

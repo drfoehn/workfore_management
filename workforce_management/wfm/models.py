@@ -71,6 +71,17 @@ class ScheduleTemplate(models.Model):
         verbose_name = _("Arbeitszeit-Vorlage")
         verbose_name_plural = _("Arbeitszeit-Vorlagen")
 
+    @property
+    def hours(self):
+        """Berechnet die Stunden zwischen Start- und Endzeit"""
+        start = datetime.combine(date.min, self.start_time)
+        end = datetime.combine(date.min, self.end_time)
+        duration = end - start
+        return Decimal(str(duration.total_seconds() / 3600))
+
+    def __str__(self):
+        return f"{self.employee.username} - {self.get_weekday_display()}"
+
 class GermanDateField(models.DateField):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
