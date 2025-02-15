@@ -156,8 +156,8 @@ class Command(BaseCommand):
             )
         
         self.stdout.write(self.style.SUCCESS('Demo-Daten erfolgreich erstellt!')) 
-                end_date=end_date,
-                status='APPROVED'
+        end_date=end_date,
+        status='APPROVED'
             )
             
             # Zeitausgleich in 3 Wochen

@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         eventClick: function(info) {
             if (info.event.extendedProps.type === 'working_hours') {
-                openWorkingHoursModal(info.event);
+                openWorkingHoursModal(info.event.id.replace('work_', ''));
             }
         },
         eventContent: function(arg) {
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function openWorkingHoursModal(event) {
-    const id = event.id.replace('work_', '');
+    const id = event.replace('work_', '');
     fetch(`/api/working-hours/${id}/`)
         .then(response => response.json())
         .then(data => {

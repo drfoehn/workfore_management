@@ -10,8 +10,15 @@ urlpatterns = [
 
     
     path('working-hours/', views.WorkingHoursListView.as_view(), name='working-hours-list'),
-    path('working-hours/add/', views.WorkingHoursCreateView.as_view(), name='working-hours-add'),
-    path('working-hours/edit/<int:pk>/', views.WorkingHoursUpdateView.as_view(), name='working-hours-edit'),
+    path('working-hours/check/', views.WorkingHoursCreateOrUpdateView.as_view(), name='working-hours-check'),
+    # API URLs für Arbeitszeiten
+    path('api/working-hours/<int:pk>/', views.api_working_hours_detail, name='api-working-hours-detail'),
+    path('api/working-hours/<int:pk>/update/', views.api_working_hours_update, name='api-working-hours-update'),
+    path('api/working-hours/<int:pk>/delete/', views.delete_working_hours, name='api-working-hours-delete'),
+    path('api/working-hours/<str:date>/', views.get_working_hours, name='api-get-working-hours'),
+    path('api/working-hours/<str:date>/save/', views.save_working_hours, name='api-save-working-hours'),
+    # path('working-hours/add/', views.WorkingHoursCreateView.as_view(), name='working-hours-add'),
+    # path('working-hours/edit/<int:pk>/', views.WorkingHoursUpdateView.as_view(), name='working-hours-edit'),
     path('vacation/', views.VacationListView.as_view(), name='vacation-list'),
     path('vacation/request/', views.VacationRequestView.as_view(), name='vacation-request'),
     
@@ -22,12 +29,10 @@ urlpatterns = [
     # AssistantViews
     path('monthly-overview/', views.MonthlyOverviewView.as_view(), name='monthly-overview'),
     path('time-compensation/add/', views.TimeCompensationCreateView.as_view(), name='time-compensation-add'),
-    path('working-hours/edit/<int:pk>/', views.WorkingHoursUpdateView.as_view(), name='working-hours-edit'),
-    path('working-hours/check/', views.WorkingHoursCreateOrUpdateView.as_view(), name='working-hours-check'),
+    # path('working-hours/edit/<int:pk>/', views.WorkingHoursUpdateView.as_view(), name='working-hours-edit'),
+    
     path('vacation/edit/<int:pk>/', views.VacationUpdateView.as_view(), name='vacation-edit'),
     path('time-compensation/edit/<int:pk>/', views.TimeCompensationUpdateView.as_view(), name='time-compensation-edit'),
-    path('api/working-hours/<str:date>/', views.get_working_hours, name='api-get-working-hours'),
-    path('api/working-hours/<str:date>/save/', views.save_working_hours, name='api-save-working-hours'),
     path('api/vacation/request/', views.api_vacation_request, name='api-vacation-request'),
     path('api/vacation/status/', views.api_vacation_status, name='api-vacation-status'),
     path('api/time-compensation/request/', views.api_time_compensation_request, name='api-time-compensation-request'),
@@ -45,6 +50,7 @@ urlpatterns = [
     path('api/therapist/booking/used/', views.api_therapist_booking_used, name='api-therapist-booking-used'),
     path('api/therapist-booking/<int:pk>/', views.api_therapist_booking_detail, name='api-therapist-booking-detail'),
     path('api/therapist-booking/update/', views.api_therapist_booking_update, name='api-therapist-booking-update'),
+    path('api/therapist-booking/<int:pk>/delete/', views.api_therapist_booking_delete, name='api-therapist-booking-delete'),
 
     
     # AssistantCalendarView

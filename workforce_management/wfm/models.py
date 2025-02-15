@@ -227,52 +227,28 @@ class TherapistBooking(models.Model):
         ('CANCELLED', _('Storniert')),
     ]
 
-    therapist = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        limit_choices_to={'role': 'THERAPIST'}
-    )
+    therapist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
-    status = models.CharField(
-        max_length=10,
-        choices=STATUS_CHOICES,
-        default='RESERVED'
-    )
+    actual_hours = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
-    actual_hours = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        null=True,
-        blank=True
-    )
-    hours = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal('0.00')
-    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='RESERVED')
 
-    class Meta:
-        ordering = ['date', 'start_time']
-        
+    @property
+    def hours(self):
+        """Berechnet die gebuchten Stunden"""
+        start = datetime.combine(date.min, self.start_time)
+        end = datetime.combine(date.min, self.end_time)
+        duration = end - start
+        return Decimal(str(duration.total_seconds() / 3600))
+
     def clean(self):
         if self.start_time and self.end_time and self.start_time >= self.end_time:
             raise ValidationError('Endzeit muss nach Startzeit liegen')
-        
-        # Berechne die Stunden bei Änderungen
-        if self.start_time and self.end_time:
-            start = datetime.combine(self.date, self.start_time)
-            end = datetime.combine(self.date, self.end_time)
-            duration = end - start
-            self.hours = Decimal(str(duration.total_seconds() / 3600))
-            
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.therapist} - {self.date} ({self.start_time}-{self.end_time})"
+        return f"{self.therapist.username} - {self.date} ({self.start_time}-{self.end_time})"
 
 class TherapistScheduleTemplate(models.Model):
     """Vorlage für die Standard-Raumbuchungen"""

@@ -1055,36 +1055,75 @@ def delete_working_hours(request, pk):
 
 @login_required
 def api_therapist_booking_detail(request, pk):
-    if request.user.role != 'OWNER':
+    if request.user.role != 'OWNER' and request.user.role != 'THERAPIST':
         return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
         
     try:
-        booking = TherapistBooking.objects.get(pk=pk)
+        booking = TherapistBooking.objects.select_related('therapist').get(pk=pk)
+        
+        # Prüfe ob der Therapeut seine eigene Buchung anschaut
+        if request.user.role == 'THERAPIST' and booking.therapist != request.user:
+            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+            
         return JsonResponse({
             'id': booking.id,
-            'status': booking.status,
+            'date': booking.date.isoformat(),
+            'start_time': booking.start_time.strftime('%H:%M'),
+            'end_time': booking.end_time.strftime('%H:%M'),
             'hours': float(booking.hours),
             'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
-            'notes': booking.notes
+            'notes': booking.notes or '',
+            'status': booking.status,
+            'therapist': {
+                'id': booking.therapist.id,
+                'username': booking.therapist.username,
+                'full_name': booking.therapist.get_full_name(),
+                'color': booking.therapist.color
+            }
         })
     except TherapistBooking.DoesNotExist:
         return JsonResponse({'error': 'Buchung nicht gefunden'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 def api_therapist_booking_update(request):
-    if request.method != 'POST' or request.user.role != 'OWNER':
+    """API-Endpunkt zum Aktualisieren einer Therapeuten-Buchung"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Nur POST-Anfragen erlaubt'}, status=405)
+        
+    if request.user.role != 'OWNER' and request.user.role != 'THERAPIST':
         return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
         
     try:
         data = json.loads(request.body)
         booking = TherapistBooking.objects.get(id=data['booking_id'])
         
-        booking.status = data['status']
-        booking.actual_hours = data['actual_hours']
-        booking.notes = data['notes']
+        # Prüfe ob der Therapeut seine eigene Buchung bearbeitet
+        if request.user.role == 'THERAPIST' and booking.therapist != request.user:
+            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+        
+        # Owner kann alles ändern
+        if request.user.role == 'OWNER':
+            booking.date = parse_date(data['date'])
+            booking.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+            booking.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+            
+        # Beide können actual_hours und notes ändern
+        if data.get('actual_hours'):
+            booking.actual_hours = Decimal(str(data['actual_hours']))
+        booking.notes = data.get('notes', '')
+        
+        # Wenn actual_hours gesetzt wurden, Status auf USED setzen
+        if booking.actual_hours is not None:
+            booking.status = 'USED'
+        
         booking.save()
         
         return JsonResponse({'success': True})
+        
+    except TherapistBooking.DoesNotExist:
+        return JsonResponse({'error': 'Buchung nicht gefunden'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -1110,46 +1149,51 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
         
         return context
 
-class TherapistBookingListView(LoginRequiredMixin, OwnerRequiredMixin, ListView):
+class TherapistBookingListView(LoginRequiredMixin, ListView):
     model = TherapistBooking
     template_name = 'wfm/therapist_booking_list.html'
     context_object_name = 'bookings'
     
     def get_queryset(self):
-        return TherapistBooking.objects.select_related('therapist').order_by('-date', 'start_time')
+        queryset = TherapistBooking.objects.select_related('therapist')
+        
+        # Filter für bestimmten Therapeuten
+        therapist_id = self.request.GET.get('therapist')
+        if therapist_id:
+            queryset = queryset.filter(therapist_id=therapist_id)
+            
+        # Berechne die Differenz für jede Buchung
+        bookings = list(queryset)  # Konvertiere QuerySet in Liste
+        for booking in bookings:
+            print(f"\nDebugging Buchung {booking.id}:")
+            print(f"- actual_hours: {booking.actual_hours} ({type(booking.actual_hours)})")
+            print(f"- hours: {booking.hours} ({type(booking.hours)})")
+            
+            if booking.actual_hours is not None:
+                print(f"- Vergleich: {booking.actual_hours} > {booking.hours} = {booking.actual_hours > booking.hours}")
+                if booking.actual_hours > booking.hours:
+                    booking.difference = float(booking.actual_hours) - float(booking.hours)
+                    print(f"- difference berechnet: {booking.difference}")
+                else:
+                    booking.difference = None
+                    print(f"- keine Differenz (actual_hours nicht größer)")
+            else:
+                booking.difference = None
+                print(f"- keine Differenz (actual_hours is None)")
+                
+        return sorted(bookings, key=lambda x: (-x.date.toordinal(), x.start_time))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Berechne die Gesamtstunden für jeden Therapeuten
-        therapists = CustomUser.objects.filter(role='THERAPIST').annotate(
-            total_hours=Sum('therapistbooking__hours'),
-            total_bookings=Count('therapistbooking')
-        )
-        context['therapists'] = therapists
-        return context
-
-@login_required
-def api_working_hours_detail(request, pk):
-    """API-Endpunkt zum Abrufen der Details einer Arbeitszeit"""
-    try:
-        working_hours = WorkingHours.objects.get(pk=pk)
-        if request.user.role != 'OWNER' and working_hours.employee != request.user:
-            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+        context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
+        context['debug'] = True  # Debug-Modus aktivieren
+        
+        # Hole den ausgewählten Therapeuten
+        therapist_id = self.request.GET.get('therapist')
+        if therapist_id:
+            context['selected_therapist'] = CustomUser.objects.filter(id=therapist_id).first()
             
-        return JsonResponse({
-            'id': working_hours.id,
-            'date': working_hours.date.isoformat(),
-            'start_time': working_hours.start_time.strftime('%H:%M'),
-            'end_time': working_hours.end_time.strftime('%H:%M'),
-            'break_duration': working_hours.break_duration.total_seconds() / 60 if working_hours.break_duration else 0,
-            'employee': {
-                'id': working_hours.employee.id,
-                'username': working_hours.employee.username,
-                'color': working_hours.employee.color
-            }
-        })
-    except WorkingHours.DoesNotExist:
-        return JsonResponse({'error': 'Arbeitszeit nicht gefunden'}, status=404)
+        return context
 
 @login_required
 def api_working_hours_update(request):
@@ -1173,6 +1217,50 @@ def api_working_hours_update(request):
         return JsonResponse({'success': True})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+    
+    
+@login_required
+def api_working_hours_detail(request, pk):
+    """API-Endpunkt zum Abrufen der Details einer Arbeitszeit"""
+    try:
+        working_hours = WorkingHours.objects.select_related('employee').get(pk=pk)
+        if request.user.role != 'OWNER' and working_hours.employee != request.user:
+            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+        
+        # Berechne die Stunden
+        template = ScheduleTemplate.objects.filter(
+            employee=working_hours.employee,
+            weekday=working_hours.date.weekday()
+        ).first()
+        
+        soll_hours = template.hours if template else Decimal('8.0')
+        
+        duration = datetime.combine(date.min, working_hours.end_time) - datetime.combine(date.min, working_hours.start_time)
+        if working_hours.break_duration:
+            duration -= working_hours.break_duration
+        ist_hours = Decimal(str(duration.total_seconds() / 3600))
+            
+        return JsonResponse({
+            'id': working_hours.id,
+            'date': working_hours.date.isoformat(),
+            'start_time': working_hours.start_time.strftime('%H:%M'),
+            'end_time': working_hours.end_time.strftime('%H:%M'),
+            'break_duration': working_hours.break_duration.total_seconds() / 60 if working_hours.break_duration else 0,
+            'employee': {
+                'id': working_hours.employee.id,
+                'username': working_hours.employee.username,
+                'color': working_hours.employee.color
+            },
+            'soll_hours': float(soll_hours),
+            'ist_hours': float(ist_hours),
+            'difference': float(ist_hours - soll_hours)
+        })
+    except WorkingHours.DoesNotExist:
+        return JsonResponse({'error': 'Arbeitszeit nicht gefunden'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
 
 @login_required
 def api_vacation_status(request):
@@ -1207,6 +1295,26 @@ def api_vacation_status(request):
     except Vacation.DoesNotExist:
         return JsonResponse({
             'error': 'Urlaub nicht gefunden'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+
+@login_required
+def api_therapist_booking_delete(request, pk):
+    """API-Endpunkt zum Löschen einer Therapeuten-Buchung"""
+    if request.method != 'POST' or request.user.role != 'OWNER':
+        return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
+        
+    try:
+        booking = TherapistBooking.objects.get(pk=pk)
+        booking.delete()
+        return JsonResponse({'success': True})
+        
+    except TherapistBooking.DoesNotExist:
+        return JsonResponse({
+            'error': 'Buchung nicht gefunden'
         }, status=404)
     except Exception as e:
         return JsonResponse({

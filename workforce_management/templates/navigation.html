@@ -50,6 +50,28 @@
                                 </li>
                             </ul>
                         </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-gear"></i> Verwaltung Therapeuten
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}">
+                                        <i class="bi bi-clock"></i> Buchungen - Liste
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{% url 'wfm:calendar' %}">
+                                        <i class="bi bi-calendar3"></i> Buchungen - Kalender
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{% url 'wfm:therapist-monthly-overview' %}">
+                                        <i class="bi bi-list"></i> Monatsübersicht
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
                     {% elif user.role == 'THERAPIST' %}
                         <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.url_name == 'therapist-monthly-overview' %}active{% endif %}" 

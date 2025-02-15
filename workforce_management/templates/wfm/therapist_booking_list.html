@@ -1,16 +1,37 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% trans "Raumbuchungen" %} - {{ block.super }}{% endblock %}
+{% block title %}{% trans "Therapeuten-Buchungen" %} - {{ block.super }}{% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h2 class="mb-0">{% trans "Raumbuchungen" %}</h2>
-        <div>
-            <a href="{% url 'wfm:calendar' %}" class="btn btn-outline-primary me-2">
-                <i class="bi bi-calendar3"></i> {% trans "Kalenderansicht" %}
-            </a>
+        <h2 class="mb-0">{% trans "Therapeuten-Buchungen" %}</h2>
+        <div class="d-flex gap-2">
+            <div class="dropdown">
+                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    {% if selected_therapist %}
+                        {{ selected_therapist.get_full_name|default:selected_therapist.username }}
+                    {% else %}
+                        {% trans "Alle Therapeuten" %}
+                    {% endif %}
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}">
+                            {% trans "Alle Therapeuten" %}
+                        </a>
+                    </li>
+                    {% for therapist in therapists %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}?therapist={{ therapist.id }}">
+                                {{ therapist.get_full_name|default:therapist.username }}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     </div>
     <div class="card-body">
@@ -22,8 +43,10 @@
                         <th>{% trans "Therapeut" %}</th>
                         <th>{% trans "Von" %}</th>
                         <th>{% trans "Bis" %}</th>
-                        <th>{% trans "Stunden" %}</th>
-                        <th>{% trans "Status" %}</th>
+                        <th>{% trans "Gebucht (Std)" %}</th>
+                        <th>{% trans "Verwendet (Std)" %}</th>
+                        <th>{% trans "Differenz" %}</th>
+                        <th>{% trans "Bemerkungen" %}</th>
                         <th>{% trans "Aktionen" %}</th>
                     </tr>
                 </thead>
@@ -33,33 +56,48 @@
                             <td>{{ booking.date }}</td>
                             <td>
                                 <span class="badge" style="background-color: {{ booking.therapist.color }}">
-                                    {{ booking.therapist.username }}
+                                    {{ booking.therapist.get_full_name|default:booking.therapist.username }}
                                 </span>
                             </td>
                             <td>{{ booking.start_time|time:"H:i" }}</td>
                             <td>{{ booking.end_time|time:"H:i" }}</td>
-                            <td>{{ booking.hours }}</td>
-                            <td>
-                                {% if booking.status == 'USED' %}
-                                    <span class="badge bg-success">{% trans "Verwendet" %}</span>
-                                {% elif booking.status == 'CANCELLED' %}
-                                    <span class="badge bg-danger">{% trans "Storniert" %}</span>
+                            <td>{{ booking.hours|floatformat:2 }}</td>
+                            <td>{{ booking.actual_hours|default_if_none:"-"|floatformat:2 }}</td>
+                            <td class="{% if booking.difference is not None %}text-danger{% endif %}">
+                                <!-- Debug Info -->
+                                {% if debug %}
+                                    
+                                {% endif %}
+                                <!-- Normale Anzeige -->
+                                {% if booking.difference is not None %}
+                                    {{ booking.difference|floatformat:2 }}
                                 {% else %}
-                                    <span class="badge bg-warning">{% trans "Reserviert" %}</span>
+                                    -
                                 {% endif %}
                             </td>
+                            <td>{{ booking.notes|default:"-" }}</td>
                             <td>
-                                <button type="button" 
-                                        class="btn btn-sm btn-primary"
-                                        onclick="openBookingModal({{ booking.id }})"
-                                        title="{% trans 'Bearbeiten' %}">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
+                                <div class="btn-group">
+                                    <button type="button"
+                                            onclick="openBookingModal({{ booking.id }})"
+                                            class="btn btn-sm btn-outline-primary"
+                                            title="{% trans 'Bearbeiten' %}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    {% if user.role == 'OWNER' %}
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger"
+                                                onclick="deleteBooking({{ booking.id }})"
+                                                title="{% trans 'Löschen' %}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center">{% trans "Keine Buchungen gefunden" %}</td>
+                            <td colspan="8" class="text-center">{% trans "Keine Buchungen gefunden" %}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -68,7 +106,7 @@
     </div>
 </div>
 
-<!-- Modal für Buchungsdetails -->
+<!-- Modal für Buchungen -->
 <div class="modal fade" id="bookingModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -78,27 +116,46 @@
             </div>
             <div class="modal-body">
                 <form id="bookingForm">
-                    <input type="hidden" name="booking_id" id="bookingId">
+                    <input type="hidden" id="bookingId">
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Status" %}</label>
-                        <select class="form-select" name="status" id="bookingStatus">
-                            <option value="RESERVED">{% trans "Reserviert" %}</option>
-                            <option value="USED">{% trans "Verwendet" %}</option>
-                            <option value="CANCELLED">{% trans "Storniert" %}</option>
-                        </select>
+                        <label class="form-label">{% trans "Therapeut" %}</label>
+                        <input type="text" class="form-control" id="therapistName" readonly>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Tatsächliche Stunden" %}</label>
-                        <input type="number" class="form-control" name="actual_hours" id="actualHours" step="0.25">
+                        <label class="form-label">{% trans "Datum" %}</label>
+                        <input type="date" class="form-control" id="bookingDate" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Von" %}</label>
+                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Bis" %}</label>
+                            <input type="time" class="form-control" id="endTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Gebucht (Std)" %}</label>
+                            <input type="number" class="form-control" id="bookedHours" readonly>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Verwendet (Std)" %}</label>
+                            <input type="number" class="form-control" id="actualHours" step="0.25" min="0">
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">{% trans "Notizen" %}</label>
-                        <textarea class="form-control" name="notes" id="bookingNotes" rows="3"></textarea>
+                        <textarea class="form-control" id="notes" rows="3"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                {% if user.role == 'OWNER' %}
+                    <button type="button" class="btn btn-danger" onclick="deleteBooking()">{% trans "Löschen" %}</button>
+                {% endif %}
                 <button type="button" class="btn btn-primary" onclick="saveBooking()">{% trans "Speichern" %}</button>
             </div>
         </div>
@@ -108,31 +165,52 @@
 
 {% block extra_js %}
 <script>
-function openBookingModal(bookingId) {
-    fetch(`/api/therapist-booking/${bookingId}/`)
-        .then(response => response.json())
+// User-Rolle als Variable verfügbar machen
+const userRole = '{{ user.role }}';
+
+function openBookingModal(id) {
+    fetch(`/api/therapist-booking/${id}/`)
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
         .then(data => {
             document.getElementById('bookingId').value = data.id;
-            document.getElementById('bookingStatus').value = data.status;
-            document.getElementById('actualHours').value = data.actual_hours || data.hours;
-            document.getElementById('bookingNotes').value = data.notes || '';
+            document.getElementById('therapistName').value = data.therapist.username;
+            document.getElementById('bookingDate').value = data.date;
+            document.getElementById('startTime').value = data.start_time;
+            document.getElementById('endTime').value = data.end_time;
+            document.getElementById('bookedHours').value = data.hours;
+            document.getElementById('actualHours').value = data.actual_hours || '';
+            document.getElementById('notes').value = data.notes || '';
+            
             new bootstrap.Modal(document.getElementById('bookingModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Laden der Daten');
         });
 }
 
 function saveBooking() {
+    const id = document.getElementById('bookingId').value;
     const data = {
-        booking_id: document.getElementById('bookingId').value,
-        status: document.getElementById('bookingStatus').value,
+        booking_id: id,
         actual_hours: document.getElementById('actualHours').value,
-        notes: document.getElementById('bookingNotes').value
+        notes: document.getElementById('notes').value
     };
+    
+    if (userRole === 'OWNER') {
+        data.date = document.getElementById('bookingDate').value;
+        data.start_time = document.getElementById('startTime').value;
+        data.end_time = document.getElementById('endTime').value;
+    }
     
     fetch('/api/therapist-booking/update/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
         },
         body: JSON.stringify(data)
     })
@@ -141,9 +219,41 @@ function saveBooking() {
         if (data.success) {
             location.reload();
         } else {
-            alert(data.error || '{% trans "Fehler beim Speichern" %}');
+            alert(data.error || 'Fehler beim Speichern');
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Fehler beim Speichern');
     });
+}
+
+function deleteBooking(id) {
+    if (!id) {
+        id = document.getElementById('bookingId').value;
+    }
+    if (!id) return;
+    
+    if (confirm('{% trans "Buchung wirklich löschen?" %}')) {
+        fetch(`/api/therapist-booking/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || '{% trans "Fehler beim Löschen" %}');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Löschen');
+        });
+    }
 }
 </script>
 {% endblock %} 

@@ -33,9 +33,9 @@
                     </ul>
                 </div>
             {% comment %} {% endif %} {% endcomment %}
-            <a href="{% url 'wfm:working-hours-add' %}" class="btn btn-primary">
+{% comment %}             <a href="{% url 'wfm:api-' %}" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> {% trans "Neue Arbeitszeit" %}
-            </a>
+            </a> {% endcomment %}
         </div>
     </div>
     <div class="card-body">
@@ -87,11 +87,12 @@
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <a href="{% url 'wfm:working-hours-edit' wh.id %}" 
-                                       class="btn btn-sm btn-outline-primary"
-                                       title="{% trans 'Bearbeiten' %}">
+                                    <button type="button"
+                                            onclick="openWorkingHoursModal({{ wh.id }})"
+                                            class="btn btn-sm btn-outline-primary"
+                                            title="{% trans 'Bearbeiten' %}">
                                         <i class="bi bi-pencil"></i>
-                                    </a>
+                                    </button>
                                     <button type="button" 
                                             class="btn btn-sm btn-outline-danger"
                                             onclick="deleteWorkingHours({{ wh.id }})"
@@ -111,16 +112,137 @@
         </div>
     </div>
 </div>
+
+<!-- Modal für Arbeitszeiten -->
+<div class="modal fade" id="workingHoursModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{% trans "Arbeitszeit bearbeiten" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="workingHoursForm">
+                    <input type="hidden" id="workingHoursId">
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Mitarbeiter" %}</label>
+                        <input type="text" class="form-control" id="employeeName" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Datum" %}</label>
+                        <input type="date" class="form-control" id="workDate" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Von" %}</label>
+                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Bis" %}</label>
+                            <input type="time" class="form-control" id="endTime">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Pause (Minuten)" %}</label>
+                        <input type="number" class="form-control" id="breakDuration" min="0" step="15">
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Soll (Std)" %}</label>
+                            <input type="number" class="form-control" id="sollHours" readonly>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Ist (Std)" %}</label>
+                            <input type="number" class="form-control" id="istHours" readonly>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Differenz" %}</label>
+                            <input type="number" class="form-control" id="difference" readonly>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                {% if user.role == 'OWNER' %}
+                    <button type="button" class="btn btn-danger" onclick="deleteWorkingHours()">{% trans "Löschen" %}</button>
+                {% endif %}
+                <button type="button" class="btn btn-primary" onclick="saveWorkingHours()">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function deleteWorkingHours(id) {
+function openWorkingHoursModal(id) {
+    fetch(`/api/working-hours/${id}/`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            document.getElementById('workingHoursId').value = data.id;
+            document.getElementById('employeeName').value = data.employee.username;
+            document.getElementById('workDate').value = data.date;
+            document.getElementById('startTime').value = data.start_time;
+            document.getElementById('endTime').value = data.end_time;
+            document.getElementById('breakDuration').value = data.break_duration;
+            document.getElementById('sollHours').value = data.soll_hours;
+            document.getElementById('istHours').value = data.ist_hours;
+            document.getElementById('difference').value = data.difference;
+            
+            new bootstrap.Modal(document.getElementById('workingHoursModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Laden der Daten');
+        });
+}
+
+function saveWorkingHours() {
+    const id = document.getElementById('workingHoursId').value;
+    const data = {
+        date: document.getElementById('workDate').value,
+        start_time: document.getElementById('startTime').value,
+        end_time: document.getElementById('endTime').value,
+        break_duration: document.getElementById('breakDuration').value
+    };
+    
+    fetch(`/api/working-hours/${id}/update/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Fehler beim Speichern');
+    });
+}
+
+function deleteWorkingHours() {
+    const id = document.getElementById('workingHoursId').value;
+    if (!id) return;
+    
     if (confirm('{% trans "Arbeitszeit wirklich löschen?" %}')) {
         fetch(`/api/working-hours/${id}/delete/`, {
             method: 'POST',
             headers: {
-                'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
             }
         })
         .then(response => response.json())
