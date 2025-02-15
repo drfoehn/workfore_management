@@ -55,6 +55,8 @@ urlpatterns = [
     
     # AssistantCalendarView
     path('assistant-calendar/', views.AssistantCalendarView.as_view(), name='assistant-calendar'),
+    path('therapist-calendar/', views.TherapistCalendarView.as_view(), name='therapist-calendar'),
+    path('api/therapist-calendar/events/', views.api_therapist_calendar_events, name='api-therapist-calendar-events'),
 ] 
 
 

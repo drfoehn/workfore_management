@@ -1165,21 +1165,14 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         # Berechne die Differenz für jede Buchung
         bookings = list(queryset)  # Konvertiere QuerySet in Liste
         for booking in bookings:
-            print(f"\nDebugging Buchung {booking.id}:")
-            print(f"- actual_hours: {booking.actual_hours} ({type(booking.actual_hours)})")
-            print(f"- hours: {booking.hours} ({type(booking.hours)})")
             
             if booking.actual_hours is not None:
-                print(f"- Vergleich: {booking.actual_hours} > {booking.hours} = {booking.actual_hours > booking.hours}")
                 if booking.actual_hours > booking.hours:
                     booking.difference = float(booking.actual_hours) - float(booking.hours)
-                    print(f"- difference berechnet: {booking.difference}")
                 else:
                     booking.difference = None
-                    print(f"- keine Differenz (actual_hours nicht größer)")
             else:
                 booking.difference = None
-                print(f"- keine Differenz (actual_hours is None)")
                 
         return sorted(bookings, key=lambda x: (-x.date.toordinal(), x.start_time))
 
@@ -1320,3 +1313,50 @@ def api_therapist_booking_delete(request, pk):
         return JsonResponse({
             'error': str(e)
         }, status=500)
+
+class TherapistCalendarView(LoginRequiredMixin, TemplateView):
+    template_name = 'wfm/therapist_calendar.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
+        
+        # Hole den ausgewählten Therapeuten
+        therapist_id = self.request.GET.get('therapist')
+        if therapist_id:
+            context['selected_therapist'] = CustomUser.objects.filter(id=therapist_id).first()
+            
+        return context
+
+@login_required
+def api_therapist_calendar_events(request):
+    start = request.GET.get('start')
+    end = request.GET.get('end')
+    therapist_id = request.GET.get('therapist')
+    
+    bookings = TherapistBooking.objects.select_related('therapist')
+    
+    if therapist_id:
+        bookings = bookings.filter(therapist_id=therapist_id)
+    
+    if start:
+        bookings = bookings.filter(date__gte=start[:10])
+    if end:
+        bookings = bookings.filter(date__lte=end[:10])
+        
+    events = []
+    for booking in bookings:
+        events.append({
+            'id': booking.id,
+            'title': f"{booking.therapist.get_full_name()} ({booking.hours}h)",
+            'start': f"{booking.date}T{booking.start_time}",
+            'end': f"{booking.date}T{booking.end_time}",
+            'color': booking.therapist.color,
+            'therapist': {
+                'id': booking.therapist.id,
+                'name': booking.therapist.get_full_name()
+            },
+            'status': booking.status
+        })
+        
+    return JsonResponse(events, safe=False)

@@ -1,18 +1,42 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% trans "Therapeuten-Buchungen" %} - {{ block.super }}{% endblock %}
+{% block title %}{% trans "Therapeuten-Kalender" %} - {{ block.super }}{% endblock %}
+
+{% block extra_css %}
+<!-- FullCalendar CSS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.css' rel='stylesheet' />
+<style>
+    .fc-event {
+        cursor: pointer;
+    }
+    .fc-event.status-USED {
+        opacity: 0.7;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 {% csrf_token %}
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h2 class="mb-0">{% trans "Therapeuten-Buchungen" %}</h2>
+        <h2 class="mb-0">{% trans "Therapeuten-Kalender" %}</h2>
         <div class="d-flex gap-2">
-            <a href="{% url 'wfm:therapist-calendar' %}{% if selected_therapist %}?therapist={{ selected_therapist.id }}{% endif %}" 
-               class="btn btn-outline-primary">
-                <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
-            </a>
+            <!-- View Buttons -->
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary" onclick="calendar.changeView('dayGridMonth')">
+                    <i class="bi bi-calendar-month"></i> {% trans "Monat" %}
+                </button>
+                <button type="button" class="btn btn-outline-primary" onclick="calendar.changeView('timeGridWeek')">
+                    <i class="bi bi-calendar-week"></i> {% trans "Woche" %}
+                </button>
+                <a href="{% url 'wfm:therapist-booking-list' %}{% if selected_therapist %}?therapist={{ selected_therapist.id }}{% endif %}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-list"></i> {% trans "Liste" %}
+                </a>
+            </div>
+
+            <!-- Therapeuten Filter -->
             <div class="dropdown">
                 <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     {% if selected_therapist %}
@@ -23,13 +47,11 @@
                 </button>
                 <ul class="dropdown-menu">
                     <li>
-                        <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}">
-                            {% trans "Alle Therapeuten" %}
-                        </a>
+                        <a class="dropdown-item" href="?">{% trans "Alle Therapeuten" %}</a>
                     </li>
                     {% for therapist in therapists %}
                         <li>
-                            <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}?therapist={{ therapist.id }}">
+                            <a class="dropdown-item" href="?therapist={{ therapist.id }}">
                                 {{ therapist.get_full_name|default:therapist.username }}
                             </a>
                         </li>
@@ -39,74 +61,7 @@
         </div>
     </div>
     <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>{% trans "Datum" %}</th>
-                        <th>{% trans "Therapeut" %}</th>
-                        <th>{% trans "Von" %}</th>
-                        <th>{% trans "Bis" %}</th>
-                        <th>{% trans "Gebucht (Std)" %}</th>
-                        <th>{% trans "Verwendet (Std)" %}</th>
-                        <th>{% trans "Differenz" %}</th>
-                        <th>{% trans "Bemerkungen" %}</th>
-                        <th>{% trans "Aktionen" %}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for booking in bookings %}
-                        <tr>
-                            <td>{{ booking.date }}</td>
-                            <td>
-                                <span class="badge" style="background-color: {{ booking.therapist.color }}">
-                                    {{ booking.therapist.get_full_name|default:booking.therapist.username }}
-                                </span>
-                            </td>
-                            <td>{{ booking.start_time|time:"H:i" }}</td>
-                            <td>{{ booking.end_time|time:"H:i" }}</td>
-                            <td>{{ booking.hours|floatformat:2 }}</td>
-                            <td>{{ booking.actual_hours|default_if_none:"-"|floatformat:2 }}</td>
-                            <td class="{% if booking.difference is not None %}text-danger{% endif %}">
-                                <!-- Debug Info -->
-                                {% if debug %}
-                                    
-                                {% endif %}
-                                <!-- Normale Anzeige -->
-                                {% if booking.difference is not None %}
-                                    {{ booking.difference|floatformat:2 }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            <td>{{ booking.notes|default:"-" }}</td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button"
-                                            onclick="openBookingModal({{ booking.id }})"
-                                            class="btn btn-sm btn-outline-primary"
-                                            title="{% trans 'Bearbeiten' %}">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    {% if user.role == 'OWNER' %}
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-danger"
-                                                onclick="deleteBooking({{ booking.id }})"
-                                                title="{% trans 'Löschen' %}">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="8" class="text-center">{% trans "Keine Buchungen gefunden" %}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <div id="calendar"></div>
     </div>
 </div>
 
@@ -168,10 +123,57 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
-// User-Rolle als Variable verfügbar machen
-const userRole = '{{ user.role }}';
+<!-- FullCalendar JS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/de.js'></script>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        locale: 'de',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: ''  // View-Buttons sind jetzt in der Card-Header
+        },
+        slotMinTime: '07:00:00',
+        slotMaxTime: '20:00:00',
+        allDaySlot: false,
+        height: 'auto',
+        eventClick: function(info) {
+            openBookingModal(info.event.id.replace('book_', ''));
+        },
+        events: function(info, successCallback, failureCallback) {
+            fetch('/api/therapist-calendar/events/?start=' + info.startStr + '&end=' + info.endStr{% if selected_therapist %} + '&therapist={{ selected_therapist.id }}'{% endif %})
+                .then(response => response.json())
+                .then(data => {
+                    successCallback(data.map(event => ({
+                        id: 'book_' + event.id,
+                        title: event.title,
+                        start: event.start,
+                        end: event.end,
+                        backgroundColor: event.color,
+                        borderColor: event.color,
+                        className: 'status-' + event.status,
+                        extendedProps: {
+                            therapist: event.therapist,
+                            status: event.status
+                        }
+                    })));
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    failureCallback(error);
+                });
+        }
+    });
+    calendar.render();
+    window.calendar = calendar;  // Mache calendar global verfügbar
+});
+
+// Die gleichen Funktionen wie in therapist_booking_list.html
 function openBookingModal(id) {
     fetch(`/api/therapist-booking/${id}/`)
         .then(response => {
@@ -204,7 +206,7 @@ function saveBooking() {
         notes: document.getElementById('notes').value
     };
     
-    if (userRole === 'OWNER') {
+    if ('{{ user.role }}' === 'OWNER') {
         data.date = document.getElementById('bookingDate').value;
         data.start_time = document.getElementById('startTime').value;
         data.end_time = document.getElementById('endTime').value;
@@ -232,10 +234,8 @@ function saveBooking() {
     });
 }
 
-function deleteBooking(id) {
-    if (!id) {
-        id = document.getElementById('bookingId').value;
-    }
+function deleteBooking() {
+    const id = document.getElementById('bookingId').value;
     if (!id) return;
     
     if (confirm('{% trans "Buchung wirklich löschen?" %}')) {
