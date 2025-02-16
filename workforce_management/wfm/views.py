@@ -60,17 +60,25 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         # Basis-Queryset für tatsächliche Arbeitszeiten
         queryset = WorkingHours.objects.select_related('employee')
         
-        # Filter nach Mitarbeiter
+        # Filter nach Mitarbeiter und Rolle
         if self.request.user.role == 'OWNER':
             employee_id = self.request.GET.get('employee')
+            role_filter = self.request.GET.get('role')
+            
             if employee_id:
+                # Filter nach spezifischem Mitarbeiter
                 employees = [CustomUser.objects.get(id=employee_id)]
+            elif role_filter:
+                # Filter nach Rolle
+                employees = CustomUser.objects.filter(role=role_filter)
             else:
+                # Alle Assistenten und Reinigungskräfte
                 employees = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
         else:
+            # Nicht-Owner sehen nur ihre eigenen Einträge
             employees = [self.request.user]
-            
-        # Hole alle relevanten Templates
+
+        # Hole alle relevanten Templates für die gefilterten Mitarbeiter
         all_templates = ScheduleTemplate.objects.filter(
             employee__in=employees
         ).order_by('employee', '-valid_from', 'weekday')
@@ -82,8 +90,11 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             if key not in template_dict:
                 template_dict[key] = template
 
-        # Erstelle WorkingHours-Objekte für jeden Tag im Monat
-        working_hours_list = list(queryset.filter(date__range=[start_date, end_date]))
+        # Hole existierende Arbeitszeiten für den gewählten Zeitraum und die gefilterten Mitarbeiter
+        working_hours_list = list(queryset.filter(
+            date__range=[start_date, end_date],
+            employee__in=employees
+        ))
         existing_dates = {(wh.employee_id, wh.date): wh for wh in working_hours_list}
         
         # Fülle fehlende Tage mit Template-basierten Arbeitszeiten
@@ -142,12 +153,28 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         })
         
         if self.request.user.role == 'OWNER':
-            # Liste aller Assistenten und Reinigungskräfte für Filter
-            context['employees'] = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
-            # Hole den ausgewählten Mitarbeiter
+            # Hole alle Mitarbeiter für Filter
+            context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
+            context['cleaners'] = CustomUser.objects.filter(role='CLEANING')
+            
+            # Hole ausgewählten Mitarbeiter und Rolle
             employee_id = self.request.GET.get('employee')
+            role_filter = self.request.GET.get('role')
+            
             if employee_id:
                 context['selected_employee'] = CustomUser.objects.filter(id=employee_id).first()
+            context['selected_role'] = role_filter
+            
+            # Erstelle URLs für Rollenfilter
+            current_params = self.request.GET.copy()
+            current_params.pop('role', None)
+            current_params.pop('employee', None)
+            
+            context['all_url'] = f"?{current_params.urlencode()}"
+            current_params['role'] = 'ASSISTANT'
+            context['assistant_url'] = f"?{current_params.urlencode()}"
+            current_params['role'] = 'CLEANING'
+            context['cleaning_url'] = f"?{current_params.urlencode()}"
         
         # Berechne die Stunden für jeden Eintrag
         for wh in context['working_hours']:

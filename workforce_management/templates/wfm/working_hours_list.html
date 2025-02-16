@@ -9,62 +9,81 @@
         <div class="d-flex align-items-center gap-3">
             <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
             <div class="btn-group">
-                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}year={{ prev_year }}&month={{ prev_month }}" 
+                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ prev_year }}&month={{ prev_month }}" 
                    class="btn btn-outline-primary">
                     <i class="bi bi-chevron-left"></i>
                 </a>
                 <button class="btn btn-outline-primary" disabled>
                     {{ month_name }}
                 </button>
-                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}year={{ next_year }}&month={{ next_month }}" 
+                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ next_year }}&month={{ next_month }}" 
                    class="btn btn-outline-primary">
                     <i class="bi bi-chevron-right"></i>
                 </a>
             </div>
         </div>
         <div class="d-flex gap-2">
-            {% comment %} {% if user.role == 'OWNER' %} {% endcomment %}
+            {% if user.role == 'OWNER' %}
+                <!-- Rollenfilter -->
+                <div class="btn-group me-2">
+                    <a href="{{ all_url }}" 
+                       class="btn btn-outline-primary {% if not selected_role %}active{% endif %}">
+                        {% trans "Alle" %}
+                    </a>
+                    <a href="{{ assistant_url }}" 
+                       class="btn btn-outline-primary {% if selected_role == 'ASSISTANT' %}active{% endif %}">
+                        {% trans "Assistenz" %}
+                    </a>
+                    <a href="{{ cleaning_url }}" 
+                       class="btn btn-outline-primary {% if selected_role == 'CLEANING' %}active{% endif %}">
+                        {% trans "Reinigung" %}
+                    </a>
+                </div>
+                
+                <!-- Mitarbeiterfilter -->
                 <div class="dropdown">
                     <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                         {% if selected_employee %}
                             {{ selected_employee.get_full_name|default:selected_employee.username }}
-                            ({{ selected_employee.get_role_display }})
                         {% else %}
-                            {% trans "Alle Mitarbeiter" %}
+                            {% if selected_role == 'ASSISTANT' %}
+                                {% trans "Alle Assistenzen" %}
+                            {% elif selected_role == 'CLEANING' %}
+                                {% trans "Alle Reinigungskräfte" %}
+                            {% else %}
+                                {% trans "Alle Mitarbeiter" %}
+                            {% endif %}
                         {% endif %}
                     </button>
                     <ul class="dropdown-menu">
                         <li>
-                            <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}">
-                                {% trans "Alle Mitarbeiter" %}
+                            <a class="dropdown-item" href="?{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ current_year }}&month={{ current_month }}">
+                                {% trans "Alle anzeigen" %}
                             </a>
                         </li>
-                        <li><h6 class="dropdown-header">{% trans "Assistenzen" %}</h6></li>
-                        {% for employee in employees %}
-                            {% if employee.role == 'ASSISTANT' %}
+                        {% if not selected_role or selected_role == 'ASSISTANT' %}
+                            <li><h6 class="dropdown-header">{% trans "Assistenzen" %}</h6></li>
+                            {% for employee in assistants %}
                                 <li>
-                                    <a class="dropdown-item" href="?employee={{ employee.id }}">
+                                    <a class="dropdown-item" href="?employee={{ employee.id }}&year={{ current_year }}&month={{ current_month }}">
                                         {{ employee.get_full_name|default:employee.username }}
                                     </a>
                                 </li>
-                            {% endif %}
-                        {% endfor %}
-                        <li><h6 class="dropdown-header">{% trans "Reinigungsdienst" %}</h6></li>
-                        {% for employee in employees %}
-                            {% if employee.role == 'CLEANING' %}
+                            {% endfor %}
+                        {% endif %}
+                        {% if not selected_role or selected_role == 'CLEANING' %}
+                            <li><h6 class="dropdown-header">{% trans "Reinigungsdienst" %}</h6></li>
+                            {% for employee in cleaners %}
                                 <li>
-                                    <a class="dropdown-item" href="?employee={{ employee.id }}">
+                                    <a class="dropdown-item" href="?employee={{ employee.id }}&year={{ current_year }}&month={{ current_month }}">
                                         {{ employee.get_full_name|default:employee.username }}
                                     </a>
                                 </li>
-                            {% endif %}
-                        {% endfor %}
+                            {% endfor %}
+                        {% endif %}
                     </ul>
                 </div>
-            {% comment %} {% endif %} {% endcomment %}
-{% comment %}             <a href="{% url 'wfm:api-' %}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> {% trans "Neue Arbeitszeit" %}
-            </a> {% endcomment %}
+            {% endif %}
         </div>
     </div>
     <div class="card-body">
