@@ -66,9 +66,10 @@ class ScheduleTemplate(models.Model):
     weekday = models.IntegerField(choices=WEEKDAY_CHOICES, verbose_name=_("Wochentag"))
     start_time = models.TimeField(verbose_name=_("Beginn"))
     end_time = models.TimeField(verbose_name=_("Ende"))
+    valid_from = models.DateField(verbose_name=_("Gültig ab"), default=date.today)
     
     class Meta:
-        unique_together = ['employee', 'weekday']
+        ordering = ['-valid_from', 'weekday']
         verbose_name = _("Arbeitszeit-Vorlage")
         verbose_name_plural = _("Arbeitszeit-Vorlagen")
 
@@ -81,7 +82,7 @@ class ScheduleTemplate(models.Model):
         return Decimal(str(duration.total_seconds() / 3600))
 
     def __str__(self):
-        return f"{self.employee.username} - {self.get_weekday_display()}"
+        return f"{self.employee.username} - {self.get_weekday_display()} (ab {self.valid_from})"
 
 class GermanDateField(models.DateField):
     def __init__(self, *args, **kwargs):
@@ -268,15 +269,7 @@ class TherapistBooking(models.Model):
 
 class TherapistScheduleTemplate(models.Model):
     """Vorlage für die Standard-Raumbuchungen"""
-    WEEKDAY_CHOICES = [
-        (0, _('Montag')),
-        (1, _('Dienstag')),
-        (2, _('Mittwoch')),
-        (3, _('Donnerstag')),
-        (4, _('Freitag')),
-        (5, _('Samstag')),
-        (6, _('Sonntag')),
-    ]
+    WEEKDAY_CHOICES = ScheduleTemplate.WEEKDAY_CHOICES
     
     therapist = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -286,6 +279,7 @@ class TherapistScheduleTemplate(models.Model):
     weekday = models.IntegerField(choices=WEEKDAY_CHOICES)
     start_time = models.TimeField()
     end_time = models.TimeField()
+    valid_from = models.DateField(verbose_name=_("Gültig ab"), default=date.today)
     hours = models.DecimalField(
         max_digits=4,
         decimal_places=2,
@@ -293,7 +287,7 @@ class TherapistScheduleTemplate(models.Model):
     )
 
     class Meta:
-        ordering = ['weekday', 'start_time']
+        ordering = ['-valid_from', 'weekday', 'start_time']
         
     def clean(self):
         if self.start_time and self.end_time and self.start_time >= self.end_time:
@@ -312,4 +306,27 @@ class TherapistScheduleTemplate(models.Model):
 
     def __str__(self):
         return f"{self.therapist} - {self.get_weekday_display()} ({self.start_time}-{self.end_time})"
+
+class UserDocument(models.Model):
+    """Dokumente für Benutzer (Verträge etc.)"""
+    user = models.ForeignKey(
+        CustomUser, 
+        on_delete=models.CASCADE,
+        related_name='documents'
+    )
+    title = models.CharField(max_length=255, verbose_name=_("Titel"))
+    file = models.FileField(
+        upload_to='user_documents/%Y/%m/',
+        verbose_name=_("Datei")
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, verbose_name=_("Notizen"))
+
+    class Meta:
+        verbose_name = _("Benutzerdokument")
+        verbose_name_plural = _("Benutzerdokumente")
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
 

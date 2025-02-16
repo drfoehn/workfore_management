@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>{% trans "Dokumente" %}</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label">{% trans "Titel" %}</label>
+                <input type="text" name="title" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">{% trans "Datei" %}</label>
+                <input type="file" name="file" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">{% trans "Notizen" %}</label>
+                <textarea name="notes" class="form-control"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">{% trans "Hochladen" %}</button>
+        </form>
+
+        <hr>
+
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>{% trans "Titel" %}</th>
+                        <th>{% trans "Hochgeladen am" %}</th>
+                        <th>{% trans "Aktionen" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documents %}
+                    <tr>
+                        <td>{{ doc.title }}</td>
+                        <td>{{ doc.uploaded_at|date:"d.m.Y H:i" }}</td>
+                        <td>
+                            <div class="btn-group">
+                                <a href="{{ doc.file.url }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                                {% if user.role == 'OWNER' %}
+                                <button type="button" 
+                                        class="btn btn-sm btn-outline-danger"
+                                        onclick="deleteDocument({{ doc.id }})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %} 

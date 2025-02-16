@@ -43,7 +43,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
     model = WorkingHours
     template_name = 'wfm/working_hours_list.html'
     context_object_name = 'working_hours'
-    paginate_by = None  # Deaktiviere Standard-Pagination
+    paginate_by = None
 
     def get_queryset(self):
         # Hole Jahr und Monat aus URL-Parametern oder nutze aktuellen Monat
@@ -57,22 +57,56 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         else:
             end_date = date(year, month + 1, 1) - timedelta(days=1)
 
-        queryset = WorkingHours.objects.select_related('employee').filter(
-            date__range=[start_date, end_date]
-        )
+        # Basis-Queryset für tatsächliche Arbeitszeiten
+        queryset = WorkingHours.objects.select_related('employee')
         
+        # Filter nach Mitarbeiter
         if self.request.user.role == 'OWNER':
-            # Filter für bestimmte Assistenz/Reinigung
             employee_id = self.request.GET.get('employee')
             if employee_id:
-                queryset = queryset.filter(employee_id=employee_id)
+                employees = [CustomUser.objects.get(id=employee_id)]
             else:
-                queryset = queryset.filter(employee__role__in=['ASSISTANT', 'CLEANING'])
+                employees = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
         else:
-            # Mitarbeiter sehen nur ihre eigenen Einträge
-            queryset = queryset.filter(employee=self.request.user)
+            employees = [self.request.user]
             
-        return queryset.order_by('-date', 'start_time')
+        # Hole alle relevanten Templates
+        all_templates = ScheduleTemplate.objects.filter(
+            employee__in=employees
+        ).order_by('employee', '-valid_from', 'weekday')
+        
+        # Erstelle Dictionary für schnellen Template-Zugriff
+        template_dict = {}
+        for template in all_templates:
+            key = (template.employee_id, template.weekday)
+            if key not in template_dict:
+                template_dict[key] = template
+
+        # Erstelle WorkingHours-Objekte für jeden Tag im Monat
+        working_hours_list = list(queryset.filter(date__range=[start_date, end_date]))
+        existing_dates = {(wh.employee_id, wh.date): wh for wh in working_hours_list}
+        
+        # Fülle fehlende Tage mit Template-basierten Arbeitszeiten
+        current_date = start_date
+        while current_date <= end_date:
+            weekday = current_date.weekday()
+            if weekday < 5:  # Nur Werktage (Mo-Fr)
+                for employee in employees:
+                    key = (employee.id, current_date)
+                    if key not in existing_dates:
+                        template = template_dict.get((employee.id, weekday))
+                        if template and template.valid_from <= current_date:
+                            wh = WorkingHours(
+                                employee=employee,
+                                date=current_date,
+                                start_time=template.start_time,
+                                end_time=template.end_time,
+                                break_duration=timedelta(minutes=30)  # Standard-Pause
+                            )
+                            working_hours_list.append(wh)
+            current_date += timedelta(days=1)
+            
+        return sorted(working_hours_list, key=lambda x: (x.date, x.employee_id))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -117,29 +151,32 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         
         # Berechne die Stunden für jeden Eintrag
         for wh in context['working_hours']:
-            # Soll-Stunden aus Template
+            # Hole das gültige Template für dieses Datum
             template = ScheduleTemplate.objects.filter(
                 employee=wh.employee,
-                weekday=wh.date.weekday()
-            ).first()
+                weekday=wh.date.weekday(),
+                valid_from__lte=wh.date
+            ).order_by('-valid_from').first()
             
             if template:
                 wh.soll_start = template.start_time
                 wh.soll_end = template.end_time
                 wh.soll_hours = template.hours
             else:
-                # Standard 8-Stunden-Tag wenn kein Template existiert
                 wh.soll_start = time(8, 0)
                 wh.soll_end = time(16, 0)
                 wh.soll_hours = Decimal('8.0')
             
-            # Ist-Stunden
-            duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
-            if wh.break_duration:
-                duration -= wh.break_duration
-            wh.ist_hours = Decimal(str(duration.total_seconds() / 3600))
+            # Berechne Ist-Stunden
+            if wh.id:  # Nur für gespeicherte Einträge
+                duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
+                if wh.break_duration:
+                    duration -= wh.break_duration
+                wh.ist_hours = Decimal(str(duration.total_seconds() / 3600))
+            else:
+                wh.ist_hours = Decimal('0')
             
-            # Urlaub und Zeitausgleich für diesen Tag
+            # Hole Abwesenheiten
             wh.vacation = Vacation.objects.filter(
                 employee=wh.employee,
                 start_date__lte=wh.date,
