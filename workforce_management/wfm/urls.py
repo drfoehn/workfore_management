@@ -36,7 +36,7 @@ urlpatterns = [
     path('api/vacation/request/', views.api_vacation_request, name='api-vacation-request'),
     path('api/vacation/status/', views.api_vacation_status, name='api-vacation-status'),
     path('api/time-compensation/request/', views.api_time_compensation_request, name='api-time-compensation-request'),
-    path('calendar/', views.CalendarView.as_view(), name='calendar'),
+    # path('calendar/', views.CalendarView.as_view(), name='calendar'),
     path('api/calendar/events/', views.api_calendar_events, name='api-calendar-events'),
     
     

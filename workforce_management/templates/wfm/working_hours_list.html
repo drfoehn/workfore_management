@@ -6,29 +6,58 @@
 {% block content %}
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
+        <div class="d-flex align-items-center gap-3">
+            <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
+            <div class="btn-group">
+                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}year={{ prev_year }}&month={{ prev_month }}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+                <button class="btn btn-outline-primary" disabled>
+                    {{ month_name }}
+                </button>
+                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}year={{ next_year }}&month={{ next_month }}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
         <div class="d-flex gap-2">
             {% comment %} {% if user.role == 'OWNER' %} {% endcomment %}
                 <div class="dropdown">
                     <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        {% if selected_assistant %}
-                            {{ selected_assistant.get_full_name|default:selected_assistant.username }}
+                        {% if selected_employee %}
+                            {{ selected_employee.get_full_name|default:selected_employee.username }}
+                            ({{ selected_employee.get_role_display }})
                         {% else %}
-                            {% trans "Alle Assistenzen" %}
+                            {% trans "Alle Mitarbeiter" %}
                         {% endif %}
                     </button>
                     <ul class="dropdown-menu">
                         <li>
                             <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}">
-                                {% trans "Alle Assistenzen" %}
+                                {% trans "Alle Mitarbeiter" %}
                             </a>
                         </li>
-                        {% for assistant in assistants %}
-                            <li>
-                                <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}?assistant={{ assistant.id }}">
-                                    {{ assistant.get_full_name|default:assistant.username }}
-                                </a>
-                            </li>
+                        <li><h6 class="dropdown-header">{% trans "Assistenzen" %}</h6></li>
+                        {% for employee in employees %}
+                            {% if employee.role == 'ASSISTANT' %}
+                                <li>
+                                    <a class="dropdown-item" href="?employee={{ employee.id }}">
+                                        {{ employee.get_full_name|default:employee.username }}
+                                    </a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        <li><h6 class="dropdown-header">{% trans "Reinigungsdienst" %}</h6></li>
+                        {% for employee in employees %}
+                            {% if employee.role == 'CLEANING' %}
+                                <li>
+                                    <a class="dropdown-item" href="?employee={{ employee.id }}">
+                                        {{ employee.get_full_name|default:employee.username }}
+                                    </a>
+                                </li>
+                            {% endif %}
                         {% endfor %}
                     </ul>
                 </div>
@@ -44,15 +73,15 @@
                 <thead>
                     <tr>
                         <th>{% trans "Datum" %}</th>
-                        {% comment %} {% if user.role == 'OWNER' %} {% endcomment %}
+                        {% if user.role == 'OWNER' %}
                             <th>{% trans "Mitarbeiter" %}</th>
-                        {% comment %} {% endif %} {% endcomment %}
-                        <th>{% trans "Von" %}</th>
-                        <th>{% trans "Bis" %}</th>
+                        {% endif %}
+                        <th>{% trans "Soll-Von/Bis" %}</th>
                         <th>{% trans "Soll (Std)" %}</th>
+                        <th>{% trans "Ist-Von/Bis" %}</th>
                         <th>{% trans "Ist (Std)" %}</th>
-                        <th>{% trans "Urlaub" %}</th>
-                        <th>{% trans "ZA" %}</th>
+                        <th>{% trans "Abwesenheit" %}</th>
+                        <th>{% trans "Status" %}</th>
                         <th>{% trans "Differenz" %}</th>
                         <th>{% trans "Aktionen" %}</th>
                     </tr>
@@ -60,26 +89,44 @@
                 <tbody>
                     {% for wh in working_hours %}
                         <tr>
-                            <td>{{ wh.date }}</td>
-                            {% comment %} {% if user.role == 'OWNER' %} {% endcomment %}
+                            <td>{{ wh.date|date:"d.m.Y (l)" }}</td>
+                            {% if user.role == 'OWNER' %}
                                 <td>
                                     <span class="badge" style="background-color: {{ wh.employee.color }}">
-                                        {{ wh.employee.username }}
+                                        {{ wh.employee.get_full_name|default:wh.employee.username }}
                                     </span>
                                 </td>
-                            {% comment %} {% endif %} {% endcomment %}
-                            <td>{{ wh.start_time|time:"H:i" }}</td>
-                            <td>{{ wh.end_time|time:"H:i" }}</td>
+                            {% endif %}
+                            <td>{{ wh.soll_start|time:"H:i" }} - {{ wh.soll_end|time:"H:i" }}</td>
                             <td>{{ wh.soll_hours|floatformat:2 }}</td>
+                            <td>{{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}</td>
                             <td>{{ wh.ist_hours|floatformat:2 }}</td>
                             <td>
                                 {% if wh.vacation %}
-                                    <i class="bi bi-check-circle text-success"></i>
+                                    <i class="bi bi-umbrella text-primary" title="{% trans 'Urlaub' %}"></i>
+                                {% endif %}
+                                {% if wh.time_comp %}
+                                    <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
+                                {% endif %}
+                                {% if wh.sick_leave %}
+                                    <i class="bi bi-hospital text-danger" title="{% trans 'Krankenstand' %}"></i>
                                 {% endif %}
                             </td>
                             <td>
+                                {% if wh.vacation %}
+                                    <span class="badge {% if wh.vacation.status == 'APPROVED' %}bg-success{% else %}bg-warning{% endif %}">
+                                        {{ wh.vacation.get_status_display }}
+                                    </span>
+                                {% endif %}
                                 {% if wh.time_comp %}
-                                    <i class="bi bi-check-circle text-success"></i>
+                                    <span class="badge {% if wh.time_comp.status == 'APPROVED' %}bg-success{% else %}bg-warning{% endif %}">
+                                        {{ wh.time_comp.get_status_display }}
+                                    </span>
+                                {% endif %}
+                                {% if wh.sick_leave %}
+                                    <span class="badge {% if wh.sick_leave.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
+                                        {{ wh.sick_leave.get_status_display }}
+                                    </span>
                                 {% endif %}
                             </td>
                             <td class="{% if wh.difference < 0 %}text-danger{% elif wh.difference > 0 %}text-success{% endif %}">
@@ -93,12 +140,14 @@
                                             title="{% trans 'Bearbeiten' %}">
                                         <i class="bi bi-pencil"></i>
                                     </button>
-                                    <button type="button" 
-                                            class="btn btn-sm btn-outline-danger"
-                                            onclick="deleteWorkingHours({{ wh.id }})"
-                                            title="{% trans 'Löschen' %}">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+                                    {% if user.role == 'OWNER' %}
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger"
+                                                onclick="deleteWorkingHours({{ wh.id }})"
+                                                title="{% trans 'Löschen' %}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -130,35 +179,49 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">{% trans "Datum" %}</label>
-                        <input type="date" class="form-control" id="workDate" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        <input type="date" class="form-control" id="workDate" readonly>
                     </div>
+                    
+                    <!-- Soll-Zeiten (nur lesbar) -->
                     <div class="row mb-3">
                         <div class="col">
-                            <label class="form-label">{% trans "Von" %}</label>
-                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                            <label class="form-label">{% trans "Soll-Von" %}</label>
+                            <input type="time" class="form-control" id="sollStartTime" readonly>
                         </div>
                         <div class="col">
-                            <label class="form-label">{% trans "Bis" %}</label>
-                            <input type="time" class="form-control" id="endTime">
+                            <label class="form-label">{% trans "Soll-Bis" %}</label>
+                            <input type="time" class="form-control" id="sollEndTime" readonly>
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Pause (Minuten)" %}</label>
-                        <input type="number" class="form-control" id="breakDuration" min="0" step="15">
-                    </div>
-                    <div class="row mb-3">
                         <div class="col">
                             <label class="form-label">{% trans "Soll (Std)" %}</label>
                             <input type="number" class="form-control" id="sollHours" readonly>
+                        </div>
+                    </div>
+                    
+                    <!-- Ist-Zeiten (editierbar nach Berechtigung) -->
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Ist-Von" %}</label>
+                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Ist-Bis" %}</label>
+                            <input type="time" class="form-control" id="endTime">
                         </div>
                         <div class="col">
                             <label class="form-label">{% trans "Ist (Std)" %}</label>
                             <input type="number" class="form-control" id="istHours" readonly>
                         </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Differenz" %}</label>
-                            <input type="number" class="form-control" id="difference" readonly>
-                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Pause (Minuten)" %}</label>
+                        <input type="number" class="form-control" id="breakDuration" min="0" step="15">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Differenz (Std)" %}</label>
+                        <input type="number" class="form-control" id="difference" readonly>
                     </div>
                 </form>
             </div>
@@ -188,11 +251,13 @@ function openWorkingHoursModal(id) {
             document.getElementById('workingHoursId').value = data.id;
             document.getElementById('employeeName').value = data.employee.username;
             document.getElementById('workDate').value = data.date;
+            document.getElementById('sollStartTime').value = data.soll_start;
+            document.getElementById('sollEndTime').value = data.soll_end;
+            document.getElementById('sollHours').value = data.soll_hours;
             document.getElementById('startTime').value = data.start_time;
             document.getElementById('endTime').value = data.end_time;
-            document.getElementById('breakDuration').value = data.break_duration;
-            document.getElementById('sollHours').value = data.soll_hours;
             document.getElementById('istHours').value = data.ist_hours;
+            document.getElementById('breakDuration').value = data.break_duration;
             document.getElementById('difference').value = data.difference;
             
             new bootstrap.Modal(document.getElementById('workingHoursModal')).show();

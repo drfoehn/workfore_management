@@ -18,7 +18,7 @@ from .models import (
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count
 from django.db.models.functions import ExtractMonth, ExtractYear
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
 import calendar
 from django.db import models
 from decimal import Decimal  # Am Anfang der Datei hinzufügen
@@ -43,47 +43,94 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
     model = WorkingHours
     template_name = 'wfm/working_hours_list.html'
     context_object_name = 'working_hours'
+    paginate_by = None  # Deaktiviere Standard-Pagination
 
     def get_queryset(self):
-        queryset = WorkingHours.objects.select_related('employee')
+        # Hole Jahr und Monat aus URL-Parametern oder nutze aktuellen Monat
+        year = int(self.request.GET.get('year', date.today().year))
+        month = int(self.request.GET.get('month', date.today().month))
         
-        # if self.request.user.role == 'OWNER':
-            # Filter für bestimmte Assistenz
-        assistant_id = self.request.GET.get('assistant')
-        if assistant_id:
-            queryset = queryset.filter(employee_id=assistant_id)
+        # Erstelle Datum für Monatsanfang und -ende
+        start_date = date(year, month, 1)
+        if month == 12:
+            end_date = date(year + 1, 1, 1) - timedelta(days=1)
         else:
-            queryset = queryset.filter(employee__role='ASSISTANT')
-        # else:
-            # queryset = queryset.filter(employee=self.request.user)
+            end_date = date(year, month + 1, 1) - timedelta(days=1)
+
+        queryset = WorkingHours.objects.select_related('employee').filter(
+            date__range=[start_date, end_date]
+        )
+        
+        if self.request.user.role == 'OWNER':
+            # Filter für bestimmte Assistenz/Reinigung
+            employee_id = self.request.GET.get('employee')
+            if employee_id:
+                queryset = queryset.filter(employee_id=employee_id)
+            else:
+                queryset = queryset.filter(employee__role__in=['ASSISTANT', 'CLEANING'])
+        else:
+            # Mitarbeiter sehen nur ihre eigenen Einträge
+            queryset = queryset.filter(employee=self.request.user)
             
         return queryset.order_by('-date', 'start_time')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Liste aller Assistenten für Filter
-        # if self.request.user.role == 'OWNER':
-        context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
+        # Hole Jahr und Monat
+        year = int(self.request.GET.get('year', date.today().year))
+        month = int(self.request.GET.get('month', date.today().month))
         
-        # Hole den ausgewählten Assistenten als Objekt
-        assistant_id = self.request.GET.get('assistant')
-        if assistant_id:
-            context['selected_assistant'] = CustomUser.objects.filter(id=assistant_id).first()
+        # Berechne vorherigen und nächsten Monat
+        if month == 1:
+            prev_month = 12
+            prev_year = year - 1
+        else:
+            prev_month = month - 1
+            prev_year = year
+            
+        if month == 12:
+            next_month = 1
+            next_year = year + 1
+        else:
+            next_month = month + 1
+            next_year = year
+        
+        # Füge Navigationsdaten zum Kontext hinzu
+        context.update({
+            'current_month': month,
+            'current_year': year,
+            'prev_month': prev_month,
+            'prev_year': prev_year,
+            'next_month': next_month,
+            'next_year': next_year,
+            'month_name': date(year, month, 1).strftime('%B %Y')
+        })
+        
+        if self.request.user.role == 'OWNER':
+            # Liste aller Assistenten und Reinigungskräfte für Filter
+            context['employees'] = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
+            # Hole den ausgewählten Mitarbeiter
+            employee_id = self.request.GET.get('employee')
+            if employee_id:
+                context['selected_employee'] = CustomUser.objects.filter(id=employee_id).first()
         
         # Berechne die Stunden für jeden Eintrag
         for wh in context['working_hours']:
-            # Soll-Stunden (aus Vorlage oder Standard)
+            # Soll-Stunden aus Template
             template = ScheduleTemplate.objects.filter(
                 employee=wh.employee,
                 weekday=wh.date.weekday()
             ).first()
             
             if template:
-                # Benutze die berechneten Stunden aus dem Template
+                wh.soll_start = template.start_time
+                wh.soll_end = template.end_time
                 wh.soll_hours = template.hours
             else:
-                # Standard 8 Stunden wenn kein Template existiert
+                # Standard 8-Stunden-Tag wenn kein Template existiert
+                wh.soll_start = time(8, 0)
+                wh.soll_end = time(16, 0)
                 wh.soll_hours = Decimal('8.0')
             
             # Ist-Stunden
@@ -96,15 +143,19 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             wh.vacation = Vacation.objects.filter(
                 employee=wh.employee,
                 start_date__lte=wh.date,
-                end_date__gte=wh.date,
-                status='APPROVED'
-            ).exists()
+                end_date__gte=wh.date
+            ).first()
             
             wh.time_comp = TimeCompensation.objects.filter(
                 employee=wh.employee,
-                date=wh.date,
-                status='APPROVED'
-            ).exists()
+                date=wh.date
+            ).first()
+            
+            wh.sick_leave = SickLeave.objects.filter(
+                employee=wh.employee,
+                start_date__lte=wh.date,
+                end_date__gte=wh.date
+            ).first()
             
             # Differenz
             wh.difference = wh.ist_hours - wh.soll_hours
@@ -1220,14 +1271,23 @@ def api_working_hours_detail(request, pk):
         if request.user.role != 'OWNER' and working_hours.employee != request.user:
             return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
         
-        # Berechne die Stunden
+        # Hole Template für die Soll-Zeiten
         template = ScheduleTemplate.objects.filter(
             employee=working_hours.employee,
             weekday=working_hours.date.weekday()
         ).first()
         
-        soll_hours = template.hours if template else Decimal('8.0')
+        # Soll-Zeiten aus Template oder Standard
+        # if template:
+        soll_start = template.start_time
+        soll_end = template.end_time
+        soll_hours = template.hours
+        # else:
+        #     soll_start = time(8, 0)
+        #     soll_end = time(16, 0)
+        #     soll_hours = Decimal('8.0')
         
+        # Berechne Ist-Stunden
         duration = datetime.combine(date.min, working_hours.end_time) - datetime.combine(date.min, working_hours.start_time)
         if working_hours.break_duration:
             duration -= working_hours.break_duration
@@ -1236,6 +1296,7 @@ def api_working_hours_detail(request, pk):
         return JsonResponse({
             'id': working_hours.id,
             'date': working_hours.date.isoformat(),
+            'weekday': working_hours.date.weekday(),
             'start_time': working_hours.start_time.strftime('%H:%M'),
             'end_time': working_hours.end_time.strftime('%H:%M'),
             'break_duration': working_hours.break_duration.total_seconds() / 60 if working_hours.break_duration else 0,
@@ -1244,6 +1305,8 @@ def api_working_hours_detail(request, pk):
                 'username': working_hours.employee.username,
                 'color': working_hours.employee.color
             },
+            'soll_start': soll_start.strftime('%H:%M'),
+            'soll_end': soll_end.strftime('%H:%M'),
             'soll_hours': float(soll_hours),
             'ist_hours': float(ist_hours),
             'difference': float(ist_hours - soll_hours)
@@ -1252,8 +1315,6 @@ def api_working_hours_detail(request, pk):
         return JsonResponse({'error': 'Arbeitszeit nicht gefunden'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-    
-
 
 @login_required
 def api_vacation_status(request):

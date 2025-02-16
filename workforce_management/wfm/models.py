@@ -14,6 +14,7 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ('OWNER', _('Ordinationsinhaber/in')),
         ('ASSISTANT', _('Ordinationsassistenz')),
+        ('CLEANING', _('Reinigungsdienst')),  
         ('THERAPIST', _('Therapeut/in')),
     ]
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='ASSISTANT')
@@ -141,12 +142,27 @@ class VacationEntitlement(models.Model):
         unique_together = ['employee', 'year']
 
 class SickLeave(models.Model):
-    """Krankenstand"""
-    employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    start_date = models.DateField(verbose_name="Beginn Krankenstand")
-    end_date = models.DateField(verbose_name="Ende Krankenstand")
-    description = models.TextField(blank=True, null=True, verbose_name="Beschreibung")
-    document_provided = models.BooleanField(default=False, verbose_name="Krankmeldung vorgelegt")
+    STATUS_CHOICES = [
+        ('SUBMITTED', _('Krankmeldung vorgelegt')),
+        ('PENDING', _('Keine Krankmeldung')),
+    ]
+    
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sick_leaves'
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='PENDING'
+    )
+    notes = models.TextField(blank=True)
+    
+    def __str__(self):
+        return f"{self.employee} - {self.start_date} bis {self.end_date}"
 
 class MonthlyReport(models.Model):
     """Monatlicher Abrechnungsbericht"""

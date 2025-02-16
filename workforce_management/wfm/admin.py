@@ -10,7 +10,8 @@ from .models import (
     SickLeave,
     TimeCompensation,
     TherapistBooking,
-    TherapistScheduleTemplate
+    TherapistScheduleTemplate,
+    MonthlyReport
 )
 
 @admin.register(CustomUser)
@@ -74,20 +75,36 @@ class VacationEntitlementAdmin(admin.ModelAdmin):
 
 @admin.register(SickLeave)
 class SickLeaveAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'start_date', 'end_date', 'document_provided')
-    list_filter = ('start_date', 'document_provided', 'employee')
-    search_fields = ('employee__username', 'description')
+    list_display = ('employee', 'start_date', 'end_date', 'status', 'notes')
+    list_filter = ('status', 'employee')
+    search_fields = ('employee__username', 'employee__first_name', 'employee__last_name', 'notes')
     date_hierarchy = 'start_date'
+    ordering = ('-start_date',)
+    
+    fieldsets = (
+        (None, {
+            'fields': ('employee', 'start_date', 'end_date')
+        }),
+        ('Status', {
+            'fields': ('status', 'notes')
+        }),
+    )
 
 @admin.register(ScheduleTemplate)
 class ScheduleTemplateAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'weekday', 'start_time', 'end_time')
+    list_display = ('employee', 'get_weekday_display', 'start_time', 'end_time')
     list_filter = ('weekday', 'employee')
     search_fields = ('employee__username',)
 
 @admin.register(TherapistScheduleTemplate)
 class TherapistScheduleTemplateAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'weekday', 'start_time', 'end_time', 'hours')
+    list_display = ('therapist', 'get_weekday_display', 'start_time', 'end_time')
     list_filter = ('weekday', 'therapist')
     search_fields = ('therapist__username',)
-    ordering = ['weekday', 'start_time']
+
+@admin.register(MonthlyReport)
+class MonthlyReportAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'month', 'year', 'total_hours', 'total_amount')
+    list_filter = ('year', 'month', 'employee')
+    search_fields = ('employee__username',)
+    date_hierarchy = 'generated_at'
