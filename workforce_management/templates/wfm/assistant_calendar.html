@@ -17,7 +17,72 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2 class="mb-0">{% trans "Kalender" %}</h2>
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">{% trans "Kalender" %}</h2>
+            <div class="d-flex gap-2">
+                {% if user.role == 'OWNER' %}
+                    <!-- Rollenfilter -->
+                    <div class="btn-group me-2">
+                        <a href="{{ all_url }}" 
+                           class="btn btn-outline-primary {% if not selected_role %}active{% endif %}">
+                            {% trans "Alle" %}
+                        </a>
+                        <a href="{{ assistant_url }}" 
+                           class="btn btn-outline-primary {% if selected_role == 'ASSISTANT' %}active{% endif %}">
+                            {% trans "Assistenz" %}
+                        </a>
+                        <a href="{{ cleaning_url }}" 
+                           class="btn btn-outline-primary {% if selected_role == 'CLEANING' %}active{% endif %}">
+                            {% trans "Reinigung" %}
+                        </a>
+                    </div>
+                    
+                    <!-- Mitarbeiterfilter -->
+                    <div class="dropdown">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            {% if selected_employee %}
+                                {{ selected_employee.get_full_name|default:selected_employee.username }}
+                            {% else %}
+                                {% if selected_role == 'ASSISTANT' %}
+                                    {% trans "Alle Assistenzen" %}
+                                {% elif selected_role == 'CLEANING' %}
+                                    {% trans "Alle Reinigungskräfte" %}
+                                {% else %}
+                                    {% trans "Alle Mitarbeiter" %}
+                                {% endif %}
+                            {% endif %}
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="?{% if selected_role %}role={{ selected_role }}&{% endif %}">
+                                    {% trans "Alle anzeigen" %}
+                                </a>
+                            </li>
+                            {% if not selected_role or selected_role == 'ASSISTANT' %}
+                                <li><h6 class="dropdown-header">{% trans "Assistenzen" %}</h6></li>
+                                {% for employee in assistants %}
+                                    <li>
+                                        <a class="dropdown-item" href="?employee={{ employee.id }}">
+                                            {{ employee.get_full_name|default:employee.username }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            {% endif %}
+                            {% if not selected_role or selected_role == 'CLEANING' %}
+                                <li><h6 class="dropdown-header">{% trans "Reinigungsdienst" %}</h6></li>
+                                {% for employee in cleaners %}
+                                    <li>
+                                        <a class="dropdown-item" href="?employee={{ employee.id }}">
+                                            {{ employee.get_full_name|default:employee.username }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            {% endif %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
     <div class="card-body">
         <div id="calendar"></div>
@@ -27,16 +92,13 @@
 {% include "wfm/modals/working_hours_modal.html" %}
 {% include "wfm/modals/vacation_modal.html" %}
 {% include "wfm/modals/time_compensation_modal.html" %}
-
 {% endblock %}
 
 {% block extra_js %}
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("Initializing calendar...");
-    var calendarEl = document.getElementById('calendar');
-    var calendar = new FullCalendar.Calendar(calendarEl, {
+    var calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         initialView: 'timeGridWeek',
         headerToolbar: {
             left: 'prev,next today',
@@ -47,23 +109,31 @@ document.addEventListener('DOMContentLoaded', function() {
         slotMinTime: '07:00:00',
         slotMaxTime: '20:00:00',
         locale: 'de',
-        events: {
-            url: '{% url "wfm:api-assistant-calendar-events" %}',
-            failure: function(error) {
-                console.error('Error loading events:', error);
-            }
+        events: function(info, successCallback, failureCallback) {
+            // Get current URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // Add calendar date range
+            urlParams.set('start', info.startStr);
+            urlParams.set('end', info.endStr);
+            
+            // Fetch events with current filters
+            fetch(`{% url "wfm:api-assistant-calendar-events" %}?${urlParams.toString()}`)
+                .then(response => response.json())
+                .then(events => successCallback(events))
+                .catch(error => {
+                    console.error('Error loading events:', error);
+                    failureCallback(error);
+                });
         },
         eventTimeFormat: {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
-        },
-        eventDidMount: function(info) {
-            console.log("Event mounted:", info.event);
         }
     });
+    
     calendar.render();
-    console.log("Calendar initialized");
 });
 </script>
 {% endblock %} 

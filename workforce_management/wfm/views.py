@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, View, TemplateView
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext_lazy as _
 from .models import (
     WorkingHours, 
@@ -1195,19 +1195,39 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        year = int(self.request.GET.get('year', datetime.now().year))
-        month = int(self.request.GET.get('month', datetime.now().month))
         
-        # Hole alle Assistenten für den Filter
-        context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
-        context['selected_assistant'] = self.request.GET.get('assistant')
-        context['selected_types'] = self.request.GET.getlist('types', ['working_hours', 'vacation', 'time_comp'])
+        # Get current filters from request
+        selected_role = self.request.GET.get('role')
+        selected_employee = self.request.GET.get('employee')
         
+        # Base URL for filters
+        base_url = reverse('wfm:assistant-calendar')
+        
+        # URLs for role filters
+        context['all_url'] = base_url
+        context['assistant_url'] = f"{base_url}?role=ASSISTANT"
+        context['cleaning_url'] = f"{base_url}?role=CLEANING"
+        
+        # Get employees based on role
+        if selected_role == 'ASSISTANT':
+            employees = CustomUser.objects.filter(role='ASSISTANT')
+        elif selected_role == 'CLEANING':
+            employees = CustomUser.objects.filter(role='CLEANING')
+        else:
+            employees = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
+
+        # Get selected employee if any
+        if selected_employee:
+            selected_employee = CustomUser.objects.filter(id=selected_employee).first()
+        
+        # Split employees by role for the dropdown
         context.update({
-            'year': year,
-            'month': month,
-            'month_name': calendar.month_name[month],
-            'hours': range(7, 21)  # 7:00 bis 20:00
+            'selected_role': selected_role,
+            'selected_employee': selected_employee,
+            'assistants': employees.filter(role='ASSISTANT'),
+            'cleaners': employees.filter(role='CLEANING'),
+            'current_year': self.request.GET.get('year', datetime.now().year),
+            'current_month': self.request.GET.get('month', datetime.now().month),
         })
         
         return context
@@ -1440,11 +1460,40 @@ class AssistantCalendarEventsView(View):
     
     def get(self, request, *args, **kwargs):
         try:
-            # Hole alle relevanten Models für den Zeitraum
-            working_hours = WorkingHours.objects.all().select_related('employee')
-            vacations = Vacation.objects.all().select_related('employee')
-            time_comps = TimeCompensation.objects.all().select_related('employee')
+            # Get filter parameters
+            start = request.GET.get('start')
+            end = request.GET.get('end')
+            role = request.GET.get('role')
+            employee_id = request.GET.get('employee')
             
+            # Parse dates
+            start_date = datetime.strptime(start[:10], '%Y-%m-%d').date() if start else None
+            end_date = datetime.strptime(end[:10], '%Y-%m-%d').date() if end else None
+            
+            # Base employee queryset
+            employees = CustomUser.objects.all()
+            if role:
+                employees = employees.filter(role=role)
+            elif not request.user.role == 'OWNER':
+                employees = employees.filter(id=request.user.id)
+            if employee_id:
+                employees = employees.filter(id=employee_id)
+            
+            # Filter events
+            working_hours = WorkingHours.objects.filter(employee__in=employees)
+            vacations = Vacation.objects.filter(employee__in=employees, status='APPROVED')
+            time_comps = TimeCompensation.objects.filter(employee__in=employees, status='APPROVED')
+            
+            if start_date:
+                working_hours = working_hours.filter(date__gte=start_date)
+                vacations = vacations.filter(end_date__gte=start_date)
+                time_comps = time_comps.filter(date__gte=start_date)
+            if end_date:
+                working_hours = working_hours.filter(date__lte=end_date)
+                vacations = vacations.filter(start_date__lte=end_date)
+                time_comps = time_comps.filter(date__lte=end_date)
+            
+            # Rest der Methode bleibt gleich...
             events = []
             
             # Arbeitszeiten zu Events konvertieren
