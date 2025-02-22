@@ -9,40 +9,45 @@
         <h1 class="h2">{% trans "Meine Arbeitszeiten" %}</h1>
         
         <div class="btn-group">
-            <a href="{% url 'wfm:absence-list' %}" class="btn btn-outline-primary">
-                <i class="bi bi-calendar-check"></i> {% trans "Abwesenheiten verwalten" %}
-            </a>
+           
             {% if show_request_buttons %}
-            <div class="btn-group-vertical btn-group-md d-md-none">
-                <!-- Vertikale Buttons für Mobilgeräte -->
-                <button type="button" class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#workingHoursModal">
-                    <i class="bi bi-clock"></i> {% trans "Arbeitszeit eintragen" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary mb-2" data-bs-toggle="modal" data-bs-target="#vacationModal">
-                    <i class="bi bi-calendar-check"></i> {% trans "Urlaub beantragen" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary mb-2" data-bs-toggle="modal" data-bs-target="#timeCompModal">
-                    <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich beantragen" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
-                    <i class="bi bi-thermometer-half"></i> {% trans "Krankenstand melden" %}
-                </button>
-            </div>
-            <div class="btn-group d-none d-md-flex">
-                <!-- Horizontale Buttons für Desktop -->
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#workingHoursModal">
-                    <i class="bi bi-clock"></i> {% trans "Arbeitszeit eintragen" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
-                    <i class="bi bi-calendar-check"></i> {% trans "Urlaub beantragen" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
-                    <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich beantragen" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
-                    <i class="bi bi-thermometer-half"></i> {% trans "Krankenstand melden" %}
-                </button>
-            </div>
+                <div class="dropdown">
+                    <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-gear"></i> {% trans "Aktionen" %}
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#workingHoursModal">
+                                <i class="bi bi-clock"></i> {% trans "Arbeitszeit eintragen" %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#vacationModal">
+                                <i class="bi bi-calendar-check"></i> {% trans "Urlaub beantragen" %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#timeCompModal">
+                                <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich beantragen" %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
+                                <i class="bi bi-thermometer-half"></i> {% trans "Krankenstand melden" %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#overtimeModal">
+                                <i class="bi bi-arrow-right-circle"></i> {% trans "Überstunden umbuchen" %}
+                            </button>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'wfm:absence-list' %}">
+                                <i class="bi bi-brightness-low"></i> {% trans "Abwesenheiten verwalten" %}
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             {% endif %}
         </div>
     </div>

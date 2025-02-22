@@ -384,65 +384,69 @@ class WorkingHoursUpdateView(LoginRequiredMixin, UpdateView):
             del self.request.session['selected_date']
         return super().form_valid(form)
 
-class OvertimeOverviewView(LoginRequiredMixin, TemplateView):
+class OvertimeOverviewView(LoginRequiredMixin, View):
     template_name = 'wfm/overtime_overview.html'
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        
+    def get(self, request):
         today = date.today()
         
         # Bestimme den relevanten Monat für die Überstunden
         if today.day <= 7:
             target_date = today - relativedelta(months=1)
-        elif today.day >= 8:
+        else:
             target_date = today
             
         year = target_date.year
         month = target_date.month
         
         # Berechne die Überstunden
-        total_overtime = calculate_overtime_hours(self.request.user, year, month)
+        total_overtime = calculate_overtime_hours(request.user, year, month)
         
         # Hole oder erstelle das Überstundenkonto
         overtime_account, created = OvertimeAccount.objects.get_or_create(
-            employee=self.request.user,
+            employee=request.user,
             year=year,
             month=month,
             defaults={
-                'total_overtime': total_overtime,
-                'hours_for_payment': total_overtime,  # Standardmäßig alles zur Auszahlung
-                'hours_for_timecomp': 0
+                'total_overtime': total_overtime
             }
         )
         
+        if not created and overtime_account.total_overtime != total_overtime:
+            overtime_account.total_overtime = total_overtime
+            overtime_account.save()
+
         # Prüfe ob Übertrag möglich ist
         can_transfer = (
-            self.request.user.role in ['ASSISTANT', 'CLEANING'] and
+            request.user.role in ['ASSISTANT', 'CLEANING'] and
             not overtime_account.is_finalized and
             overtime_account.total_overtime > 0 and
             (
-                (today.day >= 8 and month == today.month) or  # Aktueller Monat ab dem 8.
-                (today.day <= 7 and month == (today - relativedelta(months=1)).month)  # Vormonat bis zum 7.
+                (today.day <= 7 and month == (today - relativedelta(months=1)).month) or
+                (today.day > 7 and month == today.month)
             )
         )
-        
-        context.update({
-            'month_name': target_date.strftime('%B %Y'),
+
+        context = {
             'overtime_hours': overtime_account.total_overtime,
             'transferred_hours': overtime_account.hours_for_timecomp,
             'payment_hours': overtime_account.hours_for_payment,
             'is_finalized': overtime_account.is_finalized,
-            'can_transfer': can_transfer
-        })
-        
-        return context
+            'can_transfer': can_transfer,
+            'month_name': target_date.strftime('%B %Y')
+        }
 
-    def post(self, request, *args, **kwargs):
-        if request.user.role not in ['ASSISTANT', 'CLEANING']:
-            raise PermissionDenied
+        # Wenn AJAX-Request, gib JSON zurück
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse(context)
             
+        return render(request, self.template_name, context)
+
+    def post(self, request):
         try:
+            if request.user.role not in ['ASSISTANT', 'CLEANING']:
+                raise PermissionDenied
+            
             hours_for_timecomp = Decimal(request.POST.get('hours_for_timecomp', 0))
             
             today = date.today()
@@ -461,20 +465,34 @@ class OvertimeOverviewView(LoginRequiredMixin, TemplateView):
                 messages.error(request, _('Überstunden wurden bereits abgerechnet'))
                 return redirect('wfm:overtime-overview')
                 
-            if hours_for_timecomp > overtime_account.total_overtime:
+            # Berechne die verfügbaren Stunden (Gesamtstunden minus bereits umgebuchte)
+            available_hours = overtime_account.total_overtime - overtime_account.hours_for_timecomp
+            
+            if hours_for_timecomp > available_hours:
                 messages.error(request, _('Nicht genügend Überstunden verfügbar'))
                 return redirect('wfm:overtime-overview')
                 
-            # Übertrage die Stunden
-            overtime_account.hours_for_timecomp = hours_for_timecomp
+            # Addiere die neuen Stunden zu den bereits umgebuchten
+            overtime_account.hours_for_timecomp += hours_for_timecomp
             overtime_account.save()  # save() Methode berechnet hours_for_payment automatisch
             
             messages.success(request, _('Überstunden wurden erfolgreich übertragen'))
             
-        except Exception as e:
-            messages.error(request, str(e))
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': True,
+                    'overtime_hours': float(overtime_account.total_overtime),
+                    'transferred_hours': float(overtime_account.hours_for_timecomp),
+                    'payment_hours': float(overtime_account.hours_for_payment)
+                })
+            return redirect('wfm:overtime-overview')
             
-        return redirect('wfm:overtime-overview')
+        except Exception as e:
+            logger.error(f"Overtime overview error: {str(e)}", exc_info=True)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': str(e)}, status=500)
+            messages.error(request, str(e))
+            return redirect('wfm:overtime-overview')
 
 class VacationListView(LoginRequiredMixin, ListView):
     model = Vacation

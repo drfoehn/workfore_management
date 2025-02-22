@@ -68,6 +68,13 @@
                             <i class="bi bi-person-circle"></i> {{ user.get_full_name|default:user.username }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            {% if user.role in 'ASSISTANT,CLEANING' %}
+                                <li>
+                                    <a class="dropdown-item" href="{% url 'wfm:overtime-overview' %}">
+                                        <i class="bi bi-clock-history"></i> {% trans "Überstunden" %}
+                                    </a>
+                                </li>
+                            {% endif %}
                             <li>
                                 <form method="post" action="{% url 'wfm:logout' %}" class="dropdown-item">
                                     {% csrf_token %}
