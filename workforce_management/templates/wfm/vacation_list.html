@@ -6,9 +6,9 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2>{% trans "Urlaub" %}</h2>
-    <a href="{% url 'wfm:vacation-request' %}" class="btn btn-primary">
-        {% trans "Urlaub beantragen" %}
-    </a>
+    <button class="btn btn-primary" onclick="openVacationModal()">
+        <i class="bi bi-plus-circle"></i> {% trans "Urlaub beantragen" %}
+    </button>
 </div>
 
 <div class="table-responsive">
@@ -43,4 +43,73 @@
         </tbody>
     </table>
 </div>
+
+{% include "wfm/modals/vacation_modal.html" %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function calculateWorkdays(startDate, endDate) {
+    let count = 0;
+    let current = new Date(startDate);
+    let end = new Date(endDate);
+    
+    while (current <= end) {
+        const dayOfWeek = current.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            count++;
+        }
+        current.setDate(current.getDate() + 1);
+    }
+    return count;
+}
+
+function updateRequestedDays() {
+    const startDate = document.querySelector('[name="start_date"]').value;
+    const endDate = document.querySelector('[name="end_date"]').value;
+    
+    if (startDate && endDate) {
+        const days = calculateWorkdays(startDate, endDate);
+        document.getElementById('requestedDays').value = days;
+    }
+}
+
+function openVacationModal() {
+    // Event-Listener für Datumsänderungen
+    document.querySelector('[name="start_date"]').addEventListener('change', updateRequestedDays);
+    document.querySelector('[name="end_date"]').addEventListener('change', updateRequestedDays);
+    
+    new bootstrap.Modal(document.getElementById('vacationModal')).show();
+}
+
+function submitVacation() {
+    const form = document.getElementById('vacationForm');
+    const data = {
+        start_date: form.querySelector('[name="start_date"]').value,
+        end_date: form.querySelector('[name="end_date"]').value,
+        notes: form.querySelector('[name="notes"]').value
+    };
+    
+    fetch('{% url "wfm:api-vacation-request" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern des Urlaubsantrags');
+        }
+    })
+    .catch(error => {
+        alert('Ein Fehler ist aufgetreten: ' + error);
+    });
+}
+</script>
 {% endblock %} 

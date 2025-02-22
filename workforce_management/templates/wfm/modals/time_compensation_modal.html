@@ -1,0 +1,35 @@
+{% load i18n %}
+
+<div class="modal fade" id="timeCompModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{% trans "Zeitausgleich beantragen" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="timeCompForm">
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Datum" %}</label>
+                        <input type="text" class="form-control" id="timeCompDisplayDate" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Stunden" %}</label>
+                        <input type="number" class="form-control" name="hours" step="0.5" min="0" required>
+                        <small class="form-text text-muted">
+                            {% trans "Verfügbare Stunden" %}: <span id="availableHours">0</span>
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" name="notes"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-primary" onclick="submitTimeComp()">{% trans "Beantragen" %}</button>
+            </div>
+        </div>
+    </div>
+</div> 

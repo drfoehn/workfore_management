@@ -1,0 +1,50 @@
+{% load i18n %}
+
+<div class="modal fade" id="vacationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">{% trans "Urlaub beantragen" %}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="vacationForm">
+                    <!-- Verfügbare Urlaubstage -->
+                    <div class="alert alert-info">
+                        <strong>{% trans "Verfügbare Urlaubstage" %}:</strong>
+                        <span id="availableVacationDays">{{ vacation_days_remaining }}</span>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Von" %}</label>
+                            <input type="date" class="form-control" name="start_date" required>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Bis" %}</label>
+                            <input type="date" class="form-control" name="end_date" required>
+                        </div>
+                    </div>
+
+                    <!-- Berechnete Urlaubstage -->
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Beantragte Tage" %}</label>
+                        <input type="text" class="form-control" id="requestedDays" readonly>
+                        <small class="form-text text-muted">
+                            {% trans "Nur Werktage werden berechnet" %}
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" name="notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn btn-success" onclick="submitVacation()">{% trans "Beantragen" %}</button>
+            </div>
+        </div>
+    </div>
+</div> 

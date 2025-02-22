@@ -1,0 +1,56 @@
+{% load i18n %}
+
+<div class="modal fade" id="bookingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{% trans "Buchung bearbeiten" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bookingForm">
+                    <input type="hidden" id="bookingId">
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Therapeut" %}</label>
+                        <input type="text" class="form-control" id="therapistName" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Datum" %}</label>
+                        <input type="date" class="form-control" id="bookingDate" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Von" %}</label>
+                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Bis" %}</label>
+                            <input type="time" class="form-control" id="endTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">{% trans "Gebucht (Std)" %}</label>
+                            <input type="number" class="form-control" id="bookedHours" readonly>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">{% trans "Verwendet (Std)" %}</label>
+                            <input type="number" class="form-control" id="actualHours" step="0.25" min="0">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="notes"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                {% if user.role == 'OWNER' %}
+                    <button type="button" class="btn btn-danger" onclick="deleteBooking()">{% trans "Löschen" %}</button>
+                {% endif %}
+                <button type="button" class="btn btn-primary" onclick="saveBooking()">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div> 

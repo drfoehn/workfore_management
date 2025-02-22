@@ -1,238 +1,127 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% trans "Assistenz-Kalender" %} - {{ block.super }}{% endblock %}
+{% block title %}{% trans "Kalender" %} - {{ block.super }}{% endblock %}
 
 {% block extra_css %}
-<!-- FullCalendar CSS -->
-<link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.css' rel='stylesheet' />
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/main.min.css' rel='stylesheet' />
 <style>
-.fc-event {
-    cursor: pointer;
-}
-.filter-section {
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background-color: #f8f9fa;
-    border-radius: 0.25rem;
-}
+    .fc-event {
+        cursor: pointer;
+        border-radius: 3px;
+        padding: 2px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="card">
+<div class="card mb-4">
     <div class="card-header">
-        <h2 class="mb-0">{% trans "Assistenz-Kalender" %}</h2>
-    </div>
-    <div class="card-body">
-        <div class="filter-section">
-            <form id="filterForm" class="row g-3">
-                <div class="col-md-4">
-                    <select class="form-select" name="assistant" id="assistantFilter">
-                        <option value="">{% trans "Alle Assistenzen" %}</option>
-                        {% for assistant in assistants %}
-                            <option value="{{ assistant.id }}" 
-                                    {% if selected_assistant == assistant.id|stringformat:"s" %}selected{% endif %}>
-                                {{ assistant.get_full_name|default:assistant.username }}
-                            </option>
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h2 class="mb-0">{% trans "Kalender" %}</h2>
+            </div>
+            <div class="col-md-6">
+                <div class="d-flex gap-2 justify-content-end">
+                    {% if user.role == 'OWNER' %}
+                    <select class="form-select" id="employeeFilter" style="width: auto;">
+                        <option value="">{% trans "Alle Mitarbeiter" %}</option>
+                        {% for role, label in user_roles %}
+                        <option value="{{ role }}">{{ label }}</option>
                         {% endfor %}
                     </select>
-                </div>
-                <div class="col-md-8">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="types" value="working_hours" 
-                               id="showWorkingHours" {% if 'working_hours' in selected_types %}checked{% endif %}>
-                        <label class="form-check-label" for="showWorkingHours">
+                    {% endif %}
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-primary active" data-type="working_hours">
                             {% trans "Arbeitszeiten" %}
-                        </label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="types" value="vacation" 
-                               id="showVacation" {% if 'vacation' in selected_types %}checked{% endif %}>
-                        <label class="form-check-label" for="showVacation">
+                        </button>
+                        <button type="button" class="btn btn-outline-primary active" data-type="vacation">
                             {% trans "Urlaub" %}
-                        </label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="types" value="time_comp" 
-                               id="showTimeComp" {% if 'time_comp' in selected_types %}checked{% endif %}>
-                        <label class="form-check-label" for="showTimeComp">
+                        </button>
+                        <button type="button" class="btn btn-outline-primary active" data-type="time_comp">
                             {% trans "Zeitausgleich" %}
-                        </label>
+                        </button>
                     </div>
                 </div>
-            </form>
+            </div>
         </div>
+    </div>
+    <div class="card-body">
         <div id="calendar"></div>
     </div>
 </div>
 
-<!-- Modal für Arbeitszeiten -->
-<div class="modal fade" id="workingHoursModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">{% trans "Arbeitszeit bearbeiten" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="workingHoursForm">
-                    <input type="hidden" name="id" id="workingHoursId">
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Datum" %}</label>
-                        <input type="date" class="form-control" id="workDate" name="date" required>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="form-label">{% trans "Von" %}</label>
-                            <input type="time" class="form-control" id="startTime" name="start_time" required>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Bis" %}</label>
-                            <input type="time" class="form-control" id="endTime" name="end_time" required>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Pause (Minuten)" %}</label>
-                        <input type="number" class="form-control" id="breakDuration" name="break_duration" min="0" step="15">
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                <button type="button" class="btn btn-danger" onclick="deleteWorkingHours()">{% trans "Löschen" %}</button>
-                <button type="button" class="btn btn-primary" onclick="saveWorkingHours()">{% trans "Speichern" %}</button>
-            </div>
-        </div>
-    </div>
-</div>
+{% include "wfm/modals/working_hours_modal.html" %}
+{% include "wfm/modals/vacation_modal.html" %}
+{% include "wfm/modals/time_compensation_modal.html" %}
 {% endblock %}
 
 {% block extra_js %}
-<!-- FullCalendar JS -->
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var calendarEl = document.getElementById('calendar');
-    var calendar = new FullCalendar.Calendar(calendarEl, {
+    var calendar;
+    var activeEventTypes = ['working_hours', 'vacation', 'time_comp'];
+    
+    function updateCalendar() {
+        var employee = document.getElementById('employeeFilter')?.value || '';
+        var queryParams = new URLSearchParams({
+            types: activeEventTypes
+        });
+        if (employee) queryParams.append('role', employee);
+        
+        calendar.removeAllEventSources();
+        calendar.addEventSource({
+            url: '{% url "wfm:api-assistant-calendar-events" %}?' + queryParams.toString(),
+            failure: function(error) {
+                console.error('Error loading events:', error);
+            }
+        });
+    }
+    
+    // Event Type Filter Buttons
+    document.querySelectorAll('[data-type]').forEach(button => {
+        button.addEventListener('click', function() {
+            this.classList.toggle('active');
+            const eventType = this.dataset.type;
+            
+            if (this.classList.contains('active')) {
+                activeEventTypes.push(eventType);
+            } else {
+                activeEventTypes = activeEventTypes.filter(type => type !== eventType);
+            }
+            
+            updateCalendar();
+        });
+    });
+    
+    // Employee Filter
+    const employeeFilter = document.getElementById('employeeFilter');
+    if (employeeFilter) {
+        employeeFilter.addEventListener('change', updateCalendar);
+    }
+    
+    // Initialize Calendar
+    calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         initialView: 'timeGridWeek',
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
             right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
+        firstDay: 1,
         slotMinTime: '07:00:00',
         slotMaxTime: '20:00:00',
-        allDaySlot: true,
         locale: 'de',
-        events: function(info, successCallback, failureCallback) {
-            // Hole die aktuellen Filter-Werte
-            const assistant = document.getElementById('assistantFilter').value;
-            const types = Array.from(document.querySelectorAll('input[name="types"]:checked'))
-                              .map(cb => cb.value);
-            
-            const url = `{% url 'wfm:api-calendar-events' %}?year=${info.start.getFullYear()}&month=${info.start.getMonth() + 1}&calendar_type=assistant&assistant=${assistant}&types=${types.join(',')}`;
-            
-            fetch(url, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Loaded events:', data.events);
-                successCallback(data.events);
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                failureCallback(error);
-            });
-        },
-        eventClick: function(info) {
-            if (info.event.extendedProps.type === 'working_hours') {
-                openWorkingHoursModal(info.event.id.replace('work_', ''));
-            }
-        },
-        eventContent: function(arg) {
-            let event = arg.event;
-            let content = document.createElement('div');
-            content.innerHTML = `
-                <div class="fc-content">
-                    <div class="fc-title">${event.title}</div>
-                </div>
-            `;
-            return { domNodes: [content] };
+        eventTimeFormat: {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
         }
     });
-    calendar.render();
-
-    // Event-Handler für Filter-Änderungen
-    document.getElementById('filterForm').addEventListener('change', function() {
-        calendar.refetchEvents();
-    });
-});
-
-function openWorkingHoursModal(event) {
-    const id = event.replace('work_', '');
-    fetch(`/api/working-hours/${id}/`)
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('workingHoursId').value = data.id;
-            document.getElementById('workDate').value = data.date;
-            document.getElementById('startTime').value = data.start_time;
-            document.getElementById('endTime').value = data.end_time;
-            document.getElementById('breakDuration').value = data.break_duration || 0;
-            new bootstrap.Modal(document.getElementById('workingHoursModal')).show();
-        });
-}
-
-function saveWorkingHours() {
-    const form = document.getElementById('workingHoursForm');
-    const data = {
-        id: form.querySelector('[name="id"]').value,
-        date: form.querySelector('[name="date"]').value,
-        start_time: form.querySelector('[name="start_time"]').value,
-        end_time: form.querySelector('[name="end_time"]').value,
-        break_duration: form.querySelector('[name="break_duration"]').value
-    };
     
-    fetch('/api/working-hours/update/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.error || '{% trans "Fehler beim Speichern" %}');
-        }
-    });
-}
-
-function deleteWorkingHours() {
-    if (confirm('{% trans "Arbeitszeit wirklich löschen?" %}')) {
-        const id = document.getElementById('workingHoursId').value;
-        fetch(`/api/working-hours/${id}/delete/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert(data.error || '{% trans "Fehler beim Löschen" %}');
-            }
-        });
-    }
-}
+    calendar.render();
+    updateCalendar();
+});
 </script>
 {% endblock %} 

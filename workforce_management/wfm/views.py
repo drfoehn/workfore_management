@@ -28,6 +28,10 @@ from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.core.exceptions import PermissionDenied
+import logging
+from django.utils.decorators import method_decorator
+
+logger = logging.getLogger(__name__)
 
 class OwnerRequiredMixin(UserPassesTestMixin):
     def test_func(self):
@@ -637,15 +641,15 @@ def api_vacation_request(request):
                     'error': 'Bitte Start- und Enddatum angeben'
                 })
 
-            # Prüfe ob genügend Urlaubstage verfügbar sind
+            # Parse dates
             start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
             end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
             
-            # Berechne die Anzahl der Urlaubstage (ohne Wochenenden)
+            # Berechne Werktage
             requested_days = sum(1 for date in (start_date + timedelta(n) for n in range((end_date - start_date).days + 1))
-                               if date.weekday() < 5)  # 0-4 sind Montag bis Freitag
+                               if date.weekday() < 5)
             
-            # Hole verfügbare Urlaubstage
+            # Prüfe verfügbare Urlaubstage
             vacation_entitlement = VacationEntitlement.objects.filter(
                 employee=request.user,
                 year=start_date.year
@@ -677,18 +681,13 @@ def api_vacation_request(request):
                 start_date=start_date,
                 end_date=end_date,
                 notes=data.get('notes', ''),
-                status='REQUESTED'  # Initial status
+                status='REQUESTED'
             )
             
             return JsonResponse({'success': True})
             
-        except json.JSONDecodeError:
-            return JsonResponse({
-                'success': False,
-                'error': 'Ungültiges JSON-Format'
-            })
         except Exception as e:
-            print("Error:", str(e))
+            logger.error(f"Vacation request error: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -997,88 +996,37 @@ class CalendarView(LoginRequiredMixin, TemplateView):
 
 @login_required
 def api_calendar_events(request):
+    """Einfache API für Kalender-Events"""
     try:
-        year = int(request.GET.get('year', datetime.now().year))
-        month = int(request.GET.get('month', datetime.now().month))
-        calendar_type = request.GET.get('calendar_type', 'default')
-        assistant_id = request.GET.get('assistant')
-        event_types = request.GET.get('types', '').split(',')
+        # Parse start/end dates from request
+        start = request.GET.get('start')
+        end = request.GET.get('end')
         
+        # Convert to date objects
+        start_date = datetime.strptime(start[:10], '%Y-%m-%d').date()
+        end_date = datetime.strptime(end[:10], '%Y-%m-%d').date()
+        
+        # Get all working hours for the current user
+        working_hours = WorkingHours.objects.filter(
+            date__range=[start_date, end_date],
+            employee=request.user
+        ).select_related('employee')
+        
+        # Format events for FullCalendar
         events = []
+        for wh in working_hours:
+            events.append({
+                'id': f'work_{wh.id}',
+                'title': f'{wh.hours:.1f}h',
+                'start': f'{wh.date}T{wh.start_time}',
+                'end': f'{wh.date}T{wh.end_time}',
+                'color': wh.employee.color
+            })
         
-        if calendar_type == 'assistant':
-            # Basis-Query für Assistenten
-            assistant_query = CustomUser.objects.filter(role='ASSISTANT')
-            if assistant_id:
-                assistant_query = assistant_query.filter(id=assistant_id)
-            
-            # Arbeitszeiten
-            if 'working_hours' in event_types:
-                working_hours = WorkingHours.objects.filter(
-                    date__year=year,
-                    date__month=month,
-                    employee__in=assistant_query
-                ).select_related('employee')
-                
-                for wh in working_hours:
-                    duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
-                    if wh.break_duration:
-                        duration -= wh.break_duration
-                    hours = duration.total_seconds() / 3600
-                    
-                    events.append({
-                        'id': f'work_{wh.id}',
-                        'title': f'{wh.employee.username} ({hours:.1f}h)',
-                        'start': f'{wh.date}T{wh.start_time}',
-                        'end': f'{wh.date}T{wh.end_time}',
-                        'type': 'working_hours',
-                        'color': wh.employee.color,
-                        'editable': True
-                    })
-            
-            # Urlaub
-            if 'vacation' in event_types:
-                vacations = Vacation.objects.filter(
-                    employee__in=assistant_query,
-                    start_date__year=year,
-                    start_date__month=month,
-                    status='APPROVED'
-                ).select_related('employee')
-                
-                for vacation in vacations:
-                    events.append({
-                        'id': f'vacation_{vacation.id}',
-                        'title': f'{vacation.employee.username} - Urlaub',
-                        'start': vacation.start_date.isoformat(),
-                        'end': (vacation.end_date + timedelta(days=1)).isoformat(),
-                        'type': 'vacation',
-                        'color': vacation.employee.color,
-                        'allDay': True
-                    })
-            
-            # Zeitausgleich
-            if 'time_comp' in event_types:
-                time_comps = TimeCompensation.objects.filter(
-                    employee__in=assistant_query,
-                    date__year=year,
-                    date__month=month,
-                    status='APPROVED'
-                ).select_related('employee')
-                
-                for tc in time_comps:
-                    events.append({
-                        'id': f'timecomp_{tc.id}',
-                        'title': f'{tc.employee.username} - Zeitausgleich',
-                        'start': tc.date.isoformat(),
-                        'end': (tc.date + timedelta(days=1)).isoformat(),
-                        'type': 'time_comp',
-                        'color': tc.employee.color,
-                        'allDay': True
-                    })
-        
-        return JsonResponse({'events': events})
+        return JsonResponse(events, safe=False)
         
     except Exception as e:
+        logger.error(f"Calendar API Error: {str(e)}", exc_info=True)
         return JsonResponse({
             'error': str(e),
             'events': []
@@ -1485,3 +1433,120 @@ def api_therapist_calendar_events(request):
         })
         
     return JsonResponse(events, safe=False)
+
+@method_decorator(login_required, name='dispatch')
+class AssistantCalendarEventsView(View):
+    """API View für Kalender-Events"""
+    
+    def get(self, request, *args, **kwargs):
+        try:
+            # Get filter parameters
+            start = request.GET.get('start')
+            end = request.GET.get('end')
+            employee_id = request.GET.get('employee')
+            role = request.GET.get('role')
+            event_types = request.GET.getlist('types', ['working_hours', 'vacation', 'time_comp'])
+
+            # Parse dates
+            start_date = datetime.strptime(start[:10], '%Y-%m-%d').date() if start else None
+            end_date = datetime.strptime(end[:10], '%Y-%m-%d').date() if end else None
+
+            # Filter employees
+            employees = CustomUser.objects.all()
+            if role:
+                employees = employees.filter(role=role)
+            if employee_id:
+                employees = employees.filter(id=employee_id)
+            if not request.user.role == 'OWNER':
+                employees = employees.filter(id=request.user.id)
+
+            events = []
+            
+            # Arbeitszeiten zu Events konvertieren
+            if 'working_hours' in event_types:
+                working_hours = WorkingHours.objects.filter(
+                    employee__in=employees
+                ).select_related('employee')
+                
+                if start_date:
+                    working_hours = working_hours.filter(date__gte=start_date)
+                if end_date:
+                    working_hours = working_hours.filter(date__lte=end_date)
+
+                for wh in working_hours:
+                    start_datetime = datetime.combine(date.today(), wh.start_time)
+                    end_datetime = datetime.combine(date.today(), wh.end_time)
+                    duration = end_datetime - start_datetime
+                    hours = duration.total_seconds() / 3600
+                    
+                    if wh.break_duration:
+                        break_hours = wh.break_duration.total_seconds() / 3600
+                        hours -= break_hours
+
+                    event = {
+                        'id': f'work_{wh.id}',
+                        'title': f'{wh.employee.get_full_name()} ({hours:.1f}h)',
+                        'start': f'{wh.date}T{wh.start_time}',
+                        'end': f'{wh.date}T{wh.end_time}',
+                        'color': wh.employee.color,
+                        'type': 'working_hours',
+                        'allDay': False
+                    }
+                    events.append(event)
+
+            # Urlaub zu Events konvertieren
+            if 'vacation' in event_types:
+                vacations = Vacation.objects.filter(
+                    employee__in=employees,
+                    status='APPROVED'  # Nur genehmigte Urlaube anzeigen
+                ).select_related('employee')
+                
+                if start_date:
+                    vacations = vacations.filter(end_date__gte=start_date)
+                if end_date:
+                    vacations = vacations.filter(start_date__lte=end_date)
+
+                for vacation in vacations:
+                    event = {
+                        'id': f'vacation_{vacation.id}',
+                        'title': f'{vacation.employee.get_full_name()} - Urlaub',
+                        'start': vacation.start_date.isoformat(),
+                        'end': (vacation.end_date + timedelta(days=1)).isoformat(),
+                        'color': vacation.employee.color,
+                        'type': 'vacation',
+                        'allDay': True
+                    }
+                    events.append(event)
+
+            # Zeitausgleich zu Events konvertieren
+            if 'time_comp' in event_types:
+                time_comps = TimeCompensation.objects.filter(
+                    employee__in=employees,
+                    status='APPROVED'  # Nur genehmigte Zeitausgleiche anzeigen
+                ).select_related('employee')
+                
+                if start_date:
+                    time_comps = time_comps.filter(date__gte=start_date)
+                if end_date:
+                    time_comps = time_comps.filter(date__lte=end_date)
+
+                for tc in time_comps:
+                    event = {
+                        'id': f'timecomp_{tc.id}',
+                        'title': f'{tc.employee.get_full_name()} - Zeitausgleich',
+                        'start': tc.date.isoformat(),
+                        'end': (tc.date + timedelta(days=1)).isoformat(),
+                        'color': tc.employee.color,
+                        'type': 'time_comp',
+                        'allDay': True
+                    }
+                    events.append(event)
+            
+            return JsonResponse(events, safe=False)
+            
+        except Exception as e:
+            logger.error(f"Calendar API Error: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'error': str(e),
+                'events': []
+            }, status=500)
