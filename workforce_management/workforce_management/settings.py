@@ -149,4 +149,4 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 # Auth settings
 LOGIN_URL = 'wfm:login'
 LOGIN_REDIRECT_URL = 'wfm:dashboard'
-LOGOUT_REDIRECT_URL = 'wfm:index'
+LOGOUT_REDIRECT_URL = 'wfm:dashboard'

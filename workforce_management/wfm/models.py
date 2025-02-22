@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from datetime import datetime
 from django.conf import settings
 from datetime import date
+from django.db.models import Sum
 
 class CustomUser(AbstractUser):
     ROLE_CHOICES = [
@@ -49,6 +50,22 @@ class CustomUser(AbstractUser):
             ]
             self.color = colors[self.id % len(colors)] if self.id else colors[0]
         super().save(*args, **kwargs)
+
+    def get_available_timecomp_hours(self):
+        """Berechnet die verfügbaren Stunden für Zeitausgleich"""
+        # Summe aller finalisierten Zeitausgleichsstunden
+        total_hours = OvertimeAccount.objects.filter(
+            employee=self,
+            is_finalized=True
+        ).aggregate(total=Sum('hours_for_timecomp'))['total'] or 0
+
+        # Abzüglich bereits genutzter Stunden (genehmigte Zeitausgleiche)
+        used_hours = TimeCompensation.objects.filter(
+            employee=self,
+            status='APPROVED'
+        ).count() * 8  # 8 Stunden pro Tag
+
+        return total_hours - used_hours
 
 class ScheduleTemplate(models.Model):
     """Vorlage für die Soll-Arbeitszeiten"""
@@ -105,10 +122,61 @@ class WorkingHours(models.Model):
     break_duration = models.DurationField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
+    # Soll-Zeiten
+    soll_start = models.TimeField(null=True, blank=True)
+    soll_end = models.TimeField(null=True, blank=True)
+
+    # Stunden
+    ist_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    soll_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+
     # Füge related_names hinzu
     vacation = models.ForeignKey('Vacation', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
     time_comp = models.ForeignKey('TimeCompensation', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
     sick_leave = models.ForeignKey('SickLeave', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
+
+    def save(self, *args, **kwargs):
+        # Berechne Ist-Stunden
+        if self.start_time and self.end_time:
+            start = datetime.combine(self.date, self.start_time)
+            end = datetime.combine(self.date, self.end_time)
+            duration = end - start
+            self.ist_hours = Decimal(str(duration.total_seconds() / 3600))
+            
+            if self.break_duration:
+                self.ist_hours -= Decimal(str(self.break_duration.total_seconds() / 3600))
+        else:
+            self.ist_hours = Decimal('0')  # Setze auf 0 wenn keine Zeiten vorhanden
+
+        # Berechne Soll-Stunden
+        if self.soll_start and self.soll_end:
+            start = datetime.combine(self.date, self.soll_start)
+            end = datetime.combine(self.date, self.soll_end)
+            self.soll_hours = Decimal(str((end - start).total_seconds() / 3600))
+        else:
+            self.soll_hours = Decimal('0')  # Setze auf 0 wenn keine Zeiten vorhanden
+
+        super().save(*args, **kwargs)
+
+    @property
+    def difference(self):
+        """Differenz zwischen Ist- und Soll-Stunden"""
+        ist = self.ist_hours or Decimal('0')
+        soll = self.soll_hours or Decimal('0')
+        return ist - soll
+
+    def get_template_times(self):
+        """Holt die Soll-Zeiten aus dem Template"""
+        template = ScheduleTemplate.objects.filter(
+            employee=self.employee,
+            weekday=self.date.weekday(),
+            valid_from__lte=self.date
+        ).order_by('-valid_from').first()
+        
+        if template:
+            self.soll_start = template.start_time
+            self.soll_end = template.end_time
+            self.save()
 
     class Meta:
         verbose_name = _('Arbeitszeit')
@@ -205,47 +273,27 @@ class MonthlyReport(models.Model):
 class TimeCompensation(models.Model):
     """Zeitausgleich"""
     STATUS_CHOICES = [
-        ('REQUESTED', 'Beantragt'),
+        ('REQUESTED', 'Angefragt'),
         ('APPROVED', 'Genehmigt'),
         ('REJECTED', 'Abgelehnt'),
     ]
-
-    employee = models.ForeignKey(
-        CustomUser,
-        on_delete=models.CASCADE,
-        verbose_name=_('Mitarbeiter')
-    )
-    date = models.DateField(_('Datum'))
+    
+    employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE, verbose_name=_('Mitarbeiter'))
+    date = models.DateField(verbose_name=_('Datum'))
     hours = models.DecimalField(
-        _('Stunden'),
         max_digits=4,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))]
+        default=8,
+        verbose_name=_('Stunden'),
+        help_text=_('Standardmäßig 8 Stunden für einen vollen Arbeitstag')
     )
-    notes = models.TextField(
-        _('Anmerkungen'),
-        blank=True,
-        null=True
-    )
-    status = models.CharField(
-        _('Status'),
-        max_length=10,
-        choices=STATUS_CHOICES,
-        default='REQUESTED'
-    )
-    created_at = models.DateTimeField(
-        _('Erstellt am'),
-        auto_now_add=True
-    )
-    updated_at = models.DateTimeField(
-        _('Aktualisiert am'),
-        auto_now=True
-    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='REQUESTED', verbose_name=_('Status'))
+    notes = models.TextField(blank=True, verbose_name=_('Anmerkungen'))
 
     class Meta:
+        ordering = ['-date']
         verbose_name = _('Zeitausgleich')
         verbose_name_plural = _('Zeitausgleiche')
-        ordering = ['-date']
 
     def __str__(self):
         return f"{self.employee} - {self.date} ({self.hours}h)"
@@ -343,4 +391,50 @@ class UserDocument(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.title}"
+
+class OvertimeAccount(models.Model):
+    """Überstundenkonto für Zeitausgleich"""
+    employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    month = models.IntegerField()
+    year = models.IntegerField()
+    total_overtime = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    hours_for_payment = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    hours_for_timecomp = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    is_finalized = models.BooleanField(default=False)
+    finalized_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.pk:  # Wenn neuer Eintrag
+            self.hours_for_payment = self.total_overtime
+            self.hours_for_timecomp = 0
+        else:  # Bei Update
+            # Stelle sicher, dass die Summe stimmt
+            self.hours_for_payment = self.total_overtime - self.hours_for_timecomp
+
+        super().save(*args, **kwargs)
+
+    class Meta:
+        unique_together = ['employee', 'year', 'month']
+        ordering = ['-year', '-month']
+
+    def finalize(self, hours_for_payment):
+        """Finalisiert die Überstunden für den Monat"""
+        if self.is_finalized:
+            raise ValueError("Überstunden wurden bereits finalisiert")
+        
+        if hours_for_payment > self.total_overtime:
+            raise ValueError("Auszahlungsstunden können nicht größer als Gesamtstunden sein")
+        
+        self.hours_for_payment = hours_for_payment
+        self.hours_for_timecomp = self.total_overtime - hours_for_payment
+        self.is_finalized = True
+        self.finalized_at = timezone.now()
+        self.save()
+
+    @property
+    def available_hours(self):
+        """Verfügbare Stunden für Zeitausgleich"""
+        if not self.is_finalized:
+            return 0
+        return self.hours_for_timecomp
 

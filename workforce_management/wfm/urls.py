@@ -32,7 +32,9 @@ urlpatterns = [
     path('api/vacation/request/', views.api_vacation_request, name='api-vacation-request'),
     path('api/vacation/status/', views.api_vacation_status, name='api-vacation-status'),
     path('api/time-compensation/request/', views.api_time_compensation_request, name='api-time-compensation-request'),
+    path('api/time-compensation/status/', views.api_time_compensation_status, name='api-time-compensation-status'),
     path('api/sick-leave/', views.api_sick_leave, name='api-sick-leave'),
+    path('api/scheduled-hours/', views.api_scheduled_hours, name='api-scheduled-hours'),
     
     # Calendars
     path('assistant-calendar/', views.AssistantCalendarView.as_view(), name='assistant-calendar'),
@@ -52,6 +54,9 @@ urlpatterns = [
     # Absences
     path('absences/', views.AbsenceListView.as_view(), name='absence-list'),
     path('api/absence/<str:type>/<int:pk>/delete/', views.api_delete_absence, name='api-delete-absence'),
+    
+    # Overtime
+    path('overtime/', views.OvertimeOverviewView.as_view(), name='overtime-overview'),
 ] 
 
 

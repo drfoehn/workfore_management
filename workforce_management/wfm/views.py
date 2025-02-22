@@ -13,7 +13,8 @@ from .models import (
     TimeCompensation,
     TherapistBooking,
     TherapistScheduleTemplate,
-    CustomUser
+    CustomUser,
+    OvertimeAccount
 )
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count
@@ -32,6 +33,7 @@ import logging
 from django.utils.decorators import method_decorator
 from django.contrib.auth import logout
 from dateutil.relativedelta import relativedelta
+from django.contrib import messages
 
 logger = logging.getLogger(__name__)
 
@@ -232,20 +234,25 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             if template:
                 wh.soll_start = template.start_time
                 wh.soll_end = template.end_time
-                wh.soll_hours = template.hours
             else:
                 wh.soll_start = time(8, 0)
                 wh.soll_end = time(16, 0)
-                wh.soll_hours = Decimal('8.0')
             
             # Berechne Ist-Stunden
-            if wh.id:  # Nur für gespeicherte Einträge
+            if wh.id and wh.start_time and wh.end_time:  # Nur für gespeicherte Einträge mit Zeiten
                 duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
-                if wh.break_duration:
-                    duration -= wh.break_duration
                 wh.ist_hours = Decimal(str(duration.total_seconds() / 3600))
+                if wh.break_duration:
+                    wh.ist_hours -= Decimal(str(wh.break_duration.total_seconds() / 3600))
             else:
                 wh.ist_hours = Decimal('0')
+            
+            # Berechne Soll-Stunden
+            if wh.soll_start and wh.soll_end:
+                soll_duration = datetime.combine(date.min, wh.soll_end) - datetime.combine(date.min, wh.soll_start)
+                wh.soll_hours = Decimal(str(soll_duration.total_seconds() / 3600))
+            else:
+                wh.soll_hours = Decimal('0')
             
             # Hole Abwesenheiten
             wh.vacation = Vacation.objects.filter(
@@ -264,9 +271,6 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 start_date__lte=wh.date,
                 end_date__gte=wh.date
             ).first()
-            
-            # Differenz
-            wh.difference = wh.ist_hours - wh.soll_hours
             
         # Berechne Summen für den Monat
         total_soll = 0
@@ -379,6 +383,98 @@ class WorkingHoursUpdateView(LoginRequiredMixin, UpdateView):
         if 'selected_date' in self.request.session:
             del self.request.session['selected_date']
         return super().form_valid(form)
+
+class OvertimeOverviewView(LoginRequiredMixin, TemplateView):
+    template_name = 'wfm/overtime_overview.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        today = date.today()
+        
+        # Bestimme den relevanten Monat für die Überstunden
+        if today.day <= 7:
+            target_date = today - relativedelta(months=1)
+        elif today.day >= 8:
+            target_date = today
+            
+        year = target_date.year
+        month = target_date.month
+        
+        # Berechne die Überstunden
+        total_overtime = calculate_overtime_hours(self.request.user, year, month)
+        
+        # Hole oder erstelle das Überstundenkonto
+        overtime_account, created = OvertimeAccount.objects.get_or_create(
+            employee=self.request.user,
+            year=year,
+            month=month,
+            defaults={
+                'total_overtime': total_overtime,
+                'hours_for_payment': total_overtime,  # Standardmäßig alles zur Auszahlung
+                'hours_for_timecomp': 0
+            }
+        )
+        
+        # Prüfe ob Übertrag möglich ist
+        can_transfer = (
+            self.request.user.role in ['ASSISTANT', 'CLEANING'] and
+            not overtime_account.is_finalized and
+            overtime_account.total_overtime > 0 and
+            (
+                (today.day >= 8 and month == today.month) or  # Aktueller Monat ab dem 8.
+                (today.day <= 7 and month == (today - relativedelta(months=1)).month)  # Vormonat bis zum 7.
+            )
+        )
+        
+        context.update({
+            'month_name': target_date.strftime('%B %Y'),
+            'overtime_hours': overtime_account.total_overtime,
+            'transferred_hours': overtime_account.hours_for_timecomp,
+            'payment_hours': overtime_account.hours_for_payment,
+            'is_finalized': overtime_account.is_finalized,
+            'can_transfer': can_transfer
+        })
+        
+        return context
+
+    def post(self, request, *args, **kwargs):
+        if request.user.role not in ['ASSISTANT', 'CLEANING']:
+            raise PermissionDenied
+            
+        try:
+            hours_for_timecomp = Decimal(request.POST.get('hours_for_timecomp', 0))
+            
+            today = date.today()
+            if today.day <= 7:
+                target_date = today - relativedelta(months=1)
+            else:
+                target_date = today
+                
+            overtime_account = OvertimeAccount.objects.get(
+                employee=request.user,
+                year=target_date.year,
+                month=target_date.month
+            )
+            
+            if overtime_account.is_finalized:
+                messages.error(request, _('Überstunden wurden bereits abgerechnet'))
+                return redirect('wfm:overtime-overview')
+                
+            if hours_for_timecomp > overtime_account.total_overtime:
+                messages.error(request, _('Nicht genügend Überstunden verfügbar'))
+                return redirect('wfm:overtime-overview')
+                
+            # Übertrage die Stunden
+            overtime_account.hours_for_timecomp = hours_for_timecomp
+            overtime_account.save()  # save() Methode berechnet hours_for_payment automatisch
+            
+            messages.success(request, _('Überstunden wurden erfolgreich übertragen'))
+            
+        except Exception as e:
+            messages.error(request, str(e))
+            
+        return redirect('wfm:overtime-overview')
 
 class VacationListView(LoginRequiredMixin, ListView):
     model = Vacation
@@ -756,42 +852,44 @@ def api_vacation_request(request):
     })
 
 @login_required
-@ensure_csrf_cookie
 def api_time_compensation_request(request):
+    """API-Endpunkt für Zeitausgleichsanträge"""
     if request.method == 'POST':
         try:
-            data = json.loads(request.body.decode('utf-8'))
+            data = json.loads(request.body)
             
             # Validiere die Daten
-            required_fields = ['date', 'hours']
-            if not all(field in data and data[field] for field in required_fields):
+            if not data.get('date'):
                 return JsonResponse({
                     'success': False,
-                    'error': 'Bitte alle Pflichtfelder ausfüllen'
+                    'error': 'Bitte Datum angeben'
                 })
 
-            hours = float(data['hours'])
+            # Parse date
+            date = datetime.strptime(data['date'], '%Y-%m-%d').date()
             
             # Prüfe verfügbare Stunden
-            total_overtime = calculate_total_overtime(request.user)  # Diese Funktion müssen wir noch implementieren
-            used_compensation = TimeCompensation.objects.filter(
+            current_year = timezone.now().year
+            total_hours = calculate_overtime_hours(request.user, current_year)
+            
+            used_hours = TimeCompensation.objects.filter(
                 employee=request.user,
+                date__year=current_year,
                 status='APPROVED'
-            ).aggregate(total=Sum('hours'))['total'] or 0
+            ).count() * 8  # 8 Stunden pro Tag
             
-            available_hours = total_overtime - used_compensation
+            remaining_hours = total_hours - used_hours
             
-            if hours > available_hours:
+            if remaining_hours < 8:  # Standard-Arbeitstag
                 return JsonResponse({
                     'success': False,
-                    'error': f'Nicht genügend Stunden verfügbar. Verfügbar: {available_hours:.2f}, Angefragt: {hours:.2f}'
+                    'error': f'Nicht genügend Überstunden verfügbar. Verfügbar: {remaining_hours:.1f}h'
                 })
 
             # Erstelle den Zeitausgleichsantrag
             time_comp = TimeCompensation.objects.create(
                 employee=request.user,
-                date=data['date'],
-                hours=hours,
+                date=date,
                 notes=data.get('notes', ''),
                 status='REQUESTED'
             )
@@ -799,7 +897,7 @@ def api_time_compensation_request(request):
             return JsonResponse({'success': True})
             
         except Exception as e:
-            print("Error:", str(e))
+            logger.error(f"Time compensation request error: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -808,7 +906,7 @@ def api_time_compensation_request(request):
     return JsonResponse({
         'success': False,
         'error': 'Ungültige Anfrage'
-    })
+    }, status=400)
 
 class TherapistMonthlyOverviewView(LoginRequiredMixin, ListView):
     template_name = 'wfm/therapist_monthly_overview.html'
@@ -1690,4 +1788,137 @@ def api_delete_absence(request, type, pk):
         return JsonResponse({'error': 'Eintrag nicht gefunden'}, status=404)
     except Exception as e:
         logger.error(f"Delete absence error: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def api_time_compensation_status(request):
+    """API-Endpunkt für den aktuellen Zeitausgleichsstatus"""
+    try:
+        today = timezone.now().date()
+        
+        # Hole den relevanten Monat
+        if today.day <= 7:
+            target_date = today - relativedelta(months=1)
+        else:
+            target_date = today
+            
+        # Hole das Überstundenkonto für diesen Monat
+        overtime_account = OvertimeAccount.objects.filter(
+            employee=request.user,
+            year=target_date.year,
+            month=target_date.month
+        ).first()
+        
+        if overtime_account:
+            total_hours = overtime_account.hours_for_timecomp
+        else:
+            total_hours = 0
+        
+        # Hole genehmigte und beantragte Zeitausgleiche
+        approved_time_comps = TimeCompensation.objects.filter(
+            employee=request.user,
+            status='APPROVED'
+        )
+        
+        pending_time_comps = TimeCompensation.objects.filter(
+            employee=request.user,
+            status='REQUESTED'
+        )
+        
+        # Berechne die Stunden
+        used_hours = sum(tc.hours for tc in approved_time_comps)
+        pending_hours = sum(tc.hours for tc in pending_time_comps)
+        remaining_hours = total_hours - used_hours
+        
+        return JsonResponse({
+            'total_hours': float(total_hours),
+            'used_hours': float(used_hours),
+            'pending_hours': float(pending_hours),
+            'remaining_hours': float(remaining_hours)
+        })
+        
+    except Exception as e:
+        logger.error(f"Time compensation status error: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+def calculate_overtime_hours(user, year, month=None):
+    """Berechnet die Überstunden für einen Benutzer in einem Jahr/Monat"""
+    # Basis-Query
+    query = WorkingHours.objects.filter(
+        employee=user,
+        date__year=year
+    )
+    
+    # Wenn ein Monat angegeben ist, filtere zusätzlich danach
+    if month is not None:
+        query = query.filter(date__month=month)
+    
+    total_overtime = 0
+    for wh in query:
+        # Berechne Ist-Stunden
+        if wh.start_time and wh.end_time:
+            start = datetime.combine(wh.date, wh.start_time)
+            end = datetime.combine(wh.date, wh.end_time)
+            duration = end - start
+            ist_hours = duration.total_seconds() / 3600
+            
+            # Ziehe Pause ab
+            if wh.break_duration:
+                ist_hours -= wh.break_duration.total_seconds() / 3600
+        else:
+            ist_hours = 0
+
+        # Berechne Soll-Stunden
+        if wh.soll_start and wh.soll_end:
+            soll_start = datetime.combine(wh.date, wh.soll_start)
+            soll_end = datetime.combine(wh.date, wh.soll_end)
+            soll_hours = (soll_end - soll_start).total_seconds() / 3600
+        else:
+            soll_hours = 0
+
+        # Berechne Differenz und addiere positive Differenzen
+        difference = ist_hours - soll_hours
+        if difference > 0:
+            total_overtime += difference
+
+    return round(total_overtime, 1)
+
+@login_required
+def api_scheduled_hours(request):
+    """API-Endpunkt für geplante Arbeitsstunden an einem Tag"""
+    try:
+        date_str = request.GET.get('date')
+        if not date_str:
+            return JsonResponse({'error': 'Kein Datum angegeben'}, status=400)
+            
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        
+        # Prüfe ob das Datum in der Zukunft liegt
+        if date_obj <= timezone.now().date():
+            return JsonResponse({
+                'error': 'Zeitausgleich kann nur für zukünftige Tage beantragt werden',
+                'hours': 0
+            })
+        
+        # Hole das Template für diesen Tag
+        template = ScheduleTemplate.objects.filter(
+            employee=request.user,
+            weekday=date_obj.weekday(),
+            valid_from__lte=date_obj
+        ).order_by('-valid_from').first()
+        
+        if template and date_obj.weekday() < 5:  # Nur Werktage (0-4 = Montag-Freitag)
+            # Berechne die Stunden
+            start = datetime.combine(date.min, template.start_time)
+            end = datetime.combine(date.min, template.end_time)
+            hours = (end - start).total_seconds() / 3600
+            return JsonResponse({'hours': round(hours, 2)})
+        else:
+            return JsonResponse({
+                'error': 'An diesem Tag gibt es keine geplante Arbeitszeit',
+                'hours': 0
+            })
+            
+    except Exception as e:
+        logger.error(f"Scheduled hours error: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)

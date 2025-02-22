@@ -11,7 +11,9 @@ from .models import (
     TimeCompensation,
     TherapistBooking,
     TherapistScheduleTemplate,
-    MonthlyReport
+    MonthlyReport,
+    OvertimeAccount,
+    UserDocument
 )
 
 @admin.register(CustomUser)
@@ -47,7 +49,7 @@ class TherapistBookingAdmin(admin.ModelAdmin):
 
 @admin.register(TimeCompensation)
 class TimeCompensationAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'date', 'hours', 'status', 'created_at')
+    list_display = ('employee', 'date', 'hours', 'status')
     list_filter = ('status', 'date', 'employee')
     search_fields = ('employee__username', 'notes')
     date_hierarchy = 'date'
@@ -108,3 +110,19 @@ class MonthlyReportAdmin(admin.ModelAdmin):
     list_filter = ('year', 'month', 'employee')
     search_fields = ('employee__username',)
     date_hierarchy = 'generated_at'
+
+@admin.register(OvertimeAccount)
+class OvertimeAccountAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'year', 'month', 'total_overtime', 'hours_for_payment', 
+                   'hours_for_timecomp', 'is_finalized', 'finalized_at']
+    list_filter = ['employee', 'year', 'month', 'is_finalized']
+    search_fields = ['employee__username', 'employee__first_name', 'employee__last_name']
+    readonly_fields = ['finalized_at']
+    ordering = ['-year', '-month', 'employee']
+
+@admin.register(UserDocument)
+class UserDocumentAdmin(admin.ModelAdmin):
+    list_display = ['user', 'title', 'uploaded_at']
+    list_filter = ['uploaded_at', 'user']
+    search_fields = ['user__username', 'title', 'notes']
+    date_hierarchy = 'uploaded_at'

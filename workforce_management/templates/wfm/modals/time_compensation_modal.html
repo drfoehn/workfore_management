@@ -8,28 +8,165 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="timeCompForm">
+                <div id="timeCompStatus" class="mb-3">
+                    <div class="alert alert-info">
+                        {% trans "Verfügbare Stunden werden geladen..." %}
+                    </div>
+                </div>
+
+                <form id="timeCompForm" method="post" action="{% url 'wfm:api-time-compensation-request' %}">
+                    {% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Datum" %}</label>
-                        <input type="text" class="form-control" id="timeCompDisplayDate" readonly>
+                        <label for="timeCompDate" class="form-label">{% trans "Datum" %}</label>
+                        <input type="date" class="form-control" id="timeCompDate" name="date" required>
+                    </div>
+                    <div id="scheduledHoursInfo" class="alert alert-secondary d-none">
+                        {% trans "Geplante Arbeitszeit für diesen Tag" %}: <span id="scheduledHours">0</span> {% trans "Stunden" %}
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Stunden" %}</label>
-                        <input type="number" class="form-control" name="hours" step="0.5" min="0" required>
-                        <small class="form-text text-muted">
-                            {% trans "Verfügbare Stunden" %}: <span id="availableHours">0</span>
-                        </small>
+                        <label for="timeCompNotes" class="form-label">{% trans "Anmerkungen" %}</label>
+                        <textarea class="form-control" id="timeCompNotes" name="notes" rows="3"></textarea>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Notizen" %}</label>
-                        <textarea class="form-control" name="notes"></textarea>
-                    </div>
+                    <button type="submit" class="btn btn-primary" id="timeCompSubmit" disabled>
+                        {% trans "Beantragen" %}
+                    </button>
                 </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                <button type="button" class="btn btn-primary" onclick="submitTimeComp()">{% trans "Beantragen" %}</button>
             </div>
         </div>
     </div>
-</div> 
+</div>
+
+<script>
+// Funktion zum Laden des Zeitausgleichsstatus
+function loadTimeCompStatus() {
+    fetch('{% url "wfm:api-time-compensation-status" %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            const statusHtml = `
+                <div class="alert alert-info">
+                    <h6>{% trans "Verfügbare Stunden" %}:</h6>
+                    <ul class="mb-0">
+                        <li>{% trans "Gesamte Überstunden" %}: ${data.total_hours}h</li>
+                        <li>{% trans "Bereits verwendet" %}: ${data.used_hours}h</li>
+                        <li>{% trans "In Bearbeitung" %}: ${data.pending_hours}h</li>
+                        <li><strong>{% trans "Noch verfügbar" %}: ${data.remaining_hours}h</strong></li>
+                    </ul>
+                </div>
+            `;
+            document.getElementById('timeCompStatus').innerHTML = statusHtml;
+            window.availableHours = data.remaining_hours;
+            checkSubmitButton();
+        })
+        .catch(error => {
+            document.getElementById('timeCompStatus').innerHTML = `
+                <div class="alert alert-danger">
+                    ${error.message}
+                </div>
+            `;
+        });
+}
+
+// Funktion zum Laden der geplanten Stunden für ein Datum
+function loadScheduledHours(date) {
+    fetch(`{% url 'wfm:api-scheduled-hours' %}?date=${date}`)
+        .then(response => response.json())
+        .then(data => {
+            const infoDiv = document.getElementById('scheduledHoursInfo');
+            const submitBtn = document.getElementById('timeCompSubmit');
+            
+            if (data.error) {
+                infoDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        ${data.error}
+                    </div>
+                `;
+                infoDiv.classList.remove('d-none');
+                window.requiredHours = 0;
+            } else if (data.hours > 0) {
+                document.getElementById('scheduledHours').textContent = data.hours;
+                infoDiv.classList.remove('d-none');
+                window.requiredHours = data.hours;
+            } else {
+                infoDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        {% trans "An diesem Tag gibt es keine geplante Arbeitszeit" %}
+                    </div>
+                `;
+                infoDiv.classList.remove('d-none');
+                window.requiredHours = 0;
+            }
+            checkSubmitButton();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+// Prüfe ob Submit-Button aktiviert werden soll
+function checkSubmitButton() {
+    const submitBtn = document.getElementById('timeCompSubmit');
+    if (window.requiredHours && window.availableHours) {
+        submitBtn.disabled = window.requiredHours > window.availableHours || window.requiredHours === 0;
+        
+        if (window.requiredHours > window.availableHours) {
+            submitBtn.title = '{% trans "Nicht genügend Stunden verfügbar" %}';
+        } else if (window.requiredHours === 0) {
+            submitBtn.title = '{% trans "Keine Arbeitszeit für diesen Tag geplant" %}';
+        } else {
+            submitBtn.title = '';
+        }
+    }
+}
+
+// Event Listener für Datumsänderung
+document.getElementById('timeCompDate').addEventListener('change', function(e) {
+    if (this.value) {
+        loadScheduledHours(this.value);
+    }
+});
+
+// Lade Status wenn Modal geöffnet wird
+document.getElementById('timeCompModal').addEventListener('show.bs.modal', function() {
+    loadTimeCompStatus();
+    const dateInput = document.getElementById('timeCompDate');
+    if (dateInput.value) {
+        loadScheduledHours(dateInput.value);
+    }
+});
+
+// Form Submit Handler
+document.getElementById('timeCompForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch(this.action, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken'),
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            date: formData.get('date'),
+            hours: window.requiredHours,
+            notes: formData.get('notes')
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        bootstrap.Modal.getInstance(document.getElementById('timeCompModal')).hide();
+        showAlert('success', '{% trans "Zeitausgleich wurde erfolgreich beantragt" %}');
+        setTimeout(() => location.reload(), 1500);
+    })
+    .catch(error => {
+        showAlert('danger', error.message);
+    });
+});
+</script> 
