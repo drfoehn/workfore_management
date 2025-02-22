@@ -10,8 +10,8 @@
                 <ul class="navbar-nav me-auto">
                     {% if user.role == 'OWNER' %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'owner-dashboard' %}active{% endif %}" 
-                               href="{% url 'wfm:owner-dashboard' %}">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" 
+                               href="{% url 'wfm:dashboard' %}">
                                 <i class="bi bi-speedometer2"></i> Dashboard
                             </a>
                         </li>

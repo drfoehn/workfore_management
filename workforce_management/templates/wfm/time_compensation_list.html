@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Zeitausgleichsanträge" %}</h1>
+        {% if user.role != 'OWNER' %}
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
+            {% trans "Zeitausgleich beantragen" %}
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Mitarbeiter" %}</th>
+                            <th>{% trans "Datum" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Notizen" %}</th>
+                            {% if user.role == 'OWNER' %}
+                            <th>{% trans "Aktionen" %}</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tc in time_compensations %}
+                        <tr>
+                            <td>{{ tc.employee.get_full_name }}</td>
+                            <td>{{ tc.date|date:"d.m.Y" }}</td>
+                            <td>
+                                <span class="badge bg-{{ tc.status|lower }}">
+                                    {{ tc.get_status_display }}
+                                </span>
+                            </td>
+                            <td>{{ tc.notes|default:"-" }}</td>
+                            {% if user.role == 'OWNER' %}
+                            <td>
+                                {% if tc.status == 'REQUESTED' %}
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-success"
+                                            onclick="approveTimeComp('{{ tc.id }}')">
+                                        {% trans "Genehmigen" %}
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                            onclick="rejectTimeComp('{{ tc.id }}')">
+                                        {% trans "Ablehnen" %}
+                                    </button>
+                                </div>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if user.role != 'OWNER' %}
+{% include "wfm/modals/time_compensation_modal.html" %}
+{% endif %}
+{% endblock %} 

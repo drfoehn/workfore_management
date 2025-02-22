@@ -1,43 +1,301 @@
 {% extends "base.html" %}
 {% load i18n %}
-{% load crispy_forms_tags %}
-
-{% block title %}{% trans "Dashboard" %} - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="row">
-    <!-- Zeiterfassung Card -->
-    <div class="col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-header">
-                <h5 class="card-title mb-0">{% trans "Zeiterfassung" %}</h5>
+<div class="container py-4">
+    {% if user.role == 'OWNER' %}
+    <!-- Owner Dashboard -->
+    <h1 class="mb-4">{% trans "Dashboard" %}</h1>
+    <div class="row g-4">
+        <!-- Mitarbeiter-Verwaltung -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Mitarbeiter-Verwaltung" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:working-hours-list' %}" class="list-group-item list-group-item-action">
+                            {% trans "Assistenzen-Liste" %}
+                        </a>
+                        <a href="{% url 'wfm:assistant-calendar' %}" class="list-group-item list-group-item-action">
+                            {% trans "Assistenzen-Kalender" %}
+                        </a>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <a href="{% url 'wfm:working-hours-add' %}" class="btn btn-primary mb-3">
-                    {% trans "Zeit erfassen" %}
-                </a>
-                <a href="{% url 'wfm:working-hours-list' %}" class="btn btn-outline-primary mb-3">
-                    {% trans "Übersicht" %}
-                </a>
+        </div>
+
+        <!-- Anträge & Genehmigungen -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Anträge & Genehmigungen" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:vacation-list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            {% trans "Urlaubsanträge" %}
+                            {% if pending_vacations %}
+                            <span class="badge bg-primary rounded-pill">{{ pending_vacations }}</span>
+                            {% endif %}
+                        </a>
+                        <a href="{% url 'wfm:time-compensation-list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            {% trans "Zeitausgleichsanträge" %}
+                            {% if pending_time_comps %}
+                            <span class="badge bg-primary rounded-pill">{{ pending_time_comps }}</span>
+                            {% endif %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Administration" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                           data-bs-toggle="modal" data-bs-target="#adminConfirmModal">
+                            {% trans "Admin-Bereich" %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Therapeuten -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Therapeuten" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:therapist-booking-list' %}" class="list-group-item list-group-item-action">
+                            {% trans "Therapeuten-Buchungen" %}
+                        </a>
+                        <a href="{% url 'wfm:therapist-calendar' %}" class="list-group-item list-group-item-action">
+                            {% trans "Therapeuten-Kalender" %}
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Urlaub Card -->
-    <div class="col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-header">
-                <h5 class="card-title mb-0">{% trans "Urlaub" %}</h5>
+    {% elif user.role == 'ASSISTANT' or user.role == 'CLEANING' %}
+    <!-- Assistenten/Cleaner Dashboard -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Meine Übersicht" %}</h1>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#workingHoursModal">
+                {% trans "Arbeitszeit eintragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
+                {% trans "Urlaub beantragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
+                {% trans "Zeitausgleich beantragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
+                {% trans "Krankenstand melden" %}
+            </button>
+        </div>
+    </div>
+
+    <!-- Wochenübersicht -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">{% trans "Diese Woche" %}</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Datum" %}</th>
+                            <th>{% trans "Geplante Zeit" %}</th>
+                            <th>{% trans "Tatsächliche Zeit" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Aktionen" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for date in week_dates %}
+                        <tr>
+                            <td>{{ date|date:"D, d.m.Y" }}</td>
+                            <td>
+                                {% for wh in working_hours %}
+                                    {% if wh.date == date %}
+                                        {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <!-- Tatsächliche Arbeitszeit -->
+                            </td>
+                            <td>
+                                {% for vacation in vacations %}
+                                    {% if date >= vacation.start_date and date <= vacation.end_date %}
+                                        <span class="badge bg-info">{% trans "Urlaub" %}</span>
+                                    {% endif %}
+                                {% endfor %}
+                                {% for tc in time_comps %}
+                                    {% if tc.date == date %}
+                                        <span class="badge bg-warning">{% trans "Zeitausgleich" %}</span>
+                                    {% endif %}
+                                {% endfor %}
+                                {% for sl in sick_leaves %}
+                                    {% if date >= sl.start_date and date <= sl.end_date %}
+                                        <span class="badge bg-danger">{% trans "Krank" %}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick="editWorkingHours('{{ date|date:"Y-m-d" }}')">
+                                    {% trans "Bearbeiten" %}
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-            <div class="card-body">
-                <a href="{% url 'wfm:vacation-request' %}" class="btn btn-primary mb-3">
-                    {% trans "Urlaub beantragen" %}
-                </a>
-                <a href="{% url 'wfm:vacation-list' %}" class="btn btn-outline-primary mb-3">
-                    {% trans "Urlaubsübersicht" %}
+        </div>
+    </div>
+
+    {% elif user.role == 'THERAPIST' %}
+    <!-- Therapeuten Dashboard -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Meine Übersicht" %}</h1>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#absenceModal">
+                {% trans "Abwesenheit melden" %}
+            </button>
+        </div>
+    </div>
+
+    <!-- Wochenübersicht -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">{% trans "Diese Woche" %}</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Datum" %}</th>
+                            <th>{% trans "Gebuchte Zeit" %}</th>
+                            <th>{% trans "Tatsächliche Zeit" %}</th>
+                            <th>{% trans "Raum" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Aktionen" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for date in week_dates %}
+                        <tr>
+                            <td>{{ date|date:"D, d.m.Y" }}</td>
+                            <td>
+                                {% for booking in bookings %}
+                                    {% if booking.date == date %}
+                                        {{ booking.start_time|time:"H:i" }} - {{ booking.end_time|time:"H:i" }}
+                                        ({{ booking.hours }}h)
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% for booking in bookings %}
+                                    {% if booking.date == date and booking.actual_hours %}
+                                        {{ booking.actual_hours }}h
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% for booking in bookings %}
+                                    {% if booking.date == date %}
+                                        {{ booking.room }}
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% for booking in bookings %}
+                                    {% if booking.date == date %}
+                                        <span class="badge bg-{{ booking.status|lower }}">
+                                            {{ booking.get_status_display }}
+                                        </span>
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% for booking in bookings %}
+                                    {% if booking.date == date %}
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                onclick="editActualHours('{{ booking.id }}')">
+                                            {% trans "Zeit eintragen" %}
+                                        </button>
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modals -->
+{% if user.role in 'ASSISTANT,CLEANING' %}
+{% include "wfm/modals/working_hours_modal.html" %}
+{% include "wfm/modals/vacation_modal.html" %}
+{% include "wfm/modals/time_compensation_modal.html" %}
+{% include "wfm/modals/sick_leave_modal.html" %}
+{% elif user.role == 'THERAPIST' %}
+{% include "wfm/modals/actual_hours_modal.html" %}
+{% include "wfm/modals/absence_modal.html" %}
+{% endif %}
+
+<!-- Admin Bestätigungs-Modal -->
+{% if user.role == 'OWNER' %}
+<div class="modal fade" id="adminConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{% trans "Achtung" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    {% trans "Bitte sei vorsichtig was du im Admin-Bereich machst - hier kann man auch viel zerstören!" %}
+                </div>
+                <p>{% trans "Im Admin-Bereich hast du direkten Zugriff auf die Datenbank. Änderungen hier können weitreichende Folgen haben." %}</p>
+                <ul>
+                    <li>{% trans "Lösche keine Daten, die noch gebraucht werden könnten" %}</li>
+                    <li>{% trans "Sei vorsichtig beim Bearbeiten von Berechtigungen" %}</li>
+                    <li>{% trans "Mache im Zweifelsfall vorher ein Backup" %}</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    {% trans "Abbrechen" %}
+                </button>
+                <a href="{% url 'admin:index' %}" class="btn btn-primary">
+                    {% trans "Verstanden, zum Admin-Bereich" %}
                 </a>
             </div>
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %} 

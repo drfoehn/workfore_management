@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="mb-4">{% trans "Dashboard" %}</h1>
+
+    <div class="row g-4">
+        <!-- Mitarbeiter-Verwaltung -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Mitarbeiter-Verwaltung" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:working-hours-list' %}" class="list-group-item list-group-item-action">
+                            {% trans "Assistenzen-Liste" %}
+                        </a>
+                        <a href="{% url 'wfm:assistant-calendar' %}" class="list-group-item list-group-item-action">
+                            {% trans "Assistenzen-Kalender" %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Anträge & Genehmigungen -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Anträge & Genehmigungen" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:vacation-list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            {% trans "Urlaubsanträge" %}
+                            {% if pending_vacations %}
+                            <span class="badge bg-primary rounded-pill">{{ pending_vacations }}</span>
+                            {% endif %}
+                        </a>
+                        <a href="{% url 'wfm:time-compensation-list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            {% trans "Zeitausgleichsanträge" %}
+                            {% if pending_time_comps %}
+                            <span class="badge bg-primary rounded-pill">{{ pending_time_comps }}</span>
+                            {% endif %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Therapeuten -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Therapeuten" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:therapist-booking-list' %}" class="list-group-item list-group-item-action">
+                            {% trans "Therapeuten-Buchungen" %}
+                        </a>
+                        <a href="{% url 'wfm:therapist-calendar' %}" class="list-group-item list-group-item-action">
+                            {% trans "Therapeuten-Kalender" %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

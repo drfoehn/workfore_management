@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h2 class="mb-4">{% trans "Erfolgreich abgemeldet" %}</h2>
+                    <p>{% trans "Sie wurden erfolgreich abgemeldet." %}</p>
+                    <a href="{% url 'wfm:login' %}" class="btn btn-primary">
+                        {% trans "Erneut anmelden" %}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

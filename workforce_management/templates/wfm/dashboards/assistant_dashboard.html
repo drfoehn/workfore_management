@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Meine Übersicht" %}</h1>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#workingHoursModal">
+                {% trans "Arbeitszeit eintragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
+                {% trans "Urlaub beantragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
+                {% trans "Zeitausgleich beantragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
+                {% trans "Krankenstand melden" %}
+            </button>
+        </div>
+    </div>
+
+    <!-- Wochenübersicht -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">{% trans "Diese Woche" %}</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Datum" %}</th>
+                            <th>{% trans "Geplante Zeit" %}</th>
+                            <th>{% trans "Tatsächliche Zeit" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Aktionen" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for date in week_dates %}
+                        <tr>
+                            <td>{{ date|date:"D, d.m.Y" }}</td>
+                            <td>
+                                {% for wh in working_hours %}
+                                    {% if wh.date == date %}
+                                        {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <!-- Tatsächliche Arbeitszeit -->
+                            </td>
+                            <td>
+                                {% for vacation in vacations %}
+                                    {% if date >= vacation.start_date and date <= vacation.end_date %}
+                                        <span class="badge bg-info">{% trans "Urlaub" %}</span>
+                                    {% endif %}
+                                {% endfor %}
+                                {% for tc in time_comps %}
+                                    {% if tc.date == date %}
+                                        <span class="badge bg-warning">{% trans "Zeitausgleich" %}</span>
+                                    {% endif %}
+                                {% endfor %}
+                                {% for sl in sick_leaves %}
+                                    {% if date >= sl.start_date and date <= sl.end_date %}
+                                        <span class="badge bg-danger">{% trans "Krank" %}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick="editWorkingHours('{{ date|date:"Y-m-d" }}')">
+                                    {% trans "Bearbeiten" %}
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include "wfm/modals/working_hours_modal.html" %}
+{% include "wfm/modals/vacation_modal.html" %}
+{% include "wfm/modals/time_compensation_modal.html" %}
+{% include "wfm/modals/sick_leave_modal.html" %}
+{% endblock %} 

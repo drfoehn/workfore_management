@@ -30,6 +30,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.core.exceptions import PermissionDenied
 import logging
 from django.utils.decorators import method_decorator
+from django.contrib.auth import logout
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,8 @@ class OwnerRequiredMixin(UserPassesTestMixin):
 
 @login_required
 def dashboard(request):
-    if request.user.role == 'THERAPIST':
-        return redirect('wfm:therapist-monthly-overview')
-    return redirect('wfm:monthly-overview')
+    """Leitet zur Hauptseite weiter"""
+    return redirect('wfm:dashboard')  # Statt 'owner-dashboard' verwenden wir jetzt 'dashboard'
 
 class WorkingHoursListView(LoginRequiredMixin, ListView):
     model = WorkingHours
@@ -1040,57 +1040,52 @@ def generate_color_for_user(user_id):
     ]
     return colors[user_id % len(colors)]
 
-class OwnerDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'wfm/owner_dashboard.html'
-    
-    def test_func(self):
-        return self.request.user.role == 'OWNER'
-    
+class DashboardView(LoginRequiredMixin, TemplateView):
+    template_name = 'wfm/dashboard.html'
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        # Offene Anträge
-        context['pending_vacations'] = Vacation.objects.filter(
-            status='PENDING'
-        ).select_related('employee').order_by('start_date')
-        
-        context['pending_time_comps'] = TimeCompensation.objects.filter(
-            status='PENDING'
-        ).select_related('employee').order_by('date')
-        
-        # Aktuelle Buchungen
-        context['recent_bookings'] = TherapistBooking.objects.filter(
-            date__gte=timezone.now().date()
-        ).select_related('therapist').order_by('date', 'start_time')[:10]
-        
-        # Mitarbeiter-Statistiken
-        context['therapists'] = CustomUser.objects.filter(
-            role='THERAPIST'
-        ).annotate(
-            booking_count=Count('therapistbooking'),
-            total_hours=Sum('therapistbooking__hours')
-        )
-        
-        # Für Assistenten müssen wir die Stunden manuell berechnen
-        assistants = CustomUser.objects.filter(role='ASSISTANT').annotate(
-            vacation_count=Count('vacation')
-        )
-        
-        for assistant in assistants:
-            # Berechne die Gesamtstunden für jeden Assistenten
-            working_hours = WorkingHours.objects.filter(employee=assistant)
-            total_hours = Decimal('0.0')
-            
-            for wh in working_hours:
-                duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
-                if wh.break_duration:
-                    duration -= wh.break_duration
-                total_hours += Decimal(str(duration.total_seconds() / 3600))
-            
-            assistant.working_hours = total_hours
-            
-        context['assistants'] = assistants
-        
+        today = timezone.now().date()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+
+        if self.request.user.role == 'OWNER':
+            # Owner-spezifische Daten
+            context['pending_vacations'] = Vacation.objects.filter(status='REQUESTED').count()
+            context['pending_time_comps'] = TimeCompensation.objects.filter(status='REQUESTED').count()
+
+        elif self.request.user.role in ['ASSISTANT', 'CLEANING']:
+            # Assistenten/Cleaner-spezifische Daten
+            context['working_hours'] = WorkingHours.objects.filter(
+                employee=self.request.user,
+                date__range=[week_start, week_end]
+            ).order_by('date', 'start_time')
+
+            context['vacations'] = Vacation.objects.filter(
+                employee=self.request.user,
+                start_date__lte=week_end,
+                end_date__gte=week_start
+            )
+
+            context['time_comps'] = TimeCompensation.objects.filter(
+                employee=self.request.user,
+                date__range=[week_start, week_end]
+            )
+
+            context['sick_leaves'] = SickLeave.objects.filter(
+                employee=self.request.user,
+                start_date__lte=week_end,
+                end_date__gte=week_start
+            )
+
+        elif self.request.user.role == 'THERAPIST':
+            # Therapeuten-spezifische Daten
+            context['bookings'] = TherapistBooking.objects.filter(
+                therapist=self.request.user,
+                date__range=[week_start, week_end]
+            ).order_by('date', 'start_time')
+
+        context['week_dates'] = [week_start + timedelta(days=i) for i in range(7)]
         return context
 
 @login_required
@@ -1554,3 +1549,27 @@ class AssistantCalendarEventsView(View):
                 'error': str(e),
                 'events': []
             }, status=500)
+
+class TimeCompensationListView(LoginRequiredMixin, ListView):
+    model = TimeCompensation
+    template_name = 'wfm/time_compensation_list.html'
+    context_object_name = 'time_compensations'
+
+    def get_queryset(self):
+        queryset = TimeCompensation.objects.select_related('employee')
+        
+        if self.request.user.role != 'OWNER':
+            queryset = queryset.filter(employee=self.request.user)
+            
+        return queryset.order_by('-date')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.user.role == 'OWNER':
+            context['employees'] = CustomUser.objects.exclude(role='OWNER')
+        return context
+
+@login_required
+def logout_view(request):
+    logout(request)
+    return redirect('wfm:login')
