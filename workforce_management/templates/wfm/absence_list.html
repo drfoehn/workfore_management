@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Meine Abwesenheiten" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2">{% trans "Meine Abwesenheiten" %}</h1>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
+                <i class="bi bi-calendar-plus"></i> {% trans "Urlaub beantragen" %}
+            </button>
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
+                <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich" %}
+            </button>
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
+                <i class="bi bi-thermometer-half"></i> {% trans "Krankenstand" %}
+            </button>
+        </div>
+    </div>
+
+    {% if vacation_info %}
+    <div class="alert alert-info">
+        <h6 class="mb-0">{% trans "Urlaubsübersicht" %} {{ today.year }}</h6>
+        <div class="row align-items-center">
+            <div class="col-auto">
+                <small class="text-muted">{% trans "Gesamt:" %}</small>
+                <strong>{{ vacation_info.total }}</strong>
+            </div>
+            <div class="col-auto">
+                <small class="text-muted">{% trans "Genommen:" %}</small>
+                <strong>{{ vacation_info.used }}</strong>
+            </div>
+            <div class="col-auto">
+                <small class="text-muted">{% trans "Verfügbar:" %}</small>
+                <strong>{{ vacation_info.remaining }}</strong>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Urlaub -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-umbrella text-primary"></i> {% trans "Urlaub" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% for vacation in vacations %}
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <strong>{{ vacation.start_date|date:"d.m.Y" }} - {{ vacation.end_date|date:"d.m.Y" }}</strong>
+                            <br>
+                            <small class="text-muted">{{ vacation.working_days }} {% trans "Arbeitstage" %}</small>
+                            {% if vacation.notes %}
+                            <br>
+                            <small class="text-muted">{{ vacation.notes }}</small>
+                            {% endif %}
+                        </div>
+                        <div class="btn-group">
+                            {% if vacation.status == 'REQUESTED' %}
+                            <button type="button" 
+                                    class="btn btn-sm btn-outline-danger"
+                                    onclick="deleteAbsence('vacation', {{ vacation.id }})"
+                                    title="{% trans 'Stornieren' %}">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                            {% endif %}
+                            <span class="badge {% if vacation.status == 'APPROVED' %}bg-success{% elif vacation.status == 'REQUESTED' %}bg-warning{% else %}bg-danger{% endif %}">
+                                {{ vacation.get_status_display }}
+                            </span>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted mb-0">{% trans "Keine Urlaubsanträge" %}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Zeitausgleich -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock-history text-info"></i> {% trans "Zeitausgleich" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% for tc in time_comps %}
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <strong>{{ tc.date|date:"d.m.Y" }}</strong>
+                            {% if tc.notes %}
+                            <br>
+                            <small class="text-muted">{{ tc.notes }}</small>
+                            {% endif %}
+                        </div>
+                        <div class="btn-group">
+                            {% if tc.status == 'REQUESTED' %}
+                            <button type="button" 
+                                    class="btn btn-sm btn-outline-danger"
+                                    onclick="deleteAbsence('time_comp', {{ tc.id }})"
+                                    title="{% trans 'Stornieren' %}">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                            {% endif %}
+                            <span class="badge {% if tc.status == 'APPROVED' %}bg-success{% elif tc.status == 'REQUESTED' %}bg-warning{% else %}bg-danger{% endif %}">
+                                {{ tc.get_status_display }}
+                            </span>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted mb-0">{% trans "Keine Zeitausgleichsanträge" %}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Krankenstand -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-hospital text-danger"></i> {% trans "Krankenstand" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% for sl in sick_leaves %}
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <strong>{{ sl.start_date|date:"d.m.Y" }} - {{ sl.end_date|date:"d.m.Y" }}</strong>
+                            {% if sl.notes %}
+                            <br>
+                            <small class="text-muted">{{ sl.notes }}</small>
+                            {% endif %}
+                        </div>
+                        <span class="badge {% if sl.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
+                            {{ sl.get_status_display }}
+                        </span>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted mb-0">{% trans "Keine Krankmeldungen" %}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include "wfm/modals/vacation_modal.html" %}
+{% include "wfm/modals/time_compensation_modal.html" %}
+{% include "wfm/modals/sick_leave_modal.html" %}
+
+<script>
+function deleteAbsence(type, id) {
+    if (confirm('{% trans "Möchten Sie diesen Antrag wirklich stornieren?" %}')) {
+        fetch(`/api/absence/${type}/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('{% trans "Ein Fehler ist aufgetreten" %}');
+        });
+    }
+}
+</script>
+{% endblock %} 

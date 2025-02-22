@@ -686,7 +686,6 @@ def save_working_hours(request, date=None):
     })
 
 @login_required
-@ensure_csrf_cookie
 def api_vacation_request(request):
     if request.method == 'POST':
         try:
@@ -705,8 +704,7 @@ def api_vacation_request(request):
             end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
             
             # Berechne Werktage
-            requested_days = sum(1 for date in (start_date + timedelta(n) for n in range((end_date - start_date).days + 1))
-                               if date.weekday() < 5)
+            requested_days = sum(1 for date in (start_date + timedelta(n) for n in range((end_date - start_date).days + 1)) if date.weekday() < 5)
             
             # Prüfe verfügbare Urlaubstage
             vacation_entitlement = VacationEntitlement.objects.filter(
@@ -967,7 +965,7 @@ def api_therapist_booking(request):
     return JsonResponse({
         'success': False,
         'error': 'Ungültige Anfrage'
-    })
+    }, status=400)
 
 @login_required
 @ensure_csrf_cookie
@@ -1604,3 +1602,92 @@ def api_therapist_booking_update(request):
         return JsonResponse({
             'error': str(e)
         }, status=500)
+
+class AbsenceListView(LoginRequiredMixin, ListView):
+    template_name = 'wfm/absence_list.html'
+    context_object_name = 'absences'
+
+    def get_queryset(self):
+        # Leeres Queryset, da wir die Daten über get_context_data bereitstellen
+        return []
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        today = timezone.now().date()
+        
+        # Hole alle zukünftigen und aktuellen Abwesenheiten
+        context['vacations'] = Vacation.objects.filter(
+            employee=self.request.user,
+            end_date__gte=today
+        ).order_by('start_date')
+        
+        context['time_comps'] = TimeCompensation.objects.filter(
+            employee=self.request.user,
+            date__gte=today
+        ).order_by('date')
+        
+        context['sick_leaves'] = SickLeave.objects.filter(
+            employee=self.request.user,
+            end_date__gte=today
+        ).order_by('start_date')
+        
+        # Hole Urlaubsanspruch für das aktuelle Jahr
+        entitlement = VacationEntitlement.objects.filter(
+            employee=self.request.user,
+            year=today.year
+        ).first()
+        
+        if entitlement:
+            used_days = sum(v.working_days for v in Vacation.objects.filter(
+                employee=self.request.user,
+                start_date__year=today.year,
+                status='APPROVED'
+            ))
+            context['vacation_info'] = {
+                'total': entitlement.total_days,
+                'used': used_days,
+                'remaining': entitlement.total_days - used_days,
+                'today': today  # Füge das aktuelle Datum hinzu für die Anzeige des Jahres
+            }
+        
+        return context
+
+@login_required
+def api_delete_absence(request, type, pk):
+    """API zum Löschen von Abwesenheiten"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid method'}, status=405)
+        
+    try:
+        # Wähle das richtige Model basierend auf dem Typ
+        if type == 'vacation':
+            model = Vacation
+        elif type == 'time_comp':
+            model = TimeCompensation
+        else:
+            return JsonResponse({'error': 'Invalid type'}, status=400)
+            
+        # Hole den Eintrag
+        absence = model.objects.get(pk=pk, employee=request.user)
+        
+        # Prüfe ob der Eintrag in der Zukunft liegt
+        if type == 'vacation':
+            if absence.start_date < timezone.now().date():
+                return JsonResponse({'error': 'Vergangene Einträge können nicht gelöscht werden'}, status=400)
+        else:
+            if absence.date < timezone.now().date():
+                return JsonResponse({'error': 'Vergangene Einträge können nicht gelöscht werden'}, status=400)
+                
+        # Prüfe den Status
+        if absence.status != 'REQUESTED':
+            return JsonResponse({'error': 'Nur offene Anträge können storniert werden'}, status=400)
+            
+        # Lösche den Eintrag
+        absence.delete()
+        return JsonResponse({'success': True})
+        
+    except model.DoesNotExist:
+        return JsonResponse({'error': 'Eintrag nicht gefunden'}, status=404)
+    except Exception as e:
+        logger.error(f"Delete absence error: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)

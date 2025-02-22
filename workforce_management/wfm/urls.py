@@ -48,6 +48,10 @@ urlpatterns = [
     path('api/therapist-booking/<int:pk>/', views.api_therapist_booking_detail, name='api-therapist-booking-detail'),
     path('api/therapist-booking/update/', views.api_therapist_booking_update, name='api-therapist-booking-update'),
     path('api/therapist-booking/<int:pk>/delete/', views.api_therapist_booking_delete, name='api-therapist-booking-delete'),
+    
+    # Absences
+    path('absences/', views.AbsenceListView.as_view(), name='absence-list'),
+    path('api/absence/<str:type>/<int:pk>/delete/', views.api_delete_absence, name='api-delete-absence'),
 ] 
 
 
