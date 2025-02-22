@@ -1440,107 +1440,62 @@ class AssistantCalendarEventsView(View):
     
     def get(self, request, *args, **kwargs):
         try:
-            # Get filter parameters
-            start = request.GET.get('start')
-            end = request.GET.get('end')
-            employee_id = request.GET.get('employee')
-            role = request.GET.get('role')
-            event_types = request.GET.getlist('types', ['working_hours', 'vacation', 'time_comp'])
-
-            # Parse dates
-            start_date = datetime.strptime(start[:10], '%Y-%m-%d').date() if start else None
-            end_date = datetime.strptime(end[:10], '%Y-%m-%d').date() if end else None
-
-            # Filter employees
-            employees = CustomUser.objects.all()
-            if role:
-                employees = employees.filter(role=role)
-            if employee_id:
-                employees = employees.filter(id=employee_id)
-            if not request.user.role == 'OWNER':
-                employees = employees.filter(id=request.user.id)
-
+            # Hole alle relevanten Models für den Zeitraum
+            working_hours = WorkingHours.objects.all().select_related('employee')
+            vacations = Vacation.objects.all().select_related('employee')
+            time_comps = TimeCompensation.objects.all().select_related('employee')
+            
             events = []
             
             # Arbeitszeiten zu Events konvertieren
-            if 'working_hours' in event_types:
-                working_hours = WorkingHours.objects.filter(
-                    employee__in=employees
-                ).select_related('employee')
+            for wh in working_hours:
+                # Berechne die Stunden
+                start_datetime = datetime.combine(date.today(), wh.start_time)
+                end_datetime = datetime.combine(date.today(), wh.end_time)
+                duration = end_datetime - start_datetime
+                hours = duration.total_seconds() / 3600  # Konvertiere zu Stunden
                 
-                if start_date:
-                    working_hours = working_hours.filter(date__gte=start_date)
-                if end_date:
-                    working_hours = working_hours.filter(date__lte=end_date)
+                # Ziehe die Pause ab
+                if wh.break_duration:
+                    break_hours = wh.break_duration.total_seconds() / 3600
+                    hours -= break_hours
 
-                for wh in working_hours:
-                    start_datetime = datetime.combine(date.today(), wh.start_time)
-                    end_datetime = datetime.combine(date.today(), wh.end_time)
-                    duration = end_datetime - start_datetime
-                    hours = duration.total_seconds() / 3600
-                    
-                    if wh.break_duration:
-                        break_hours = wh.break_duration.total_seconds() / 3600
-                        hours -= break_hours
-
-                    event = {
-                        'id': f'work_{wh.id}',
-                        'title': f'{wh.employee.get_full_name()} ({hours:.1f}h)',
-                        'start': f'{wh.date}T{wh.start_time}',
-                        'end': f'{wh.date}T{wh.end_time}',
-                        'color': wh.employee.color,
-                        'type': 'working_hours',
-                        'allDay': False
-                    }
-                    events.append(event)
+                event = {
+                    'id': f'work_{wh.id}',
+                    'title': f'{wh.employee.get_full_name()} ({hours:.1f}h)',
+                    'start': f'{wh.date}T{wh.start_time}',
+                    'end': f'{wh.date}T{wh.end_time}',
+                    'color': wh.employee.color,
+                    'type': 'working_hours',
+                    'allDay': False
+                }
+                events.append(event)
 
             # Urlaub zu Events konvertieren
-            if 'vacation' in event_types:
-                vacations = Vacation.objects.filter(
-                    employee__in=employees,
-                    status='APPROVED'  # Nur genehmigte Urlaube anzeigen
-                ).select_related('employee')
-                
-                if start_date:
-                    vacations = vacations.filter(end_date__gte=start_date)
-                if end_date:
-                    vacations = vacations.filter(start_date__lte=end_date)
-
-                for vacation in vacations:
-                    event = {
-                        'id': f'vacation_{vacation.id}',
-                        'title': f'{vacation.employee.get_full_name()} - Urlaub',
-                        'start': vacation.start_date.isoformat(),
-                        'end': (vacation.end_date + timedelta(days=1)).isoformat(),
-                        'color': vacation.employee.color,
-                        'type': 'vacation',
-                        'allDay': True
-                    }
-                    events.append(event)
+            for vacation in vacations:
+                event = {
+                    'id': f'vacation_{vacation.id}',
+                    'title': f'{vacation.employee.get_full_name()} - Urlaub',
+                    'start': vacation.start_date.isoformat(),
+                    'end': (vacation.end_date + timedelta(days=1)).isoformat(),
+                    'color': vacation.employee.color,
+                    'type': 'vacation',
+                    'allDay': True
+                }
+                events.append(event)
 
             # Zeitausgleich zu Events konvertieren
-            if 'time_comp' in event_types:
-                time_comps = TimeCompensation.objects.filter(
-                    employee__in=employees,
-                    status='APPROVED'  # Nur genehmigte Zeitausgleiche anzeigen
-                ).select_related('employee')
-                
-                if start_date:
-                    time_comps = time_comps.filter(date__gte=start_date)
-                if end_date:
-                    time_comps = time_comps.filter(date__lte=end_date)
-
-                for tc in time_comps:
-                    event = {
-                        'id': f'timecomp_{tc.id}',
-                        'title': f'{tc.employee.get_full_name()} - Zeitausgleich',
-                        'start': tc.date.isoformat(),
-                        'end': (tc.date + timedelta(days=1)).isoformat(),
-                        'color': tc.employee.color,
-                        'type': 'time_comp',
-                        'allDay': True
-                    }
-                    events.append(event)
+            for tc in time_comps:
+                event = {
+                    'id': f'timecomp_{tc.id}',
+                    'title': f'{tc.employee.get_full_name()} - Zeitausgleich',
+                    'start': tc.date.isoformat(),
+                    'end': (tc.date + timedelta(days=1)).isoformat(),
+                    'color': tc.employee.color,
+                    'type': 'time_comp',
+                    'allDay': True
+                }
+                events.append(event)
             
             return JsonResponse(events, safe=False)
             

@@ -15,36 +15,9 @@
 {% endblock %}
 
 {% block content %}
-<div class="card mb-4">
+<div class="card">
     <div class="card-header">
-        <div class="row align-items-center">
-            <div class="col-md-6">
-                <h2 class="mb-0">{% trans "Kalender" %}</h2>
-            </div>
-            <div class="col-md-6">
-                <div class="d-flex gap-2 justify-content-end">
-                    {% if user.role == 'OWNER' %}
-                    <select class="form-select" id="employeeFilter" style="width: auto;">
-                        <option value="">{% trans "Alle Mitarbeiter" %}</option>
-                        {% for role, label in user_roles %}
-                        <option value="{{ role }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                    {% endif %}
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-outline-primary active" data-type="working_hours">
-                            {% trans "Arbeitszeiten" %}
-                        </button>
-                        <button type="button" class="btn btn-outline-primary active" data-type="vacation">
-                            {% trans "Urlaub" %}
-                        </button>
-                        <button type="button" class="btn btn-outline-primary active" data-type="time_comp">
-                            {% trans "Zeitausgleich" %}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <h2 class="mb-0">{% trans "Kalender" %}</h2>
     </div>
     <div class="card-body">
         <div id="calendar"></div>
@@ -54,55 +27,16 @@
 {% include "wfm/modals/working_hours_modal.html" %}
 {% include "wfm/modals/vacation_modal.html" %}
 {% include "wfm/modals/time_compensation_modal.html" %}
+
 {% endblock %}
 
 {% block extra_js %}
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var calendar;
-    var activeEventTypes = ['working_hours', 'vacation', 'time_comp'];
-    
-    function updateCalendar() {
-        var employee = document.getElementById('employeeFilter')?.value || '';
-        var queryParams = new URLSearchParams({
-            types: activeEventTypes
-        });
-        if (employee) queryParams.append('role', employee);
-        
-        calendar.removeAllEventSources();
-        calendar.addEventSource({
-            url: '{% url "wfm:api-assistant-calendar-events" %}?' + queryParams.toString(),
-            failure: function(error) {
-                console.error('Error loading events:', error);
-            }
-        });
-    }
-    
-    // Event Type Filter Buttons
-    document.querySelectorAll('[data-type]').forEach(button => {
-        button.addEventListener('click', function() {
-            this.classList.toggle('active');
-            const eventType = this.dataset.type;
-            
-            if (this.classList.contains('active')) {
-                activeEventTypes.push(eventType);
-            } else {
-                activeEventTypes = activeEventTypes.filter(type => type !== eventType);
-            }
-            
-            updateCalendar();
-        });
-    });
-    
-    // Employee Filter
-    const employeeFilter = document.getElementById('employeeFilter');
-    if (employeeFilter) {
-        employeeFilter.addEventListener('change', updateCalendar);
-    }
-    
-    // Initialize Calendar
-    calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+    console.log("Initializing calendar...");
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
         headerToolbar: {
             left: 'prev,next today',
@@ -113,15 +47,23 @@ document.addEventListener('DOMContentLoaded', function() {
         slotMinTime: '07:00:00',
         slotMaxTime: '20:00:00',
         locale: 'de',
+        events: {
+            url: '{% url "wfm:api-assistant-calendar-events" %}',
+            failure: function(error) {
+                console.error('Error loading events:', error);
+            }
+        },
         eventTimeFormat: {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
+        },
+        eventDidMount: function(info) {
+            console.log("Event mounted:", info.event);
         }
     });
-    
     calendar.render();
-    updateCalendar();
+    console.log("Calendar initialized");
 });
 </script>
 {% endblock %} 
