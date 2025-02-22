@@ -168,6 +168,7 @@
                             <th>{% trans "Abwesenheit" %}</th>
                             <th>{% trans "Status" %}</th>
                             <th>{% trans "Differenz" %}</th>
+                            <th>{% trans "Notizen" %}</th>
                             <th>{% trans "Aktionen" %}</th>
                         </tr>
                     </thead>
@@ -216,6 +217,14 @@
                                 </td>
                                 <td class="{% if wh.difference < 0 %}text-danger{% elif wh.difference > 0 %}text-success{% endif %}">
                                     {{ wh.difference|floatformat:2 }}
+                                </td>
+                                <td>
+                                    {% if wh.notes %}
+                                        <i class="bi bi-exclamation-circle text-info" 
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="left"
+                                           title="{{ wh.notes }}"></i>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     <div class="btn-group">
@@ -340,5 +349,16 @@ function deleteWorkingHours() {
         });
     }
 }
+
+// Initialisiere Tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+            html: true,
+            container: 'body'
+        });
+    });
+});
 </script>
 {% endblock %} 

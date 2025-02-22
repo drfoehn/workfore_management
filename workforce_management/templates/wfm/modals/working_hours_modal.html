@@ -4,40 +4,126 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">{% trans "Arbeitszeit bearbeiten" %}</h5>
+                <h5 class="modal-title">{% trans "Arbeitszeit eintragen" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="workingHoursForm">
-                    <input type="hidden" id="workingHoursId">
+                    {% csrf_token %}
+                    <input type="hidden" id="workingHoursId" name="id">
+                    
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Datum" %}</label>
-                        <input type="text" class="form-control" id="workDate" readonly>
+                        <label for="workDate" class="form-label">{% trans "Datum" %}</label>
+                        <input type="date" class="form-control" id="workDate" name="date" required readonly>
                     </div>
+
                     <div class="row mb-3">
                         <div class="col">
-                            <label class="form-label">{% trans "Von" %}</label>
-                            <input type="time" class="form-control" id="startTime">
+                            <label for="startTime" class="form-label">{% trans "Von" %}</label>
+                            <input type="time" class="form-control" id="startTime" name="start_time" required>
                         </div>
                         <div class="col">
-                            <label class="form-label">{% trans "Bis" %}</label>
-                            <input type="time" class="form-control" id="endTime">
+                            <label for="endTime" class="form-label">{% trans "Bis" %}</label>
+                            <input type="time" class="form-control" id="endTime" name="end_time" required>
                         </div>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Pause (HH:MM)" %}</label>
-                        <input type="text" class="form-control" id="breakDuration">
+                        <label for="breakDuration" class="form-label">{% trans "Pause (Minuten)" %}</label>
+                        <input type="number" class="form-control" id="breakDuration" name="break_duration" 
+                               min="0" max="120" value="30" required>
+                        <div class="form-text">{% trans "Standard-Pause: 30 Minuten" %}</div>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Notizen" %}</label>
-                        <textarea class="form-control" id="notes"></textarea>
+                        <label for="notes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                <button type="button" class="btn btn-primary" onclick="saveWorkingHours()">{% trans "Speichern" %}</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    {% trans "Abbrechen" %}
+                </button>
+                <button type="button" class="btn btn-primary" onclick="submitWorkingHours()">
+                    {% trans "Speichern" %}
+                </button>
             </div>
         </div>
     </div>
-</div> 
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Setze das Datum auf heute, wenn das Modal geöffnet wird
+    const modal = document.getElementById('workingHoursModal');
+    modal.addEventListener('show.bs.modal', function() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('workDate').value = today;
+        
+        // Hole die Soll-Zeiten für heute
+        fetch(`/api/working-hours/${today}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.id) {
+                    // Wenn es schon einen Eintrag gibt, fülle die Felder
+                    document.getElementById('workingHoursId').value = data.id;
+                    document.getElementById('startTime').value = data.start_time || '';
+                    document.getElementById('endTime').value = data.end_time || '';
+                    document.getElementById('breakDuration').value = data.break_duration || 30;
+                    document.getElementById('notes').value = data.notes || '';
+                } else {
+                    // Wenn es noch keinen Eintrag gibt, setze Standard-Werte
+                    document.getElementById('workingHoursId').value = '';
+                    document.getElementById('startTime').value = '';
+                    document.getElementById('endTime').value = '';
+                    document.getElementById('breakDuration').value = 30;
+                    document.getElementById('notes').value = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    });
+});
+
+function submitWorkingHours() {
+    const form = document.getElementById('workingHoursForm');
+    const formData = {
+        date: form.date.value,
+        start_time: form.start_time.value,
+        end_time: form.end_time.value,
+        break_duration: parseInt(form.break_duration.value),
+        notes: form.notes.value
+    };
+
+    const id = document.getElementById('workingHoursId').value;
+    const url = id ? 
+        `/api/working-hours/${id}/update/` : 
+        `/api/working-hours/${formData.date}/save/`;
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Schließe das Modal und lade die Seite neu
+            bootstrap.Modal.getInstance(document.getElementById('workingHoursModal')).hide();
+            location.reload();
+        } else {
+            // Zeige Fehlermeldung
+            alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('{% trans "Ein Fehler ist aufgetreten" %}');
+    });
+}
+</script> 
