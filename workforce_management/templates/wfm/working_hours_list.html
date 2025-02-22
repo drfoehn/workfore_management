@@ -190,6 +190,7 @@
                             <th class="d-none d-md-table-cell text-nowrap">{% trans "Soll" %}</th>
                             <th class="d-none d-md-table-cell text-nowrap">{% trans "Ist" %}</th>
                             <th class="text-nowrap d-md-none">{% trans "Std" %}</th>
+                            <th class="text-nowrap">{% trans "Abwesenheit" %}</th>
                             <th class="text-nowrap">{% trans "Status" %}</th>
                             <th class="text-nowrap">{% trans "±" %}</th>
                             <th class="text-center"><i class="bi bi-three-dots-vertical"></i></th>
@@ -247,6 +248,23 @@
                                            title="{{ wh.notes }}"></i>
                                     {% endif %}
                                 </td>
+                                <td>
+                                    {% if wh.vacation %}
+                                        {% if wh.vacation.status == 'REQUESTED' %}
+                                            <span class="badge bg-warning">{% trans "Beantragt" %}</span>
+                                        {% elif wh.vacation.status == 'APPROVED' %}
+                                            <span class="badge bg-success">{% trans "Genehmigt" %}</span>
+                                        {% endif %}
+                                    {% elif wh.time_comp %}
+                                        {% if wh.time_comp.status == 'REQUESTED' %}
+                                            <span class="badge bg-warning">{% trans "Beantragt" %}</span>
+                                        {% elif wh.time_comp.status == 'APPROVED' %}
+                                            <span class="badge bg-success">{% trans "Genehmigt" %}</span>
+                                        {% endif %}
+                                    {% elif wh.sick_leave %}
+                                        <span class="badge bg-danger">{% trans "Gemeldet" %}</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-nowrap {% if wh.difference < 0 %}text-danger{% elif wh.difference > 0 %}text-success{% endif %}">
                                     {% if wh.difference %}
                                         {{ wh.difference|floatformat:1 }}h
@@ -302,6 +320,7 @@
                                 <div>{{ total_soll|floatformat:1 }}h</div>
                                 <div>{{ total_ist|floatformat:1 }}h</div>
                             </td>
+                            <td></td>
                             <td></td>
                             <td class="text-nowrap {% if total_diff < 0 %}text-danger{% elif total_diff > 0 %}text-success{% endif %}">
                                 {{ total_diff|floatformat:1 }}h
