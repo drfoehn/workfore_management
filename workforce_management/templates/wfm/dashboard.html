@@ -108,64 +108,118 @@
         </div>
     </div>
 
-    <!-- Wochenübersicht -->
+    <!-- Im Dashboard, vor der Wochenübersicht -->
     <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0">{% trans "Diese Woche" %}</h5>
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <h5 class="card-title mb-0">{% trans "Übersicht" %}</h5>
+                <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="viewType" id="weekView" value="week" 
+                           {% if view_type != 'month' %}checked{% endif %} onchange="changeViewType('week')">
+                    <label class="btn btn-outline-primary" for="weekView">
+                        <i class="bi bi-calendar-week"></i> {% trans "Woche" %}
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="viewType" id="monthView" value="month"
+                           {% if view_type == 'month' %}checked{% endif %} onchange="changeViewType('month')">
+                    <label class="btn btn-outline-primary" for="monthView">
+                        <i class="bi bi-calendar-month"></i> {% trans "Monat" %}
+                    </label>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-primary" onclick="changePeriod(-1)">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <button type="button" class="btn btn-outline-primary" onclick="resetToCurrent()">
+                    {% trans "Heute" %}
+                </button>
+                <button type="button" class="btn btn-outline-primary" onclick="changePeriod(1)">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>{% trans "Datum" %}</th>
-                            <th>{% trans "Geplante Zeit" %}</th>
-                            <th>{% trans "Tatsächliche Zeit" %}</th>
-                            <th>{% trans "Status" %}</th>
-                            <th>{% trans "Aktionen" %}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for date in week_dates %}
-                        <tr>
-                            <td>{{ date|date:"D, d.m.Y" }}</td>
-                            <td>
-                                {% for wh in working_hours %}
-                                    {% if wh.date == date %}
-                                        {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                <!-- Tatsächliche Arbeitszeit -->
-                            </td>
-                            <td>
-                                {% for vacation in vacations %}
-                                    {% if date >= vacation.start_date and date <= vacation.end_date %}
-                                        <span class="badge bg-info">{% trans "Urlaub" %}</span>
-                                    {% endif %}
-                                {% endfor %}
-                                {% for tc in time_comps %}
-                                    {% if tc.date == date %}
-                                        <span class="badge bg-warning">{% trans "Zeitausgleich" %}</span>
-                                    {% endif %}
-                                {% endfor %}
-                                {% for sl in sick_leaves %}
-                                    {% if date >= sl.start_date and date <= sl.end_date %}
-                                        <span class="badge bg-danger">{% trans "Krank" %}</span>
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-primary" 
-                                        onclick="editWorkingHours('{{ date|date:"Y-m-d" }}')">
-                                    {% trans "Bearbeiten" %}
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <!-- Wochenansicht -->
+            <div id="weekView" {% if view_type == 'month' %}style="display: none;"{% endif %}>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Datum" %}</th>
+                                <th>{% trans "Geplante Zeit" %}</th>
+                                <th>{% trans "Tatsächliche Zeit" %}</th>
+                                <th>{% trans "Status" %}</th>
+                                <th>{% trans "Aktionen" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for date in week_dates %}
+                            <tr>
+                                <td>{{ date|date:"D, d.m.Y" }}</td>
+                                <td>
+                                    {% for wh in working_hours %}
+                                        {% if wh.date == date %}
+                                            {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
+                                        {% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    <!-- Tatsächliche Arbeitszeit -->
+                                </td>
+                                <td>
+                                    {% for vacation in vacations %}
+                                        {% if date >= vacation.start_date and date <= vacation.end_date %}
+                                            <span class="badge bg-info">{% trans "Urlaub" %}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% for tc in time_comps %}
+                                        {% if tc.date == date %}
+                                            <span class="badge bg-warning">{% trans "Zeitausgleich" %}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% for sl in sick_leaves %}
+                                        {% if date >= sl.start_date and date <= sl.end_date %}
+                                            <span class="badge bg-danger">{% trans "Krank" %}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            onclick="editWorkingHours('{{ date|date:"Y-m-d" }}')">
+                                        {% trans "Bearbeiten" %}
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Monatsansicht -->
+            <div id="monthView" {% if view_type != 'month' %}style="display: none;"{% endif %}>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Datum" %}</th>
+                                <th>{% trans "Geplante Zeit" %}</th>
+                                <th>{% trans "Tatsächliche Zeit" %}</th>
+                                <th>{% trans "Status" %}</th>
+                                <th>{% trans "Aktionen" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for date in month_dates %}
+                            <tr>
+                                <td>{{ date|date:"D, d.m.Y" }}</td>
+                                <!-- Rest der Tabelle wie in der Wochenansicht... -->
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -298,4 +352,40 @@
     </div>
 </div>
 {% endif %}
+
+<script>
+let currentOffset = 0;
+let viewType = '{{ view_type|default:"week" }}';
+
+function changeViewType(type) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view_type', type);
+    url.searchParams.set('offset', '0'); // Reset offset beim Ansichtswechsel
+    window.location.href = url.toString();
+}
+
+function changePeriod(offset) {
+    currentOffset += offset;
+    loadPeriodData(currentOffset);
+}
+
+function resetToCurrent() {
+    currentOffset = 0;
+    loadPeriodData(0);
+}
+
+function loadPeriodData(offset) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('offset', offset);
+    url.searchParams.set('view_type', viewType);
+    window.location.href = url.toString();
+}
+
+// Setze die initialen Werte aus der URL
+document.addEventListener('DOMContentLoaded', function() {
+    const params = new URLSearchParams(window.location.search);
+    currentOffset = parseInt(params.get('offset')) || 0;
+    viewType = params.get('view_type') || 'week';
+});
+</script>
 {% endblock %} 

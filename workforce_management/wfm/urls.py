@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/vacation/request/', views.api_vacation_request, name='api-vacation-request'),
     path('api/vacation/status/', views.api_vacation_status, name='api-vacation-status'),
     path('api/time-compensation/request/', views.api_time_compensation_request, name='api-time-compensation-request'),
+    path('api/sick-leave/', views.api_sick_leave, name='api-sick-leave'),
     
     # Calendars
     path('assistant-calendar/', views.AssistantCalendarView.as_view(), name='assistant-calendar'),

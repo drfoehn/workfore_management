@@ -31,6 +31,7 @@ from django.core.exceptions import PermissionDenied
 import logging
 from django.utils.decorators import method_decorator
 from django.contrib.auth import logout
+from dateutil.relativedelta import relativedelta
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,24 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
+        # Füge die Buttons für Urlaub/Zeitausgleich/Krankmeldung hinzu
+        if self.request.user.role in ['ASSISTANT', 'CLEANING']:
+            context['show_request_buttons'] = True
+            
+            # Hole aktuelle Anträge
+            context['pending_vacations'] = Vacation.objects.filter(
+                employee=self.request.user,
+                status='REQUESTED'
+            )
+            context['pending_time_comps'] = TimeCompensation.objects.filter(
+                employee=self.request.user,
+                status='REQUESTED'
+            )
+            context['active_sick_leaves'] = SickLeave.objects.filter(
+                employee=self.request.user,
+                end_date__gte=timezone.now().date()
+            )
+            
         # Hole Jahr und Monat
         year = int(self.request.GET.get('year', date.today().year))
         month = int(self.request.GET.get('month', date.today().month))
@@ -1043,49 +1062,33 @@ def generate_color_for_user(user_id):
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'wfm/dashboard.html'
 
+    def get(self, request, *args, **kwargs):
+        # Für Assistenz und Cleaner direkt zur Arbeitszeiten-Liste weiterleiten
+        if request.user.role in ['ASSISTANT', 'CLEANING']:
+            return redirect('wfm:working-hours-list')
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        today = timezone.now().date()
-        week_start = today - timedelta(days=today.weekday())
-        week_end = week_start + timedelta(days=6)
-
+        
         if self.request.user.role == 'OWNER':
-            # Owner-spezifische Daten
+            # Owner-spezifische Daten...
             context['pending_vacations'] = Vacation.objects.filter(status='REQUESTED').count()
             context['pending_time_comps'] = TimeCompensation.objects.filter(status='REQUESTED').count()
 
-        elif self.request.user.role in ['ASSISTANT', 'CLEANING']:
-            # Assistenten/Cleaner-spezifische Daten
-            context['working_hours'] = WorkingHours.objects.filter(
-                employee=self.request.user,
-                date__range=[week_start, week_end]
-            ).order_by('date', 'start_time')
-
-            context['vacations'] = Vacation.objects.filter(
-                employee=self.request.user,
-                start_date__lte=week_end,
-                end_date__gte=week_start
-            )
-
-            context['time_comps'] = TimeCompensation.objects.filter(
-                employee=self.request.user,
-                date__range=[week_start, week_end]
-            )
-
-            context['sick_leaves'] = SickLeave.objects.filter(
-                employee=self.request.user,
-                start_date__lte=week_end,
-                end_date__gte=week_start
-            )
-
         elif self.request.user.role == 'THERAPIST':
             # Therapeuten-spezifische Daten
+            today = timezone.now().date()
+            week_start = today - timedelta(days=today.weekday())
+            week_end = week_start + timedelta(days=6)
+            
             context['bookings'] = TherapistBooking.objects.filter(
                 therapist=self.request.user,
                 date__range=[week_start, week_end]
             ).order_by('date', 'start_time')
+            
+            context['week_dates'] = [week_start + timedelta(days=i) for i in range(7)]
 
-        context['week_dates'] = [week_start + timedelta(days=i) for i in range(7)]
         return context
 
 @login_required
@@ -1573,3 +1576,44 @@ class TimeCompensationListView(LoginRequiredMixin, ListView):
 def logout_view(request):
     logout(request)
     return redirect('wfm:login')
+
+@login_required
+@ensure_csrf_cookie
+def api_sick_leave(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+            
+            # Validiere die Daten
+            required_fields = ['start_date', 'end_date']
+            if not all(field in data and data[field] for field in required_fields):
+                return JsonResponse({
+                    'success': False,
+                    'error': _('Bitte Start- und Enddatum angeben')
+                })
+
+            # Parse dates
+            start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+            end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+            
+            # Erstelle den Krankenstand
+            sick_leave = SickLeave.objects.create(
+                employee=request.user,
+                start_date=start_date,
+                end_date=end_date,
+                notes=data.get('notes', '')
+            )
+            
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            logger.error(f"Sick leave error: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return JsonResponse({
+        'success': False,
+        'error': _('Ungültige Anfrage')
+    })

@@ -8,110 +8,60 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             {% if user.is_authenticated %}
                 <ul class="navbar-nav me-auto">
+                    <!-- Dashboard Link für alle Benutzer -->
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" 
+                           href="{% url 'wfm:dashboard' %}">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
+                    </li>
+
                     {% if user.role == 'OWNER' %}
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" 
-                               href="{% url 'wfm:dashboard' %}">
-                                <i class="bi bi-speedometer2"></i> Dashboard
-                            </a>
-                        </li>
-                        
-                        
-                                <li class="nav-item">
-                                    <a class="nav-link" href="{% url 'admin:index' %}">
-                                        <i class="bi bi-tools"></i> Admin-Bereich
-                                    </a>
-                                </li>
-                             
+                        <!-- Owner-spezifische Navigation -->
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-gear"></i> Verwaltung Assistenzen
+                                <i class="bi bi-gear"></i> {% trans "Verwaltung" %}
                             </a>
                             <ul class="dropdown-menu">
                                 <li>
                                     <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}">
-                                        <i class="bi bi-clock"></i> Arbeitszeiten - Liste
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:assistant-calendar' %}">
-                                        <i class="bi bi-clock"></i> Arbeitszeiten - Kalender
+                                        <i class="bi bi-clock"></i> {% trans "Arbeitszeiten" %}
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item" href="{% url 'wfm:vacation-list' %}">
-                                        <i class="bi bi-calendar-check"></i> Urlaub
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-gear"></i> Verwaltung Therapeuten
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}">
-                                        <i class="bi bi-clock"></i> Buchungen - Liste
+                                        <i class="bi bi-calendar-check"></i> {% trans "Urlaub" %}
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:therapist-calendar' %}">
-                                        <i class="bi bi-calendar3"></i> Buchungen - Kalender
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:therapist-monthly-overview' %}">
-                                        <i class="bi bi-list"></i> Monatsübersicht
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                    {% elif user.role == 'THERAPIST' %}
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'therapist-monthly-overview' %}active{% endif %}" 
-                               href="{% url 'wfm:therapist-monthly-overview' %}">
-                                <i class="bi bi-list"></i> Monatsübersicht
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'calendar' %}active{% endif %}" 
-                               href="{% url 'wfm:calendar' %}">
-                                <i class="bi bi-calendar3"></i> Kalender
-                            </a>
-                        </li>
-                    {% else %} {# ASSISTANT #}
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'monthly-overview' %}active{% endif %}" 
-                               href="{% url 'wfm:monthly-overview' %}">
-                                <i class="bi bi-list"></i> Monatsübersicht
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'calendar' %}active{% endif %}" 
-                               href="{% url 'wfm:calendar' %}">
-                                <i class="bi bi-calendar3"></i> Kalender
-                            </a>
-                        </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-plus-circle"></i> Neu
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:vacation-request' %}">
-                                        <i class="bi bi-calendar-plus"></i> Urlaub beantragen
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:time-compensation-add' %}">
-                                        <i class="bi bi-clock-plus"></i> Zeitausgleich beantragen
+                                    <a class="dropdown-item" href="{% url 'wfm:time-compensation-list' %}">
+                                        <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich" %}
                                     </a>
                                 </li>
                             </ul>
                         </li>
                     {% endif %}
+
+                    {% if user.role == 'ASSISTANT' or user.role == 'CLEANING' %}
+                        <!-- Assistenten/Cleaner-spezifische Navigation -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'wfm:working-hours-list' %}">
+                                <i class="bi bi-clock"></i> {% trans "Meine Arbeitszeiten" %}
+                            </a>
+                        </li>
+                    {% endif %}
+
+                    {% if user.role == 'THERAPIST' %}
+                        <!-- Therapeuten-spezifische Navigation -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'wfm:therapist-calendar' %}">
+                                <i class="bi bi-calendar3"></i> {% trans "Mein Kalender" %}
+                            </a>
+                        </li>
+                    {% endif %}
                 </ul>
+
+                <!-- Benutzer-Menü (rechts) -->
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
@@ -119,9 +69,12 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li>
-                                <a class="dropdown-item" href="{% url 'wfm:logout' %}">
-                                    <i class="bi bi-box-arrow-right"></i> Abmelden
-                                </a>
+                                <form method="post" action="{% url 'wfm:logout' %}" class="dropdown-item">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-link p-0">
+                                        <i class="bi bi-box-arrow-right"></i> {% trans "Abmelden" %}
+                                    </button>
+                                </form>
                             </li>
                         </ul>
                     </li>

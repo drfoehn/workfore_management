@@ -4,256 +4,257 @@
 {% block title %}{% trans "Arbeitszeiten" %} - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
-            <div class="btn-group">
-                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ prev_year }}&month={{ prev_month }}" 
-                   class="btn btn-outline-primary">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-                <button class="btn btn-outline-primary" disabled>
-                    {{ month_name }}
-                </button>
-                <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ next_year }}&month={{ next_month }}" 
-                   class="btn btn-outline-primary">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Meine Arbeitszeiten" %}</h1>
+        
+        {% if show_request_buttons %}
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#workingHoursModal">
+                <i class="bi bi-clock"></i> {% trans "Arbeitszeit eintragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
+                <i class="bi bi-calendar-check"></i> {% trans "Urlaub beantragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
+                <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich beantragen" %}
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
+                <i class="bi bi-thermometer-half"></i> {% trans "Krankenstand melden" %}
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if show_request_buttons %}
+    <!-- Status-Anzeige für laufende Anträge/Krankmeldungen -->
+    <div class="row g-4 mb-4">
+        {% if pending_vacations %}
+        <div class="col-md-4">
+            <div class="alert alert-info">
+                <h6>{% trans "Offene Urlaubsanträge" %}</h6>
+                <ul class="list-unstyled mb-0">
+                    {% for vacation in pending_vacations %}
+                    <li>{{ vacation.start_date|date:"d.m.Y" }} - {{ vacation.end_date|date:"d.m.Y" }}</li>
+                    {% endfor %}
+                </ul>
             </div>
         </div>
-        <div class="d-flex gap-2">
-            {% if user.role == 'OWNER' %}
-                <!-- Rollenfilter -->
-                <div class="btn-group me-2">
-                    <a href="{{ all_url }}" 
-                       class="btn btn-outline-primary {% if not selected_role %}active{% endif %}">
-                        {% trans "Alle" %}
-                    </a>
-                    <a href="{{ assistant_url }}" 
-                       class="btn btn-outline-primary {% if selected_role == 'ASSISTANT' %}active{% endif %}">
-                        {% trans "Assistenz" %}
-                    </a>
-                    <a href="{{ cleaning_url }}" 
-                       class="btn btn-outline-primary {% if selected_role == 'CLEANING' %}active{% endif %}">
-                        {% trans "Reinigung" %}
-                    </a>
-                </div>
-                
-                <!-- Mitarbeiterfilter -->
-                <div class="dropdown">
-                    <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        {% if selected_employee %}
-                            {{ selected_employee.get_full_name|default:selected_employee.username }}
-                        {% else %}
-                            {% if selected_role == 'ASSISTANT' %}
-                                {% trans "Alle Assistenzen" %}
-                            {% elif selected_role == 'CLEANING' %}
-                                {% trans "Alle Reinigungskräfte" %}
-                            {% else %}
-                                {% trans "Alle Mitarbeiter" %}
-                            {% endif %}
-                        {% endif %}
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li>
-                            <a class="dropdown-item" href="?{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ current_year }}&month={{ current_month }}">
-                                {% trans "Alle anzeigen" %}
-                            </a>
-                        </li>
-                        {% if not selected_role or selected_role == 'ASSISTANT' %}
-                            <li><h6 class="dropdown-header">{% trans "Assistenzen" %}</h6></li>
-                            {% for employee in assistants %}
-                                <li>
-                                    <a class="dropdown-item" href="?employee={{ employee.id }}&year={{ current_year }}&month={{ current_month }}">
-                                        {{ employee.get_full_name|default:employee.username }}
-                                    </a>
-                                </li>
-                            {% endfor %}
-                        {% endif %}
-                        {% if not selected_role or selected_role == 'CLEANING' %}
-                            <li><h6 class="dropdown-header">{% trans "Reinigungsdienst" %}</h6></li>
-                            {% for employee in cleaners %}
-                                <li>
-                                    <a class="dropdown-item" href="?employee={{ employee.id }}&year={{ current_year }}&month={{ current_month }}">
-                                        {{ employee.get_full_name|default:employee.username }}
-                                    </a>
-                                </li>
-                            {% endfor %}
-                        {% endif %}
-                    </ul>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>{% trans "Datum" %}</th>
-                        {% if user.role == 'OWNER' %}
-                            <th>{% trans "Mitarbeiter" %}</th>
-                        {% endif %}
-                        <th>{% trans "Soll-Von/Bis" %}</th>
-                        <th>{% trans "Soll (Std)" %}</th>
-                        <th>{% trans "Ist-Von/Bis" %}</th>
-                        <th>{% trans "Ist (Std)" %}</th>
-                        <th>{% trans "Abwesenheit" %}</th>
-                        <th>{% trans "Status" %}</th>
-                        <th>{% trans "Differenz" %}</th>
-                        <th>{% trans "Aktionen" %}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for wh in working_hours %}
-                        <tr>
-                            <td>{{ wh.date|date:"d.m.Y (l)" }}</td>
-                            {% if user.role == 'OWNER' %}
-                                <td>
-                                    <span class="badge" style="background-color: {{ wh.employee.color }}">
-                                        {{ wh.employee.get_full_name|default:wh.employee.username }}
-                                    </span>
-                                </td>
-                            {% endif %}
-                            <td>{{ wh.soll_start|time:"H:i" }} - {{ wh.soll_end|time:"H:i" }}</td>
-                            <td>{{ wh.soll_hours|floatformat:2 }}</td>
-                            <td>{{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}</td>
-                            <td>{{ wh.ist_hours|floatformat:2 }}</td>
-                            <td>
-                                {% if wh.vacation %}
-                                    <i class="bi bi-umbrella text-primary" title="{% trans 'Urlaub' %}"></i>
-                                {% endif %}
-                                {% if wh.time_comp %}
-                                    <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
-                                {% endif %}
-                                {% if wh.sick_leave %}
-                                    <i class="bi bi-hospital text-danger" title="{% trans 'Krankenstand' %}"></i>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if wh.vacation %}
-                                    <span class="badge {% if wh.vacation.status == 'APPROVED' %}bg-success{% else %}bg-warning{% endif %}">
-                                        {{ wh.vacation.get_status_display }}
-                                    </span>
-                                {% endif %}
-                                {% if wh.time_comp %}
-                                    <span class="badge {% if wh.time_comp.status == 'APPROVED' %}bg-success{% else %}bg-warning{% endif %}">
-                                        {{ wh.time_comp.get_status_display }}
-                                    </span>
-                                {% endif %}
-                                {% if wh.sick_leave %}
-                                    <span class="badge {% if wh.sick_leave.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
-                                        {{ wh.sick_leave.get_status_display }}
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td class="{% if wh.difference < 0 %}text-danger{% elif wh.difference > 0 %}text-success{% endif %}">
-                                {{ wh.difference|floatformat:2 }}
-                            </td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button"
-                                            onclick="openWorkingHoursModal({{ wh.id }})"
-                                            class="btn btn-sm btn-outline-primary"
-                                            title="{% trans 'Bearbeiten' %}">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    {% if user.role == 'OWNER' %}
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-danger"
-                                                onclick="deleteWorkingHours({{ wh.id }})"
-                                                title="{% trans 'Löschen' %}">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="10" class="text-center">{% trans "Keine Arbeitszeiten gefunden" %}</td>
-                        </tr>
+        {% endif %}
+
+        {% if pending_time_comps %}
+        <div class="col-md-4">
+            <div class="alert alert-warning">
+                <h6>{% trans "Offene Zeitausgleichsanträge" %}</h6>
+                <ul class="list-unstyled mb-0">
+                    {% for tc in pending_time_comps %}
+                    <li>{{ tc.date|date:"d.m.Y" }}</li>
                     {% endfor %}
-                </tbody>
-            </table>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if active_sick_leaves %}
+        <div class="col-md-4">
+            <div class="alert alert-danger">
+                <h6>{% trans "Aktuelle Krankmeldungen" %}</h6>
+                <ul class="list-unstyled mb-0">
+                    {% for sl in active_sick_leaves %}
+                    <li>{{ sl.start_date|date:"d.m.Y" }} - {{ sl.end_date|date:"d.m.Y" }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
+                <div class="btn-group">
+                    <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ prev_year }}&month={{ prev_month }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <button class="btn btn-outline-primary" disabled>
+                        {{ month_name }}
+                    </button>
+                    <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ next_year }}&month={{ next_month }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                {% if user.role == 'OWNER' %}
+                    <!-- Rollenfilter -->
+                    <div class="btn-group me-2">
+                        <a href="{{ all_url }}" 
+                           class="btn btn-outline-primary {% if not selected_role %}active{% endif %}">
+                            {% trans "Alle" %}
+                        </a>
+                        <a href="{{ assistant_url }}" 
+                           class="btn btn-outline-primary {% if selected_role == 'ASSISTANT' %}active{% endif %}">
+                            {% trans "Assistenz" %}
+                        </a>
+                        <a href="{{ cleaning_url }}" 
+                           class="btn btn-outline-primary {% if selected_role == 'CLEANING' %}active{% endif %}">
+                            {% trans "Reinigung" %}
+                        </a>
+                    </div>
+                    
+                    <!-- Mitarbeiterfilter -->
+                    <div class="dropdown">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            {% if selected_employee %}
+                                {{ selected_employee.get_full_name|default:selected_employee.username }}
+                            {% else %}
+                                {% if selected_role == 'ASSISTANT' %}
+                                    {% trans "Alle Assistenzen" %}
+                                {% elif selected_role == 'CLEANING' %}
+                                    {% trans "Alle Reinigungskräfte" %}
+                                {% else %}
+                                    {% trans "Alle Mitarbeiter" %}
+                                {% endif %}
+                            {% endif %}
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="?{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ current_year }}&month={{ current_month }}">
+                                    {% trans "Alle anzeigen" %}
+                                </a>
+                            </li>
+                            {% if not selected_role or selected_role == 'ASSISTANT' %}
+                                <li><h6 class="dropdown-header">{% trans "Assistenzen" %}</h6></li>
+                                {% for employee in assistants %}
+                                    <li>
+                                        <a class="dropdown-item" href="?employee={{ employee.id }}&year={{ current_year }}&month={{ current_month }}">
+                                            {{ employee.get_full_name|default:employee.username }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            {% endif %}
+                            {% if not selected_role or selected_role == 'CLEANING' %}
+                                <li><h6 class="dropdown-header">{% trans "Reinigungsdienst" %}</h6></li>
+                                {% for employee in cleaners %}
+                                    <li>
+                                        <a class="dropdown-item" href="?employee={{ employee.id }}&year={{ current_year }}&month={{ current_month }}">
+                                            {{ employee.get_full_name|default:employee.username }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            {% endif %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Datum" %}</th>
+                            {% if user.role == 'OWNER' %}
+                                <th>{% trans "Mitarbeiter" %}</th>
+                            {% endif %}
+                            <th>{% trans "Soll-Von/Bis" %}</th>
+                            <th>{% trans "Soll (Std)" %}</th>
+                            <th>{% trans "Ist-Von/Bis" %}</th>
+                            <th>{% trans "Ist (Std)" %}</th>
+                            <th>{% trans "Abwesenheit" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Differenz" %}</th>
+                            <th>{% trans "Aktionen" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for wh in working_hours %}
+                            <tr>
+                                <td>{{ wh.date|date:"d.m.Y (l)" }}</td>
+                                {% if user.role == 'OWNER' %}
+                                    <td>
+                                        <span class="badge" style="background-color: {{ wh.employee.color }}">
+                                            {{ wh.employee.get_full_name|default:wh.employee.username }}
+                                        </span>
+                                    </td>
+                                {% endif %}
+                                <td>{{ wh.soll_start|time:"H:i" }} - {{ wh.soll_end|time:"H:i" }}</td>
+                                <td>{{ wh.soll_hours|floatformat:2 }}</td>
+                                <td>{{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}</td>
+                                <td>{{ wh.ist_hours|floatformat:2 }}</td>
+                                <td>
+                                    {% if wh.vacation %}
+                                        <i class="bi bi-umbrella text-primary" title="{% trans 'Urlaub' %}"></i>
+                                    {% endif %}
+                                    {% if wh.time_comp %}
+                                        <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
+                                    {% endif %}
+                                    {% if wh.sick_leave %}
+                                        <i class="bi bi-hospital text-danger" title="{% trans 'Krankenstand' %}"></i>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if wh.vacation %}
+                                        <span class="badge {% if wh.vacation.status == 'APPROVED' %}bg-success{% else %}bg-warning{% endif %}">
+                                            {{ wh.vacation.get_status_display }}
+                                        </span>
+                                    {% endif %}
+                                    {% if wh.time_comp %}
+                                        <span class="badge {% if wh.time_comp.status == 'APPROVED' %}bg-success{% else %}bg-warning{% endif %}">
+                                            {{ wh.time_comp.get_status_display }}
+                                        </span>
+                                    {% endif %}
+                                    {% if wh.sick_leave %}
+                                        <span class="badge {% if wh.sick_leave.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
+                                            {{ wh.sick_leave.get_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="{% if wh.difference < 0 %}text-danger{% elif wh.difference > 0 %}text-success{% endif %}">
+                                    {{ wh.difference|floatformat:2 }}
+                                </td>
+                                <td>
+                                    <div class="btn-group">
+                                        <button type="button"
+                                                onclick="openWorkingHoursModal({{ wh.id }})"
+                                                class="btn btn-sm btn-outline-primary"
+                                                title="{% trans 'Bearbeiten' %}">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        {% if user.role == 'OWNER' %}
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    onclick="deleteWorkingHours({{ wh.id }})"
+                                                    title="{% trans 'Löschen' %}">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="10" class="text-center">{% trans "Keine Arbeitszeiten gefunden" %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Modal für Arbeitszeiten -->
-<div class="modal fade" id="workingHoursModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">{% trans "Arbeitszeit bearbeiten" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="workingHoursForm">
-                    <input type="hidden" id="workingHoursId">
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Mitarbeiter" %}</label>
-                        <input type="text" class="form-control" id="employeeName" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Datum" %}</label>
-                        <input type="date" class="form-control" id="workDate" readonly>
-                    </div>
-                    
-                    <!-- Soll-Zeiten (nur lesbar) -->
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="form-label">{% trans "Soll-Von" %}</label>
-                            <input type="time" class="form-control" id="sollStartTime" readonly>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Soll-Bis" %}</label>
-                            <input type="time" class="form-control" id="sollEndTime" readonly>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Soll (Std)" %}</label>
-                            <input type="number" class="form-control" id="sollHours" readonly>
-                        </div>
-                    </div>
-                    
-                    <!-- Ist-Zeiten (editierbar nach Berechtigung) -->
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="form-label">{% trans "Ist-Von" %}</label>
-                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Ist-Bis" %}</label>
-                            <input type="time" class="form-control" id="endTime">
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Ist (Std)" %}</label>
-                            <input type="number" class="form-control" id="istHours" readonly>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Pause (Minuten)" %}</label>
-                        <input type="number" class="form-control" id="breakDuration" min="0" step="15">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Differenz (Std)" %}</label>
-                        <input type="number" class="form-control" id="difference" readonly>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                {% if user.role == 'OWNER' %}
-                    <button type="button" class="btn btn-danger" onclick="deleteWorkingHours()">{% trans "Löschen" %}</button>
-                {% endif %}
-                <button type="button" class="btn btn-primary" onclick="saveWorkingHours()">{% trans "Speichern" %}</button>
-            </div>
-        </div>
-    </div>
-</div>
+{% if show_request_buttons %}
+<!-- Modals einbinden -->
+{% include "wfm/modals/working_hours_modal.html" %}
+{% include "wfm/modals/vacation_modal.html" %}
+{% include "wfm/modals/time_compensation_modal.html" %}
+{% include "wfm/modals/sick_leave_modal.html" %}
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
