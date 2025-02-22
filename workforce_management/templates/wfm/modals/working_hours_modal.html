@@ -14,7 +14,7 @@
                     
                     <div class="mb-3">
                         <label for="workDate" class="form-label">{% trans "Datum" %}</label>
-                        <input type="date" class="form-control" id="workDate" name="date" required readonly>
+                        <input type="date" class="form-control" id="workDate" name="date" required>
                     </div>
 
                     <div class="row mb-3">
@@ -32,7 +32,6 @@
                         <label for="breakDuration" class="form-label">{% trans "Pause (Minuten)" %}</label>
                         <input type="number" class="form-control" id="breakDuration" name="break_duration" 
                                min="0" max="120" value="30" required>
-                        <div class="form-text">{% trans "Standard-Pause: 30 Minuten" %}</div>
                     </div>
 
                     <div class="mb-3">
@@ -45,7 +44,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     {% trans "Abbrechen" %}
                 </button>
-                <button type="button" class="btn btn-primary" onclick="submitWorkingHours()">
+                <button type="button" class="btn btn-primary" onclick="saveWorkingHours()">
                     {% trans "Speichern" %}
                 </button>
             </div>
@@ -55,39 +54,51 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Setze das Datum auf heute, wenn das Modal geöffnet wird
+    // Event-Listener für das Modal entfernen
     const modal = document.getElementById('workingHoursModal');
-    modal.addEventListener('show.bs.modal', function() {
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('workDate').value = today;
+    modal.addEventListener('show.bs.modal', function(event) {
+        // Hole den Button, der das Modal geöffnet hat
+        const button = event.relatedTarget;
         
-        // Hole die Soll-Zeiten für heute
-        fetch(`/api/working-hours/${today}/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.id) {
-                    // Wenn es schon einen Eintrag gibt, fülle die Felder
-                    document.getElementById('workingHoursId').value = data.id;
-                    document.getElementById('startTime').value = data.start_time || '';
-                    document.getElementById('endTime').value = data.end_time || '';
-                    document.getElementById('breakDuration').value = data.break_duration || 30;
-                    document.getElementById('notes').value = data.notes || '';
-                } else {
-                    // Wenn es noch keinen Eintrag gibt, setze Standard-Werte
-                    document.getElementById('workingHoursId').value = '';
-                    document.getElementById('startTime').value = '';
-                    document.getElementById('endTime').value = '';
-                    document.getElementById('breakDuration').value = 30;
-                    document.getElementById('notes').value = '';
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
+        // Hole die Daten aus den data-Attributen des Buttons
+        const id = button.getAttribute('data-id');
+        const date = button.getAttribute('data-date');
+        
+        if (id) {
+            // Existierender Eintrag
+            fetch(`/api/working-hours/${id}/`)
+                .then(response => response.json())
+                .then(data => {
+                    fillWorkingHoursModal(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Fehler beim Laden der Daten');
+                });
+        } else {
+            // Neuer Eintrag
+            fillWorkingHoursModal({
+                id: '',
+                date: date,
+                start_time: '',
+                end_time: '',
+                break_duration: '30',
+                notes: ''
             });
+        }
     });
 });
 
-function submitWorkingHours() {
+function fillWorkingHoursModal(data) {
+    document.getElementById('workingHoursId').value = data.id || '';
+    document.getElementById('workDate').value = data.date;
+    document.getElementById('startTime').value = data.start_time || '';
+    document.getElementById('endTime').value = data.end_time || '';
+    document.getElementById('breakDuration').value = data.break_duration || '30';
+    document.getElementById('notes').value = data.notes || '';
+}
+
+function saveWorkingHours() {
     const form = document.getElementById('workingHoursForm');
     const formData = {
         date: form.date.value,

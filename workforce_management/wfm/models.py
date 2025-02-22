@@ -100,21 +100,21 @@ class WorkingHours(models.Model):
     """Tatsächlich geleistete Arbeitsstunden"""
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     date = models.DateField()
-    start_time = models.TimeField(verbose_name=_("Beginn"))
-    end_time = models.TimeField(verbose_name=_("Ende"))
-    break_duration = models.DurationField(verbose_name=_("Pausendauer"), default='0:00:00')
-    notes = models.TextField(blank=True, null=True, verbose_name=_("Anmerkungen"))
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    break_duration = models.DurationField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    # Füge related_names hinzu
+    vacation = models.ForeignKey('Vacation', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
+    time_comp = models.ForeignKey('TimeCompensation', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
+    sick_leave = models.ForeignKey('SickLeave', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
 
     class Meta:
         verbose_name = _('Arbeitszeit')
         verbose_name_plural = _('Arbeitszeiten')
-        ordering = ['-date', '-start_time']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['employee', 'date'],
-                name='unique_shift_per_day'
-            )
-        ]
+        ordering = ['-date', 'start_time']
+        unique_together = ['employee', 'date']
 
 class Vacation(models.Model):
     """Urlaubsverwaltung"""
@@ -129,6 +129,20 @@ class Vacation(models.Model):
     end_date = models.DateField(verbose_name="Urlaubsende")
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='REQUESTED')
     notes = models.TextField(blank=True, null=True, verbose_name="Anmerkungen")
+
+    @property
+    def working_days(self):
+        """Berechnet die Anzahl der Werktage zwischen Start- und Enddatum"""
+        days = 0
+        current = self.start_date
+        while current <= self.end_date:
+            if current.weekday() < 5:  # 0-4 sind Montag bis Freitag
+                days += 1
+            current += timedelta(days=1)
+        return days
+
+    class Meta:
+        ordering = ['-start_date']
 
 class VacationEntitlement(models.Model):
     """Jahresurlaub"""

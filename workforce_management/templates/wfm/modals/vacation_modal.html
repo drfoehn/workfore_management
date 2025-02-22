@@ -3,48 +3,174 @@
 <div class="modal fade" id="vacationModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-success text-white">
+            <div class="modal-header">
                 <h5 class="modal-title">{% trans "Urlaub beantragen" %}</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="vacationForm">
-                    <!-- Verfügbare Urlaubstage -->
+                    {% csrf_token %}
+                    
                     <div class="alert alert-info">
-                        <strong>{% trans "Verfügbare Urlaubstage" %}:</strong>
-                        <span id="availableVacationDays">{{ vacation_days_remaining }}</span>
+                        <strong>{% trans "Verfügbarer Urlaub" %}:</strong>
+                        <span id="remainingVacationDays">...</span> {% trans "Tage" %}
                     </div>
 
                     <div class="row mb-3">
                         <div class="col">
-                            <label class="form-label">{% trans "Von" %}</label>
-                            <input type="date" class="form-control" name="start_date" required>
+                            <label for="startDate" class="form-label">{% trans "Von" %}</label>
+                            <input type="date" class="form-control" id="startDate" name="start_date" required>
                         </div>
                         <div class="col">
-                            <label class="form-label">{% trans "Bis" %}</label>
-                            <input type="date" class="form-control" name="end_date" required>
+                            <label for="endDate" class="form-label">{% trans "Bis" %}</label>
+                            <input type="date" class="form-control" id="endDate" name="end_date" required>
                         </div>
                     </div>
 
-                    <!-- Berechnete Urlaubstage -->
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Beantragte Tage" %}</label>
-                        <input type="text" class="form-control" id="requestedDays" readonly>
-                        <small class="form-text text-muted">
-                            {% trans "Nur Werktage werden berechnet" %}
-                        </small>
+                    <div class="alert alert-secondary">
+                        <strong>{% trans "Beantragte Tage" %}:</strong>
+                        <span id="requestedDays">0</span> {% trans "Tage" %}
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">{% trans "Notizen" %}</label>
-                        <textarea class="form-control" name="notes" rows="3"></textarea>
+                        <label for="notes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                <button type="button" class="btn btn-success" onclick="submitVacation()">{% trans "Beantragen" %}</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    {% trans "Abbrechen" %}
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveVacation()">
+                    {% trans "Beantragen" %}
+                </button>
             </div>
         </div>
     </div>
-</div> 
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Hole verfügbare Urlaubstage beim Öffnen des Modals
+    const vacationModal = document.getElementById('vacationModal');
+    vacationModal.addEventListener('show.bs.modal', function() {
+        updateVacationStatus();
+    });
+
+    // Berechne beantragte Tage bei Datumsänderung
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    
+    [startDate, endDate].forEach(input => {
+        input.addEventListener('change', calculateRequestedDays);
+    });
+});
+
+function updateVacationStatus() {
+    fetch('/api/vacation/status/')
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            // Zeige verfügbare Tage an
+            let statusText = `${data.remaining_days} (${data.used_days} genutzt`;
+            if (data.pending_days > 0) {
+                statusText += `, ${data.pending_days} beantragt`;
+            }
+            statusText += ` von ${data.total_days})`;
+            
+            document.getElementById('remainingVacationDays').textContent = statusText;
+            
+            // Speichere die Werte für spätere Validierung
+            window.vacationData = data;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('remainingVacationDays').textContent = 'Fehler beim Laden';
+        });
+}
+
+function calculateRequestedDays() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (start <= end) {
+            let days = 0;
+            let current = new Date(start);
+            
+            while (current <= end) {
+                if (current.getDay() !== 0 && current.getDay() !== 6) {
+                    days++;
+                }
+                current.setDate(current.getDate() + 1);
+            }
+            
+            document.getElementById('requestedDays').textContent = days;
+            return days;
+        }
+    }
+    
+    document.getElementById('requestedDays').textContent = '0';
+    return 0;
+}
+
+function validateVacationRequest(requestedDays) {
+    if (!window.vacationData) {
+        alert('{% trans "Urlaubsdaten konnten nicht geladen werden" %}');
+        return false;
+    }
+
+    const { remaining_days } = window.vacationData;
+    
+    if (requestedDays > remaining_days) {
+        alert(`{% trans "Nicht genügend Urlaubstage verfügbar. Verfügbar:" %} ${remaining_days}, {% trans "Beantragt:" %} ${requestedDays}`);
+        return false;
+    }
+    
+    return true;
+}
+
+function saveVacation() {
+    const form = document.getElementById('vacationForm');
+    const requestedDays = calculateRequestedDays();
+    
+    // Validiere den Antrag
+    if (!validateVacationRequest(requestedDays)) {
+        return;
+    }
+
+    const formData = {
+        start_date: form.start_date.value,
+        end_date: form.end_date.value,
+        notes: form.notes.value
+    };
+
+    fetch('/api/vacation/request/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('vacationModal')).hide();
+            location.reload();
+        } else {
+            alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('{% trans "Ein Fehler ist aufgetreten" %}');
+    });
+}
+</script> 

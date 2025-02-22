@@ -15,9 +15,9 @@ urlpatterns = [
     # Working Hours
     path('working-hours/', views.WorkingHoursListView.as_view(), name='working-hours-list'),
     path('working-hours/check/', views.WorkingHoursCreateOrUpdateView.as_view(), name='working-hours-check'),
-    path('api/working-hours/<int:pk>/', views.api_working_hours_detail, name='api-working-hours-detail'),
-    path('api/working-hours/<int:pk>/update/', views.api_working_hours_update, name='api-working-hours-update'),
-    path('api/working-hours/<int:pk>/delete/', views.delete_working_hours, name='delete-working-hours'),
+    path('api/working-hours/<int:id>/', views.api_working_hours_detail, name='api-working-hours-detail'),
+    path('api/working-hours/<int:id>/update/', views.api_working_hours_update, name='api-working-hours-update'),
+    path('api/working-hours/<int:id>/delete/', views.delete_working_hours, name='delete-working-hours'),
     path('api/working-hours/<str:date>/', views.get_working_hours, name='api-get-working-hours'),
     path('api/working-hours/<str:date>/save/', views.save_working_hours, name='api-save-working-hours'),
     

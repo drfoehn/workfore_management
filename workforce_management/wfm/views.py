@@ -45,83 +45,104 @@ def dashboard(request):
     return redirect('wfm:dashboard')  # Statt 'owner-dashboard' verwenden wir jetzt 'dashboard'
 
 class WorkingHoursListView(LoginRequiredMixin, ListView):
-    model = WorkingHours
     template_name = 'wfm/working_hours_list.html'
     context_object_name = 'working_hours'
-    paginate_by = None
 
     def get_queryset(self):
         # Hole Jahr und Monat aus URL-Parametern oder nutze aktuellen Monat
         year = int(self.request.GET.get('year', date.today().year))
         month = int(self.request.GET.get('month', date.today().month))
         
-        # Erstelle Datum für Monatsanfang und -ende
-        start_date = date(year, month, 1)
+        # Erstelle eine Liste aller Werktage im Monat
+        first_day = date(year, month, 1)
         if month == 12:
-            end_date = date(year + 1, 1, 1) - timedelta(days=1)
+            last_day = date(year + 1, 1, 1) - timedelta(days=1)
         else:
-            end_date = date(year, month + 1, 1) - timedelta(days=1)
-
-        # Basis-Queryset für tatsächliche Arbeitszeiten
-        queryset = WorkingHours.objects.select_related('employee')
+            last_day = date(year, month + 1, 1) - timedelta(days=1)
         
-        # Filter nach Mitarbeiter und Rolle
+        # Dictionary für existierende Einträge
+        working_hours_dict = {}
+        
+        # Hole die Mitarbeiter basierend auf Filtern
         if self.request.user.role == 'OWNER':
+            role = self.request.GET.get('role')
             employee_id = self.request.GET.get('employee')
-            role_filter = self.request.GET.get('role')
             
+            employees = CustomUser.objects.exclude(role='OWNER')
+            if role:
+                employees = employees.filter(role=role)
             if employee_id:
-                # Filter nach spezifischem Mitarbeiter
-                employees = [CustomUser.objects.get(id=employee_id)]
-            elif role_filter:
-                # Filter nach Rolle
-                employees = CustomUser.objects.filter(role=role_filter)
-            else:
-                # Alle Assistenten und Reinigungskräfte
-                employees = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
+                employees = employees.filter(id=employee_id)
         else:
-            # Nicht-Owner sehen nur ihre eigenen Einträge
             employees = [self.request.user]
 
-        # Hole alle relevanten Templates für die gefilterten Mitarbeiter
-        all_templates = ScheduleTemplate.objects.filter(
+        # Hole existierende Einträge
+        existing_entries = WorkingHours.objects.filter(
+            date__year=year,
+            date__month=month,
             employee__in=employees
-        ).order_by('employee', '-valid_from', 'weekday')
+        ).select_related('employee')
+
+        # Erstelle Dictionary mit existierenden Einträgen
+        for entry in existing_entries:
+            # Hole die verknüpften Objekte separat
+            entry.vacation = Vacation.objects.filter(
+                employee=entry.employee,
+                start_date__lte=entry.date,
+                end_date__gte=entry.date,
+                status='APPROVED'  # Nur genehmigte Urlaube
+            ).first()
+            
+            entry.time_comp = TimeCompensation.objects.filter(
+                employee=entry.employee,
+                date=entry.date,
+                status='APPROVED'  # Nur genehmigte Zeitausgleiche
+            ).first()
+            
+            entry.sick_leave = SickLeave.objects.filter(
+                employee=entry.employee,
+                start_date__lte=entry.date,
+                end_date__gte=entry.date
+            ).first()
+            
+            working_hours_dict[(entry.date, entry.employee_id)] = entry
+
+        # Erstelle Liste aller Werktage mit leeren oder existierenden Einträgen
+        working_hours_list = []
+        current_date = first_day
         
-        # Erstelle Dictionary für schnellen Template-Zugriff
+        # Hole Template für Soll-Zeiten
+        templates = ScheduleTemplate.objects.filter(
+            employee__in=employees
+        ).order_by('-valid_from')
         template_dict = {}
-        for template in all_templates:
+        for template in templates:
             key = (template.employee_id, template.weekday)
             if key not in template_dict:
                 template_dict[key] = template
 
-        # Hole existierende Arbeitszeiten für den gewählten Zeitraum und die gefilterten Mitarbeiter
-        working_hours_list = list(queryset.filter(
-            date__range=[start_date, end_date],
-            employee__in=employees
-        ))
-        existing_dates = {(wh.employee_id, wh.date): wh for wh in working_hours_list}
-        
-        # Fülle fehlende Tage mit Template-basierten Arbeitszeiten
-        current_date = start_date
-        while current_date <= end_date:
-            weekday = current_date.weekday()
-            if weekday < 5:  # Nur Werktage (Mo-Fr)
+        while current_date <= last_day:
+            if current_date.weekday() < 5:  # Nur Werktage (0-4 = Montag-Freitag)
                 for employee in employees:
-                    key = (employee.id, current_date)
-                    if key not in existing_dates:
-                        template = template_dict.get((employee.id, weekday))
+                    # Hole existierenden Eintrag oder erstelle leeren Eintrag
+                    entry = working_hours_dict.get((current_date, employee.id))
+                    if not entry:
+                        # Erstelle leeren Eintrag
+                        empty_entry = WorkingHours(
+                            employee=employee,
+                            date=current_date
+                        )
+                        # Optional: Füge Soll-Zeiten aus Template hinzu wenn vorhanden
+                        template = template_dict.get((employee.id, current_date.weekday()))
                         if template and template.valid_from <= current_date:
-                            wh = WorkingHours(
-                                employee=employee,
-                                date=current_date,
-                                start_time=template.start_time,
-                                end_time=template.end_time,
-                                break_duration=timedelta(minutes=30)  # Standard-Pause
-                            )
-                            working_hours_list.append(wh)
+                            empty_entry.soll_start = template.start_time
+                            empty_entry.soll_end = template.end_time
+                        working_hours_list.append(empty_entry)
+                    else:
+                        working_hours_list.append(entry)
             current_date += timedelta(days=1)
-            
+
+        # Sortiere nach Datum und dann nach Mitarbeiter-ID
         return sorted(working_hours_list, key=lambda x: (x.date, x.employee_id))
 
     def get_context_data(self, **kwargs):
@@ -247,6 +268,25 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             # Differenz
             wh.difference = wh.ist_hours - wh.soll_hours
             
+        # Berechne Summen für den Monat
+        total_soll = 0
+        total_ist = 0
+        total_diff = 0
+        
+        for wh in context['working_hours']:
+            if hasattr(wh, 'soll_hours') and wh.soll_hours:
+                total_soll += float(wh.soll_hours)
+            if hasattr(wh, 'ist_hours') and wh.ist_hours:
+                total_ist += float(wh.ist_hours)
+            if hasattr(wh, 'difference') and wh.difference:
+                total_diff += float(wh.difference)
+        
+        context.update({
+            'total_soll': total_soll,
+            'total_ist': total_ist,
+            'total_diff': total_diff,
+        })
+        
         return context
 
 class WorkingHoursCreateOrUpdateView(LoginRequiredMixin, View):
@@ -1092,10 +1132,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 @login_required
-def delete_working_hours(request, pk):
+def delete_working_hours(request, id):
     if request.method == 'POST':
         try:
-            working_hours = WorkingHours.objects.get(pk=pk)
+            working_hours = WorkingHours.objects.get(id=id)
             if request.user.role == 'OWNER' or working_hours.employee == request.user:
                 working_hours.delete()
                 return JsonResponse({'success': True})
@@ -1115,272 +1155,100 @@ def delete_working_hours(request, pk):
     }, status=400)
 
 @login_required
-def api_therapist_booking_detail(request, pk):
-    if request.user.role != 'OWNER' and request.user.role != 'THERAPIST':
-        return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
-        
-    try:
-        booking = TherapistBooking.objects.select_related('therapist').get(pk=pk)
-        
-        # Prüfe ob der Therapeut seine eigene Buchung anschaut
-        if request.user.role == 'THERAPIST' and booking.therapist != request.user:
-            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
-            
-        return JsonResponse({
-            'id': booking.id,
-            'date': booking.date.isoformat(),
-            'start_time': booking.start_time.strftime('%H:%M'),
-            'end_time': booking.end_time.strftime('%H:%M'),
-            'hours': float(booking.hours),
-            'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
-            'notes': booking.notes or '',
-            'status': booking.status,
-            'therapist': {
-                'id': booking.therapist.id,
-                'username': booking.therapist.username,
-                'full_name': booking.therapist.get_full_name(),
-                'color': booking.therapist.color
-            }
-        })
-    except TherapistBooking.DoesNotExist:
-        return JsonResponse({'error': 'Buchung nicht gefunden'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-@login_required
-def api_therapist_booking_update(request):
-    """API-Endpunkt zum Aktualisieren einer Therapeuten-Buchung"""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Nur POST-Anfragen erlaubt'}, status=405)
-        
-    if request.user.role != 'OWNER' and request.user.role != 'THERAPIST':
-        return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
-        
-    try:
-        data = json.loads(request.body)
-        booking = TherapistBooking.objects.get(id=data['booking_id'])
-        
-        # Prüfe ob der Therapeut seine eigene Buchung bearbeitet
-        if request.user.role == 'THERAPIST' and booking.therapist != request.user:
-            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
-        
-        # Owner kann alles ändern
-        if request.user.role == 'OWNER':
-            booking.date = parse_date(data['date'])
-            booking.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-            booking.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-            
-        # Beide können actual_hours und notes ändern
-        if data.get('actual_hours'):
-            booking.actual_hours = Decimal(str(data['actual_hours']))
-        booking.notes = data.get('notes', '')
-        
-        # Wenn actual_hours gesetzt wurden, Status auf USED setzen
-        if booking.actual_hours is not None:
-            booking.status = 'USED'
-        
-        booking.save()
-        
-        return JsonResponse({'success': True})
-        
-    except TherapistBooking.DoesNotExist:
-        return JsonResponse({'error': 'Buchung nicht gefunden'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-class AssistantCalendarView(LoginRequiredMixin, TemplateView):
-    template_name = 'wfm/assistant_calendar.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        
-        # Get current filters from request
-        selected_role = self.request.GET.get('role')
-        selected_employee = self.request.GET.get('employee')
-        
-        # Base URL for filters
-        base_url = reverse('wfm:assistant-calendar')
-        
-        # URLs for role filters
-        context['all_url'] = base_url
-        context['assistant_url'] = f"{base_url}?role=ASSISTANT"
-        context['cleaning_url'] = f"{base_url}?role=CLEANING"
-        
-        # Get employees based on role
-        if selected_role == 'ASSISTANT':
-            employees = CustomUser.objects.filter(role='ASSISTANT')
-        elif selected_role == 'CLEANING':
-            employees = CustomUser.objects.filter(role='CLEANING')
-        else:
-            employees = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
-
-        # Get selected employee if any
-        if selected_employee:
-            selected_employee = CustomUser.objects.filter(id=selected_employee).first()
-        
-        # Split employees by role for the dropdown
-        context.update({
-            'selected_role': selected_role,
-            'selected_employee': selected_employee,
-            'assistants': employees.filter(role='ASSISTANT'),
-            'cleaners': employees.filter(role='CLEANING'),
-            'current_year': self.request.GET.get('year', datetime.now().year),
-            'current_month': self.request.GET.get('month', datetime.now().month),
-        })
-        
-        return context
-
-class TherapistBookingListView(LoginRequiredMixin, ListView):
-    model = TherapistBooking
-    template_name = 'wfm/therapist_booking_list.html'
-    context_object_name = 'bookings'
-    
-    def get_queryset(self):
-        queryset = TherapistBooking.objects.select_related('therapist')
-        
-        # Filter für bestimmten Therapeuten
-        therapist_id = self.request.GET.get('therapist')
-        if therapist_id:
-            queryset = queryset.filter(therapist_id=therapist_id)
-            
-        # Berechne die Differenz für jede Buchung
-        bookings = list(queryset)  # Konvertiere QuerySet in Liste
-        for booking in bookings:
-            
-            if booking.actual_hours is not None:
-                if booking.actual_hours > booking.hours:
-                    booking.difference = float(booking.actual_hours) - float(booking.hours)
-                else:
-                    booking.difference = None
-            else:
-                booking.difference = None
+def api_working_hours_detail(request, id=None):
+    """API für Arbeitszeiten-Details"""
+    if request.method == 'GET':
+        if id:
+            # Existierender Eintrag
+            working_hours = get_object_or_404(WorkingHours, id=id)
+            if request.user.role != 'OWNER' and working_hours.employee != request.user:
+                raise PermissionDenied
                 
-        return sorted(bookings, key=lambda x: (-x.date.toordinal(), x.start_time))
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
-        context['debug'] = True  # Debug-Modus aktivieren
+            return JsonResponse({
+                'id': working_hours.id,
+                'date': working_hours.date.strftime('%Y-%m-%d'),
+                'start_time': working_hours.start_time.strftime('%H:%M') if working_hours.start_time else '',
+                'end_time': working_hours.end_time.strftime('%H:%M') if working_hours.end_time else '',
+                'break_duration': working_hours.break_duration.seconds // 60 if working_hours.break_duration else 30,
+                'notes': working_hours.notes or ''
+            })
         
-        # Hole den ausgewählten Therapeuten
-        therapist_id = self.request.GET.get('therapist')
-        if therapist_id:
-            context['selected_therapist'] = CustomUser.objects.filter(id=therapist_id).first()
-            
-        return context
-
-@login_required
-def api_working_hours_update(request):
-    """API-Endpunkt zum Aktualisieren einer Arbeitszeit"""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Nur POST-Anfragen erlaubt'}, status=405)
-        
-    try:
+    elif request.method == 'POST':
         data = json.loads(request.body)
-        working_hours = WorkingHours.objects.get(id=data['id'])
+        date = datetime.strptime(data['date'], '%Y-%m-%d').date()
         
-        if request.user.role != 'OWNER' and working_hours.employee != request.user:
-            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
-            
-        working_hours.date = parse_date(data['date'])
-        working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-        working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-        working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
+        if id:
+            # Update existierenden Eintrag
+            working_hours = get_object_or_404(WorkingHours, id=id)
+            if request.user.role != 'OWNER' and working_hours.employee != request.user:
+                raise PermissionDenied
+        else:
+            # Erstelle neuen Eintrag
+            working_hours = WorkingHours(employee=request.user, date=date)
+        
+        # Update Felder
+        if data.get('start_time'):
+            working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+        if data.get('end_time'):
+            working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+        if data.get('break_duration'):
+            working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
+        working_hours.notes = data.get('notes', '')
+        
         working_hours.save()
+        return JsonResponse({'success': True, 'id': working_hours.id})
         
-        return JsonResponse({'success': True})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-    
-    
-@login_required
-def api_working_hours_detail(request, pk):
-    """API-Endpunkt zum Abrufen der Details einer Arbeitszeit"""
-    try:
-        working_hours = WorkingHours.objects.select_related('employee').get(pk=pk)
-        if request.user.role != 'OWNER' and working_hours.employee != request.user:
-            return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
-        
-        # Hole Template für die Soll-Zeiten
-        template = ScheduleTemplate.objects.filter(
-            employee=working_hours.employee,
-            weekday=working_hours.date.weekday()
-        ).first()
-        
-        # Soll-Zeiten aus Template oder Standard
-        # if template:
-        soll_start = template.start_time
-        soll_end = template.end_time
-        soll_hours = template.hours
-        # else:
-        #     soll_start = time(8, 0)
-        #     soll_end = time(16, 0)
-        #     soll_hours = Decimal('8.0')
-        
-        # Berechne Ist-Stunden
-        duration = datetime.combine(date.min, working_hours.end_time) - datetime.combine(date.min, working_hours.start_time)
-        if working_hours.break_duration:
-            duration -= working_hours.break_duration
-        ist_hours = Decimal(str(duration.total_seconds() / 3600))
-            
-        return JsonResponse({
-            'id': working_hours.id,
-            'date': working_hours.date.isoformat(),
-            'weekday': working_hours.date.weekday(),
-            'start_time': working_hours.start_time.strftime('%H:%M'),
-            'end_time': working_hours.end_time.strftime('%H:%M'),
-            'break_duration': working_hours.break_duration.total_seconds() / 60 if working_hours.break_duration else 0,
-            'employee': {
-                'id': working_hours.employee.id,
-                'username': working_hours.employee.username,
-                'color': working_hours.employee.color
-            },
-            'soll_start': soll_start.strftime('%H:%M'),
-            'soll_end': soll_end.strftime('%H:%M'),
-            'soll_hours': float(soll_hours),
-            'ist_hours': float(ist_hours),
-            'difference': float(ist_hours - soll_hours)
-        })
-    except WorkingHours.DoesNotExist:
-        return JsonResponse({'error': 'Arbeitszeit nicht gefunden'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'Invalid request'}, status=400)
 
 @login_required
 def api_vacation_status(request):
-    """API-Endpunkt zum Ändern des Urlaubsstatus"""
-    if request.method != 'POST' or request.user.role != 'OWNER':
-        return JsonResponse({'error': 'Keine Berechtigung'}, status=403)
-        
+    """API-Endpunkt für den aktuellen Urlaubsstatus"""
     try:
-        data = json.loads(request.body)
-        vacation = Vacation.objects.get(id=data['vacation_id'])
+        # Hole das aktuelle Jahr
+        current_year = timezone.now().year
         
-        # Status aktualisieren
-        vacation.status = data['status']
-        vacation.save()
+        # Hole den Urlaubsanspruch für das aktuelle Jahr
+        entitlement = VacationEntitlement.objects.filter(
+            employee=request.user,
+            year=current_year
+        ).first()
         
-        # Wenn der Urlaub genehmigt wurde, aktualisiere die Urlaubstage
-        if vacation.status == 'APPROVED':
-            duration = (vacation.end_date - vacation.start_date).days + 1
-            entitlement = VacationEntitlement.objects.get(
-                employee=vacation.employee,
-                year=vacation.start_date.year
-            )
-            entitlement.days_taken += duration
-            entitlement.save()
+        if not entitlement:
+            return JsonResponse({
+                'total_days': 0,
+                'used_days': 0,
+                'pending_days': 0,
+                'remaining_days': 0
+            })
+        
+        # Hole genehmigte und beantragte Urlaube
+        approved_vacations = Vacation.objects.filter(
+            employee=request.user,
+            start_date__year=current_year,
+            status='APPROVED'
+        )
+        
+        pending_vacations = Vacation.objects.filter(
+            employee=request.user,
+            start_date__year=current_year,
+            status='REQUESTED'
+        )
+        
+        # Berechne die Tage
+        used_days = sum(vacation.working_days for vacation in approved_vacations)
+        pending_days = sum(vacation.working_days for vacation in pending_vacations)
+        total_days = entitlement.total_days
+        remaining_days = total_days - used_days
         
         return JsonResponse({
-            'success': True,
-            'status': vacation.status,
-            'vacation_id': vacation.id
+            'total_days': total_days,
+            'used_days': used_days,
+            'pending_days': pending_days,
+            'remaining_days': remaining_days
         })
         
-    except Vacation.DoesNotExist:
-        return JsonResponse({
-            'error': 'Urlaub nicht gefunden'
-        }, status=404)
     except Exception as e:
+        logger.error(f"Vacation status error: {str(e)}", exc_info=True)
         return JsonResponse({
             'error': str(e)
         }, status=500)
@@ -1617,3 +1485,122 @@ def api_sick_leave(request):
         'success': False,
         'error': _('Ungültige Anfrage')
     })
+
+class AssistantCalendarView(LoginRequiredMixin, TemplateView):
+    template_name = 'wfm/assistant_calendar.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Füge Mitarbeiter-Filter hinzu für Owner
+        if self.request.user.role == 'OWNER':
+            context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
+            context['cleaners'] = CustomUser.objects.filter(role='CLEANING')
+            
+            # Hole den ausgewählten Mitarbeiter
+            employee_id = self.request.GET.get('employee')
+            if employee_id:
+                context['selected_employee'] = CustomUser.objects.filter(id=employee_id).first()
+            
+            # Hole die ausgewählte Rolle
+            role = self.request.GET.get('role')
+            if role:
+                context['selected_role'] = role
+        
+        return context
+
+@login_required
+def api_working_hours_update(request, pk):
+    """API für das Aktualisieren von Arbeitszeiten"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid method'}, status=405)
+        
+    working_hours = get_object_or_404(WorkingHours, pk=pk)
+    if request.user.role != 'OWNER' and working_hours.employee != request.user:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+    try:
+        data = json.loads(request.body)
+        working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+        working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+        working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
+        working_hours.notes = data.get('notes', '')
+        working_hours.save()
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+class TherapistBookingListView(LoginRequiredMixin, ListView):
+    model = TherapistBooking
+    template_name = 'wfm/therapist_booking_list.html'
+    context_object_name = 'bookings'
+
+    def get_queryset(self):
+        queryset = TherapistBooking.objects.select_related('therapist')
+        if self.request.user.role != 'OWNER':
+            queryset = queryset.filter(therapist=self.request.user)
+        return queryset.order_by('-date', 'start_time')
+
+@login_required
+def api_therapist_booking_detail(request, pk):
+    """API-Endpunkt für Therapeuten-Buchungsdetails"""
+    if request.user.role != 'OWNER':
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+    booking = get_object_or_404(TherapistBooking, pk=pk)
+    return JsonResponse({
+        'id': booking.id,
+        'therapist': {
+            'id': booking.therapist.id,
+            'name': booking.therapist.get_full_name()
+        },
+        'date': booking.date.strftime('%Y-%m-%d'),
+        'start_time': booking.start_time.strftime('%H:%M'),
+        'end_time': booking.end_time.strftime('%H:%M'),
+        'hours': booking.hours,
+        'status': booking.status
+    })
+
+@login_required
+def api_therapist_booking_update(request):
+    """API-Endpunkt zum Aktualisieren einer Therapeuten-Buchung"""
+    if request.method != 'POST' or request.user.role != 'OWNER':
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+    try:
+        data = json.loads(request.body)
+        booking = TherapistBooking.objects.get(id=data['id'])
+        
+        # Aktualisiere die Buchung
+        booking.therapist_id = data['therapist_id']
+        booking.date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+        booking.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+        booking.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+        booking.status = data.get('status', booking.status)
+        booking.save()
+        
+        return JsonResponse({
+            'success': True,
+            'booking': {
+                'id': booking.id,
+                'therapist': {
+                    'id': booking.therapist.id,
+                    'name': booking.therapist.get_full_name()
+                },
+                'date': booking.date.strftime('%Y-%m-%d'),
+                'start_time': booking.start_time.strftime('%H:%M'),
+                'end_time': booking.end_time.strftime('%H:%M'),
+                'hours': booking.hours,
+                'status': booking.status
+            }
+        })
+        
+    except TherapistBooking.DoesNotExist:
+        return JsonResponse({
+            'error': 'Buchung nicht gefunden'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
