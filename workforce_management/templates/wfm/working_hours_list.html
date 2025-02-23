@@ -197,101 +197,110 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for wh in working_hours %}
-                            <tr>
-                                <td class="text-nowrap">
-                                    <strong>{{ wh.date|date:"d.m" }}</strong>
-                                    <small class="d-block text-muted d-md-none">{{ wh.date|date:"l" }}</small>
-                                </td>
-                                {% if user.role == 'OWNER' %}
-                                    <td>
-                                        <span class="badge" style="background-color: {{ wh.employee.color }}">
-                                            {{ wh.employee.get_full_name|default:wh.employee.username }}
-                                        </span>
-                                    </td>
-                                {% endif %}
-                                <td class="d-none d-md-table-cell text-nowrap">
-                                    {% if wh.soll_start %}
-                                        {{ wh.soll_start|time:"H:i" }} - {{ wh.soll_end|time:"H:i" }}
-                                        <small class="text-muted">({{ wh.soll_hours|floatformat:1 }}h)</small>
-                                    {% endif %}
-                                </td>
-                                <td class="d-none d-md-table-cell text-nowrap">
-                                    {% if wh.start_time %}
-                                        {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
-                                        <small class="text-muted">({{ wh.ist_hours|floatformat:1 }}h)</small>
-                                    {% endif %}
-                                </td>
-                                <!-- Mobile: Nur Stunden anzeigen -->
-                                <td class="text-nowrap d-md-none">
-                                    {% if wh.soll_hours %}
-                                        <div>{{ wh.soll_hours|floatformat:1 }}h</div>
-                                    {% endif %}
-                                    {% if wh.ist_hours %}
-                                        <div>{{ wh.ist_hours|floatformat:1 }}h</div>
-                                    {% endif %}
-                                </td>
-                                <td class="text-nowrap">
-                                    {% if wh.vacation %}
-                                        <i class="bi bi-umbrella text-primary" title="{% trans 'Urlaub' %}"></i>
-                                    {% endif %}
-                                    {% if wh.time_comp %}
-                                        <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
-                                    {% endif %}
-                                    {% if wh.sick_leave %}
-                                        <i class="bi bi-hospital text-danger" title="{% trans 'Krankenstand' %}"></i>
-                                    {% endif %}
-                                    {% if wh.notes %}
-                                        <i class="bi bi-exclamation-circle text-info" 
-                                           data-bs-toggle="tooltip" 
-                                           data-bs-placement="left"
-                                           title="{{ wh.notes }}"></i>
-                                    {% endif %}
-                                </td>
+                        <!-- Debug-Info -->
+                        {% if debug %}
+                        <tr>
+                            <td colspan="9" class="text-muted">
+                                <small>
+                                    Debug: {{ dates|length }} Einträge gefunden<br>
+                                    {% for date_entry in dates|slice:":3" %}
+                                        {{ date_entry.date|date:"d.m.Y" }}<br>
+                                    {% endfor %}
+                                </small>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        
+                        {% for date_entry in dates %}
+                        <tr>
+                            <td class="text-nowrap">
+                                <strong>{{ date_entry.date|date:"d.m" }}</strong>
+                                <small class="d-block text-muted d-md-none">{{ date_entry.date|date:"l" }}</small>
+                            </td>
+                            {% if user.role == 'OWNER' %}
                                 <td>
-                                    {% if wh.vacation %}
-                                        {% if wh.vacation.status == 'REQUESTED' %}
-                                            <span class="badge bg-warning">{% trans "Beantragt" %}</span>
-                                        {% elif wh.vacation.status == 'APPROVED' %}
-                                            <span class="badge bg-success">{% trans "Genehmigt" %}</span>
-                                        {% endif %}
-                                    {% elif wh.time_comp %}
-                                        {% if wh.time_comp.status == 'REQUESTED' %}
-                                            <span class="badge bg-warning">{% trans "Beantragt" %}</span>
-                                        {% elif wh.time_comp.status == 'APPROVED' %}
-                                            <span class="badge bg-success">{% trans "Genehmigt" %}</span>
-                                        {% endif %}
-                                    {% elif wh.sick_leave %}
-                                        <span class="badge bg-danger">{% trans "Gemeldet" %}</span>
-                                    {% endif %}
+                                    <span class="badge" style="background-color: {{ date_entry.employee.color|default:'#6c757d' }}">
+                                        {{ date_entry.employee.get_full_name|default:date_entry.employee.username|default:'' }}
+                                    </span>
                                 </td>
-                                <td class="text-nowrap {% if wh.difference < 0 %}text-danger{% elif wh.difference > 0 %}text-success{% endif %}">
-                                    {% if wh.difference %}
-                                        {{ wh.difference|floatformat:1 }}h
-                                    {% endif %}
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group">
-                                        <button type="button"
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#workingHoursModal"
-                                                data-id="{{ wh.id|default:'' }}"
-                                                data-date="{{ wh.date|date:'Y-m-d' }}"
-                                                class="btn btn-sm btn-outline-primary"
-                                                title="{% trans 'Bearbeiten' %}">
-                                            <i class="bi bi-pencil"></i>
+                            {% endif %}
+                            <td class="d-none d-md-table-cell text-nowrap">
+                                {% if date_entry.schedule %}
+                                    {{ date_entry.schedule.start_time|time:"H:i" }} - {{ date_entry.schedule.end_time|time:"H:i" }}
+                                    ({{ date_entry.soll_hours|floatformat:1 }}h)
+                                {% endif %}
+                            </td>
+                            <td class="d-none d-md-table-cell text-nowrap">
+                                {% if date_entry.working_hours %}
+                                    {{ date_entry.working_hours.start_time|time:"H:i" }} - {{ date_entry.working_hours.end_time|time:"H:i" }}
+                                    ({{ date_entry.ist_hours|floatformat:1 }}h)
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if date_entry.vacation %}
+                                    <i class="bi bi-umbrella text-primary" title="{% trans 'Urlaub' %}"></i>
+                                {% endif %}
+                                {% if date_entry.time_comp %}
+                                    <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
+                                {% endif %}
+                                {% if date_entry.sick_leave %}
+                                    <i class="bi bi-hospital text-danger" title="{% trans 'Krankenstand' %}"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if date_entry.vacation %}
+                                    <span class="badge {% if date_entry.vacation.status == 'REQUESTED' %}bg-warning{% else %}bg-primary{% endif %}">
+                                        {% if date_entry.vacation.status == 'REQUESTED' %}
+                                            {% trans "Beantragt" %}
+                                        {% else %}
+                                            {% trans "Genehmigt" %}
+                                        {% endif %}
+                                    </span>
+                                {% elif date_entry.time_comp %}
+                                    <span class="badge {% if date_entry.time_comp.status == 'REQUESTED' %}bg-warning{% else %}bg-info{% endif %}">
+                                        {% if date_entry.time_comp.status == 'REQUESTED' %}
+                                            {% trans "Beantragt" %}
+                                        {% else %}
+                                            {% trans "Genehmigt" %}
+                                        {% endif %}
+                                    </span>
+                                {% elif date_entry.sick_leave %}
+                                    <span class="badge {% if date_entry.sick_leave.status == 'PENDING' %}bg-warning{% else %}bg-danger{% endif %}">
+                                        {% if date_entry.sick_leave.status == 'PENDING' %}
+                                            {% trans "Keine Krankmeldung" %}
+                                        {% else %}
+                                            {% trans "Krankmeldung vorgelegt" %}
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if date_entry.schedule or date_entry.working_hours %}
+                                    {{ date_entry.difference|floatformat:1 }}h
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group">
+                                    <button type="button"
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#workingHoursModal"
+                                            data-id="{{ date_entry.working_hours.id|default:'' }}"
+                                            data-date="{{ date_entry.date|date:'Y-m-d' }}"
+                                            class="btn btn-sm btn-outline-primary"
+                                            title="{% trans 'Bearbeiten' %}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    {% if user.role == 'OWNER' %}
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger"
+                                                onclick="deleteWorkingHours({{ date_entry.working_hours.id }})"
+                                                title="{% trans 'Löschen' %}">
+                                            <i class="bi bi-trash"></i>
                                         </button>
-                                        {% if user.role == 'OWNER' %}
-                                            <button type="button" 
-                                                    class="btn btn-sm btn-outline-danger"
-                                                    onclick="deleteWorkingHours({{ wh.id }})"
-                                                    title="{% trans 'Löschen' %}">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
                         {% empty %}
                             <tr>
                                 <td colspan="9" class="text-center py-4">
@@ -303,9 +312,7 @@
                         
                         <!-- Summenzeile -->
                         <tr class="table-secondary fw-bold">
-                            <td class="text-nowrap">
-                                {% trans "Summe" %}
-                            </td>
+                            <td class="text-nowrap">{% trans "Summe" %}</td>
                             {% if user.role == 'OWNER' %}
                                 <td></td>
                             {% endif %}

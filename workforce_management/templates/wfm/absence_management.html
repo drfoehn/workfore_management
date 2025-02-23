@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="h2 mb-4">{% trans "Abwesenheitsanträge" %}</h1>
+    
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{% trans "Mitarbeiter" %}</th>
+                            <th>{% trans "Von" %}</th>
+                            <th>{% trans "Bis" %}</th>
+                            <th>{% trans "Art" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Notizen" %}</th>
+                            <th class="text-end">{% trans "Aktionen" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for absence in absences %}
+                            <tr>
+                                <td>
+                                    <span class="badge" style="background-color: {{ absence.employee.color }}">
+                                        {{ absence.employee.get_full_name }}
+                                    </span>
+                                </td>
+                                <td class="text-nowrap">{{ absence.start_date|date:"d.m.Y" }}</td>
+                                <td class="text-nowrap">{{ absence.end_date|date:"d.m.Y" }}</td>
+                                <td>
+                                    {% if absence.is_vacation %}
+                                        <span class="badge bg-primary">{% trans "Urlaub" %}</span>
+                                    {% else %}
+                                        <span class="badge bg-info">{% trans "Zeitausgleich" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-warning">{% trans "Beantragt" %}</span>
+                                </td>
+                                <td class="text-nowrap">
+                                    {% if absence.notes %}
+                                        {{ absence.notes }}"
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group">
+                                        <button type="button" 
+                                                class="btn btn-sm btn-success"
+                                                onclick="updateAbsenceStatus('{{ absence.type }}', {{ absence.id }}, 'approve')"
+                                                title="{% trans 'Genehmigen' %}">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-danger"
+                                                onclick="updateAbsenceStatus('{{ absence.type }}', {{ absence.id }}, 'reject')"
+                                                title="{% trans 'Ablehnen' %}">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4">
+                                    <i class="bi bi-calendar-check display-4 d-block text-muted"></i>
+                                    {% trans "Keine offenen Anträge" %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateAbsenceStatus(type, id, action) {
+    const formData = new FormData();
+    formData.append('type', type);
+    formData.append('id', id);
+    formData.append('action', action);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch('{% url "wfm:absence-management" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            throw new Error(data.error);
+        }
+    })
+    .catch(error => {
+        alert(error.message);
+    });
+}
+
+// Initialisiere Tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %} 

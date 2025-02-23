@@ -34,13 +34,13 @@
                 </div>
                 <div class="card-body">
                     <div class="list-group">
-                        <a href="{% url 'wfm:vacation-list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <a href="{% url 'wfm:absence-management' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                             {% trans "Urlaubsanträge" %}
                             {% if pending_vacations %}
                             <span class="badge bg-primary rounded-pill">{{ pending_vacations }}</span>
                             {% endif %}
                         </a>
-                        <a href="{% url 'wfm:time-compensation-list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <a href="{% url 'wfm:absence-management' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                             {% trans "Zeitausgleichsanträge" %}
                             {% if pending_time_comps %}
                             <span class="badge bg-primary rounded-pill">{{ pending_time_comps }}</span>

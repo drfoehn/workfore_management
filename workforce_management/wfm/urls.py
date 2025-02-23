@@ -54,9 +54,12 @@ urlpatterns = [
     # Absences
     path('absences/', views.AbsenceListView.as_view(), name='absence-list'),
     path('api/absence/<str:type>/<int:pk>/delete/', views.api_delete_absence, name='api-delete-absence'),
-    
+    path('absence-management/', views.AbsenceManagementView.as_view(), name='absence-management'),
+
     # Overtime
     path('overtime/', views.OvertimeOverviewView.as_view(), name='overtime-overview'),
+
+    
 ] 
 
 

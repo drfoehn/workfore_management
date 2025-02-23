@@ -48,156 +48,21 @@ def dashboard(request):
 
 class WorkingHoursListView(LoginRequiredMixin, ListView):
     template_name = 'wfm/working_hours_list.html'
-    context_object_name = 'working_hours'
-
-    def get_queryset(self):
-        # Hole Jahr und Monat aus URL-Parametern oder nutze aktuellen Monat
-        year = int(self.request.GET.get('year', date.today().year))
-        month = int(self.request.GET.get('month', date.today().month))
-        
-        # Erstelle eine Liste aller Werktage im Monat
-        first_day = date(year, month, 1)
-        if month == 12:
-            last_day = date(year + 1, 1, 1) - timedelta(days=1)
-        else:
-            last_day = date(year, month + 1, 1) - timedelta(days=1)
-        
-        # Dictionary für existierende Einträge
-        working_hours_dict = {}
-        
-        # Hole die Mitarbeiter basierend auf Filtern
-        if self.request.user.role == 'OWNER':
-            role = self.request.GET.get('role')
-            employee_id = self.request.GET.get('employee')
-            
-            employees = CustomUser.objects.exclude(role='OWNER')
-            if role:
-                employees = employees.filter(role=role)
-            if employee_id:
-                employees = employees.filter(id=employee_id)
-        else:
-            employees = [self.request.user]
-
-        # Hole existierende Einträge
-        existing_entries = WorkingHours.objects.filter(
-            date__year=year,
-            date__month=month,
-            employee__in=employees
-        ).select_related('employee')
-
-        # Erstelle Dictionary mit existierenden Einträgen
-        for entry in existing_entries:
-            # Hole die verknüpften Objekte separat
-            entry.vacation = Vacation.objects.filter(
-                employee=entry.employee,
-                start_date__lte=entry.date,
-                end_date__gte=entry.date,
-                status='APPROVED'  # Nur genehmigte Urlaube
-            ).first()
-            
-            entry.time_comp = TimeCompensation.objects.filter(
-                employee=entry.employee,
-                date=entry.date,
-                status='APPROVED'  # Nur genehmigte Zeitausgleiche
-            ).first()
-            
-            entry.sick_leave = SickLeave.objects.filter(
-                employee=entry.employee,
-                start_date__lte=entry.date,
-                end_date__gte=entry.date
-            ).first()
-            
-            working_hours_dict[(entry.date, entry.employee_id)] = entry
-
-        # Erstelle Liste aller Werktage mit leeren oder existierenden Einträgen
-        working_hours_list = []
-        current_date = first_day
-        
-        # Hole Template für Soll-Zeiten
-        templates = ScheduleTemplate.objects.filter(
-            employee__in=employees
-        ).order_by('-valid_from')
-        template_dict = {}
-        for template in templates:
-            key = (template.employee_id, template.weekday)
-            if key not in template_dict:
-                template_dict[key] = template
-
-        while current_date <= last_day:
-            if current_date.weekday() < 5:  # Nur Werktage (0-4 = Montag-Freitag)
-                for employee in employees:
-                    # Hole existierenden Eintrag oder erstelle leeren Eintrag
-                    entry = working_hours_dict.get((current_date, employee.id))
-                    if not entry:
-                        # Erstelle leeren Eintrag
-                        empty_entry = WorkingHours(
-                            employee=employee,
-                            date=current_date
-                        )
-                        # Optional: Füge Soll-Zeiten aus Template hinzu wenn vorhanden
-                        template = template_dict.get((employee.id, current_date.weekday()))
-                        if template and template.valid_from <= current_date:
-                            empty_entry.soll_start = template.start_time
-                            empty_entry.soll_end = template.end_time
-                        working_hours_list.append(empty_entry)
-                    else:
-                        working_hours_list.append(entry)
-            current_date += timedelta(days=1)
-
-        # Sortiere nach Datum und dann nach Mitarbeiter-ID
-        return sorted(working_hours_list, key=lambda x: (x.date, x.employee_id))
+    model = WorkingHours
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Füge die Buttons für Urlaub/Zeitausgleich/Krankmeldung hinzu
-        if self.request.user.role in ['ASSISTANT', 'CLEANING']:
-            context['show_request_buttons'] = True
-            
-            # Hole aktuelle Anträge
-            context['pending_vacations'] = Vacation.objects.filter(
-                employee=self.request.user,
-                status='REQUESTED'
-            )
-            context['pending_time_comps'] = TimeCompensation.objects.filter(
-                employee=self.request.user,
-                status='REQUESTED'
-            )
-            context['active_sick_leaves'] = SickLeave.objects.filter(
-                employee=self.request.user,
-                end_date__gte=timezone.now().date()
-            )
-            
-        # Hole Jahr und Monat
+        # 1. Hole Jahr und Monat aus URL oder nutze aktuelles Datum
         year = int(self.request.GET.get('year', date.today().year))
         month = int(self.request.GET.get('month', date.today().month))
         
-        # Berechne vorherigen und nächsten Monat
-        if month == 1:
-            prev_month = 12
-            prev_year = year - 1
-        else:
-            prev_month = month - 1
-            prev_year = year
-            
-        if month == 12:
-            next_month = 1
-            next_year = year + 1
-        else:
-            next_month = month + 1
-            next_year = year
-        
-        # Füge Navigationsdaten zum Kontext hinzu
-        context.update({
-            'current_month': month,
-            'current_year': year,
-            'prev_month': prev_month,
-            'prev_year': prev_year,
-            'next_month': next_month,
-            'next_year': next_year,
-            'month_name': date(year, month, 1).strftime('%B %Y')
-        })
-        
+        # 2. Erstelle Datum für Navigation
+        current_date = date(year, month, 1)
+        prev_month_date = current_date - timedelta(days=1)
+        next_month_date = current_date + timedelta(days=32)
+
+        # 3. Filter-Logik für Owner
         if self.request.user.role == 'OWNER':
             # Hole alle Mitarbeiter für Filter
             context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
@@ -208,7 +73,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             role_filter = self.request.GET.get('role')
             
             if employee_id:
-                context['selected_employee'] = CustomUser.objects.filter(id=employee_id).first()
+                context['selected_employee'] = CustomUser.objects.get(id=employee_id)
             context['selected_role'] = role_filter
             
             # Erstelle URLs für Rollenfilter
@@ -221,76 +86,138 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             context['assistant_url'] = f"?{current_params.urlencode()}"
             current_params['role'] = 'CLEANING'
             context['cleaning_url'] = f"?{current_params.urlencode()}"
-        
-        # Berechne die Stunden für jeden Eintrag
-        for wh in context['working_hours']:
-            # Hole das gültige Template für dieses Datum
-            template = ScheduleTemplate.objects.filter(
-                employee=wh.employee,
-                weekday=wh.date.weekday(),
-                valid_from__lte=wh.date
-            ).order_by('-valid_from').first()
+
+        # 4. Hole die Mitarbeiter
+        if self.request.user.role == 'OWNER':
+            role = self.request.GET.get('role')
+            employee_id = self.request.GET.get('employee')
             
-            if template:
-                wh.soll_start = template.start_time
-                wh.soll_end = template.end_time
-            else:
-                wh.soll_start = time(8, 0)
-                wh.soll_end = time(16, 0)
-            
-            # Berechne Ist-Stunden
-            if wh.id and wh.start_time and wh.end_time:  # Nur für gespeicherte Einträge mit Zeiten
-                duration = datetime.combine(date.min, wh.end_time) - datetime.combine(date.min, wh.start_time)
-                wh.ist_hours = Decimal(str(duration.total_seconds() / 3600))
-                if wh.break_duration:
-                    wh.ist_hours -= Decimal(str(wh.break_duration.total_seconds() / 3600))
-            else:
-                wh.ist_hours = Decimal('0')
-            
-            # Berechne Soll-Stunden
-            if wh.soll_start and wh.soll_end:
-                soll_duration = datetime.combine(date.min, wh.soll_end) - datetime.combine(date.min, wh.soll_start)
-                wh.soll_hours = Decimal(str(soll_duration.total_seconds() / 3600))
-            else:
-                wh.soll_hours = Decimal('0')
-            
-            # Hole Abwesenheiten
-            wh.vacation = Vacation.objects.filter(
-                employee=wh.employee,
-                start_date__lte=wh.date,
-                end_date__gte=wh.date
-            ).first()
-            
-            wh.time_comp = TimeCompensation.objects.filter(
-                employee=wh.employee,
-                date=wh.date
-            ).first()
-            
-            wh.sick_leave = SickLeave.objects.filter(
-                employee=wh.employee,
-                start_date__lte=wh.date,
-                end_date__gte=wh.date
-            ).first()
-            
-        # Berechne Summen für den Monat
+            employees = CustomUser.objects.exclude(role='OWNER')
+            if role:
+                employees = employees.filter(role=role)
+            if employee_id:
+                employees = employees.filter(id=employee_id)
+        else:
+            employees = [self.request.user]
+
+        # 5. Erstelle Liste aller Werktage
+        workdays = []
+        current_day = current_date
+        while current_day.month == month:
+            if current_day.weekday() < 5:  # Nur Werktage (0-4 = Montag-Freitag)
+                workdays.append(current_day)
+            current_day += timedelta(days=1)
+
+        # 6. Hole alle relevanten Daten für den Monat
+        working_hours = WorkingHours.objects.filter(
+            date__year=year,
+            date__month=month,
+            employee__in=employees
+        ).select_related('employee')
+
+        schedules = ScheduleTemplate.objects.filter(
+            employee__in=employees
+        ).order_by('-valid_from')
+
+        vacations = Vacation.objects.filter(
+            employee__in=employees,
+            start_date__lte=current_date + timedelta(days=31),
+            end_date__gte=current_date,
+            status__in=['REQUESTED', 'APPROVED']
+        ).select_related('employee')
+
+        time_comps = TimeCompensation.objects.filter(
+            employee__in=employees,
+            date__year=year,
+            date__month=month,
+            status__in=['REQUESTED', 'APPROVED']
+        ).select_related('employee')
+
+        sick_leaves = SickLeave.objects.filter(
+            employee__in=employees,
+            start_date__lte=current_date + timedelta(days=31),
+            end_date__gte=current_date
+        ).select_related('employee')
+
+        print(f"Debug - Gefundene Urlaube: {vacations.count()}")  # Debug
+        print(f"Debug - Gefundene Krankenstände: {sick_leaves.count()}")  # Debug
+
+        # 7. Erstelle Lookup-Dictionaries
+        working_hours_dict = {(wh.date, wh.employee_id): wh for wh in working_hours}
+        schedule_dict = {}
+        for schedule in schedules:
+            key = (schedule.employee_id, schedule.weekday)
+            if key not in schedule_dict:
+                schedule_dict[key] = schedule
+
+        # 8. Erstelle Tageseinträge
+        days_data = []
+        for day in workdays:
+            for employee in employees:
+                entry = {
+                    'date': day,
+                    'employee': employee,
+                    'working_hours': working_hours_dict.get((day, employee.id)),
+                    'schedule': schedule_dict.get((employee.id, day.weekday())),
+                    'vacation': next((v for v in vacations 
+                        if v.employee_id == employee.id and 
+                        v.start_date <= day <= v.end_date), None),
+                    'time_comp': next((tc for tc in time_comps 
+                        if tc.employee_id == employee.id and 
+                        tc.date == day), None),
+                    'sick_leave': next((sl for sl in sick_leaves 
+                        if sl.employee_id == employee.id and 
+                        sl.start_date <= day <= sl.end_date), None)
+                }
+                days_data.append(entry)
+
+        # Berechne die Summen
         total_soll = 0
         total_ist = 0
         total_diff = 0
-        
-        for wh in context['working_hours']:
-            if hasattr(wh, 'soll_hours') and wh.soll_hours:
-                total_soll += float(wh.soll_hours)
-            if hasattr(wh, 'ist_hours') and wh.ist_hours:
-                total_ist += float(wh.ist_hours)
-            if hasattr(wh, 'difference') and wh.difference:
-                total_diff += float(wh.difference)
-        
+
+        for entry in days_data:
+            # Berechne Soll-Stunden
+            if entry['schedule']:
+                start = datetime.combine(date.min, entry['schedule'].start_time)
+                end = datetime.combine(date.min, entry['schedule'].end_time)
+                soll_hours = (end - start).total_seconds() / 3600
+                entry['soll_hours'] = soll_hours  # Speichere im Dictionary statt am Objekt
+                total_soll += soll_hours
+
+            # Berechne Ist-Stunden
+            ist_hours = 0
+            if entry['working_hours'] and entry['working_hours'].start_time and entry['working_hours'].end_time:
+                start = datetime.combine(date.min, entry['working_hours'].start_time)
+                end = datetime.combine(date.min, entry['working_hours'].end_time)
+                ist_hours = (end - start).total_seconds() / 3600
+                if entry['working_hours'].break_duration:
+                    ist_hours -= entry['working_hours'].break_duration.total_seconds() / 3600
+            entry['ist_hours'] = ist_hours  # Speichere im Dictionary
+            total_ist += ist_hours
+
+            # Berechne Differenz
+            entry['difference'] = ist_hours - (entry.get('soll_hours', 0) or 0)
+            total_diff += entry['difference']
+
+        # 8. Kontext erweitern
         context.update({
+            'dates': days_data,
+            'year': year,
+            'month': month,
+            'prev_month': prev_month_date.month,
+            'prev_year': prev_month_date.year,
+            'next_month': next_month_date.month,
+            'next_year': next_month_date.year,
+            'month_name': current_date.strftime('%B %Y'),
+            'show_request_buttons': self.request.user.role in ['ASSISTANT', 'CLEANING'],
+            'current_year': year,
+            'current_month': month,
             'total_soll': total_soll,
             'total_ist': total_ist,
-            'total_diff': total_diff,
+            'total_diff': total_diff
         })
-        
+
         return context
 
 class WorkingHoursCreateOrUpdateView(LoginRequiredMixin, View):
@@ -1940,3 +1867,74 @@ def api_scheduled_hours(request):
     except Exception as e:
         logger.error(f"Scheduled hours error: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
+
+class AbsenceManagementView(OwnerRequiredMixin, ListView):
+    template_name = 'wfm/absence_management.html'
+    context_object_name = 'absences'
+
+    def get_queryset(self):
+        # Hole alle offenen Urlaubs- und ZA-Anträge
+        vacations = Vacation.objects.filter(
+            status='REQUESTED'
+        ).select_related('employee').order_by('start_date')
+        
+        time_comps = TimeCompensation.objects.filter(
+            status='REQUESTED'
+        ).select_related('employee').order_by('date')
+        
+        print(f"Debug - Offene Urlaube: {vacations.count()}")  # Debug
+        print(f"Debug - Offene ZA: {time_comps.count()}")  # Debug
+        
+        # Kombiniere die Anträge in eine Liste
+        absences = []
+        for vacation in vacations:
+            absences.append({
+                'id': vacation.id,
+                'type': 'vacation',
+                'employee': vacation.employee,
+                'start_date': vacation.start_date,
+                'end_date': vacation.end_date,
+                'status': vacation.status,
+                'notes': vacation.notes,
+                'is_vacation': True
+            })
+            
+        for time_comp in time_comps:
+            absences.append({
+                'id': time_comp.id,
+                'type': 'time_comp',
+                'employee': time_comp.employee,
+                'start_date': time_comp.date,
+                'end_date': time_comp.date,
+                'status': time_comp.status,
+                'notes': time_comp.notes,
+                'is_vacation': False
+            })
+            
+        # Sortiere nach Datum und Mitarbeiter
+        return sorted(absences, key=lambda x: (x['start_date'], x['employee'].username))
+
+    def post(self, request, *args, **kwargs):
+        try:
+            absence_type = request.POST.get('type')
+            absence_id = request.POST.get('id')
+            action = request.POST.get('action')
+            
+            if absence_type == 'vacation':
+                absence = Vacation.objects.get(id=absence_id)
+            else:
+                absence = TimeCompensation.objects.get(id=absence_id)
+                
+            if action == 'approve':
+                absence.status = 'APPROVED'
+                messages.success(request, _('Antrag wurde genehmigt'))
+            else:
+                absence.status = 'REJECTED'
+                messages.success(request, _('Antrag wurde abgelehnt'))
+                
+            absence.save()
+            
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
