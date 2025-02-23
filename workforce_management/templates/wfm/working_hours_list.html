@@ -212,19 +212,19 @@
                         {% endif %}
                         
                         {% for date_entry in dates %}
-                        <tr>
+                        <tr {% if date_entry.closure or date_entry.is_weekend %}class="table-light"{% endif %}>
                             <td class="text-nowrap">
                                 <strong>{{ date_entry.date|date:"d.m" }}</strong>
-                                <small class="d-block text-muted d-md-none">{{ date_entry.date|date:"l" }}</small>
+                                <small class="d-block text-muted">{{ date_entry.date|date:"l" }}</small>
                             </td>
                             {% if user.role == 'OWNER' %}
                                 <td>
-                                    {% if date_entry.closure %}
-                                        {# Keine Mitarbeiteranzeige bei Schließtagen #}
-                                    {% else %}
+                                    {% if not date_entry.closure and not date_entry.is_weekend %}
+                                        {% if date_entry.employee.role != 'THERAPIST' %}
                                         <span class="badge" style="background-color: {{ date_entry.employee.color|default:'#6c757d' }}">
                                             {{ date_entry.employee.get_full_name|default:date_entry.employee.username|default:'' }}
                                         </span>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                             {% endif %}
@@ -232,6 +232,10 @@
                                 {% if date_entry.schedule %}
                                     {{ date_entry.schedule.start_time|time:"H:i" }} - {{ date_entry.schedule.end_time|time:"H:i" }}
                                     ({{ date_entry.soll_hours|floatformat:1 }}h)
+                                {% elif date_entry.closure %}
+                                    <em class="text-muted">{% trans "Geschlossen" %}</em>
+                                {% elif date_entry.is_weekend %}
+                                    <em class="text-muted">{% trans "Wochenende" %}</em>
                                 {% endif %}
                             </td>
                             <td class="d-none d-md-table-cell text-nowrap">
@@ -288,25 +292,27 @@
                                 {% endif %}
                             </td>
                             <td class="text-center">
-                                <div class="btn-group">
-                                    <button type="button"
-                                            data-bs-toggle="modal" 
-                                            data-bs-target="#workingHoursModal"
-                                            data-id="{{ date_entry.working_hours.id|default:'' }}"
-                                            data-date="{{ date_entry.date|date:'Y-m-d' }}"
-                                            class="btn btn-sm btn-outline-primary"
-                                            title="{% trans 'Bearbeiten' %}">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    {% if user.role == 'OWNER' %}
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-danger"
-                                                onclick="deleteWorkingHours({{ date_entry.working_hours.id }})"
-                                                title="{% trans 'Löschen' %}">
-                                            <i class="bi bi-trash"></i>
+                                {% if not date_entry.closure and not date_entry.is_weekend %}
+                                    <div class="btn-group">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary"
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#workingHoursModal"
+                                                data-id="{{ date_entry.working_hours.id|default:'' }}"
+                                                data-date="{{ date_entry.date|date:'Y-m-d' }}"
+                                                title="{% trans 'Bearbeiten' %}">
+                                            <i class="bi bi-pencil"></i>
                                         </button>
-                                    {% endif %}
-                                </div>
+                                        {% if date_entry.working_hours and user.role == 'OWNER' %}
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    onclick="deleteWorkingHours('{{ date_entry.working_hours.id }}')"
+                                                    title="{% trans 'Löschen' %}">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
                             </td>
                         </tr>
                         {% empty %}
@@ -349,44 +355,91 @@
     </div>
 </div>
 
-{% if show_request_buttons %}
 <!-- Modals einbinden -->
 {% include "wfm/modals/working_hours_modal.html" %}
-{% include "wfm/modals/vacation_modal.html" %}
-{% include "wfm/modals/time_compensation_modal.html" %}
-{% include "wfm/modals/sick_leave_modal.html" %}
+{% if show_request_buttons %}
+    {% include "wfm/modals/vacation_modal.html" %}
+    {% include "wfm/modals/time_compensation_modal.html" %}
+    {% include "wfm/modals/sick_leave_modal.html" %}
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function openWorkingHoursModal(id, date) {
-    if (id) {
-        // Existierender Eintrag
-        fetch(`/api/working-hours/${id}/`)
-            .then(response => response.json())
-            .then(data => {
+// Verbesserte Modal-Initialisierung
+document.addEventListener('DOMContentLoaded', function() {
+    // Hole Modal-Element
+    const workingHoursModal = document.getElementById('workingHoursModal');
+    if (!workingHoursModal) return;  // Früher Ausstieg wenn Modal nicht existiert
+    
+    // Erstelle Modal-Instanz
+    const modal = new bootstrap.Modal(workingHoursModal);
+    
+    // Event-Handler für Edit-Buttons
+    document.querySelectorAll('[data-bs-target="#workingHoursModal"]').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const id = this.getAttribute('data-id');
+            const date = this.getAttribute('data-date');
+            
+            if (id) {
+                fetch(`/api/working-hours/${id}/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        fillWorkingHoursModal({
+                            ...data,
+                            date: date
+                        });
+                        modal.show();
+                    });
+            } else {
                 fillWorkingHoursModal({
-                    ...data,
-                    date: date  // Nutze das übergebene Datum statt dem aus der API
+                    id: '',
+                    date: date,
+                    start_time: '',
+                    end_time: '',
+                    break_duration: '30',
+                    notes: ''
                 });
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Fehler beim Laden der Daten');
-            });
-    } else {
-        // Neuer Eintrag für das ausgewählte Datum
-        fillWorkingHoursModal({
-            id: '',
-            date: date,  // Nutze das übergebene Datum
-            start_time: '',
-            end_time: '',
-            break_duration: '30',
-            notes: ''
+                modal.show();
+            }
+        });
+    });
+});
+
+// Verbesserte Delete-Funktion
+function deleteWorkingHours(id) {
+    if (!id) {
+        console.warn('No ID provided for deletion');
+        return;
+    }
+    
+    if (confirm('{% trans "Arbeitszeit wirklich löschen?" %}')) {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (!csrfToken) {
+            console.error('CSRF token not found');
+            return;
+        }
+        
+        fetch(`/api/working-hours/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken.value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || '{% trans "Fehler beim Löschen" %}');
+            }
+        })
+        .catch(error => {
+            console.error('Delete error:', error);
+            alert('{% trans "Ein Fehler ist aufgetreten" %}');
         });
     }
-    new bootstrap.Modal(document.getElementById('workingHoursModal')).show();
 }
 
 function fillWorkingHoursModal(data) {
@@ -401,7 +454,6 @@ function fillWorkingHoursModal(data) {
 function saveWorkingHours() {
     const form = document.getElementById('workingHoursForm');
     const formData = {
-        date: form.date.value,
         start_time: form.start_time.value,
         end_time: form.end_time.value,
         break_duration: parseInt(form.break_duration.value),
@@ -409,9 +461,10 @@ function saveWorkingHours() {
     };
 
     const id = document.getElementById('workingHoursId').value;
+    const date = document.getElementById('workDate').value;
     const url = id ? 
         `/api/working-hours/${id}/update/` : 
-        `/api/working-hours/${formData.date}/save/`;  // Nutze das Datum für neue Einträge
+        `/api/working-hours/${date}/save/`;
 
     fetch(url, {
         method: 'POST',
@@ -419,7 +472,7 @@ function saveWorkingHours() {
             'Content-Type': 'application/json',
             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData)  // date wird über die URL übergeben
     })
     .then(response => response.json())
     .then(data => {
@@ -436,28 +489,6 @@ function saveWorkingHours() {
         console.error('Error:', error);
         alert('{% trans "Ein Fehler ist aufgetreten" %}');
     });
-}
-
-function deleteWorkingHours() {
-    const id = document.getElementById('workingHoursId').value;
-    if (!id) return;
-    
-    if (confirm('{% trans "Arbeitszeit wirklich löschen?" %}')) {
-        fetch(`/api/working-hours/${id}/delete/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert(data.error || '{% trans "Fehler beim Löschen" %}');
-            }
-        });
-    }
 }
 
 // Initialisiere Tooltips

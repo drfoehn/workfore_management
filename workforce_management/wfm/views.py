@@ -101,12 +101,11 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         else:
             employees = [self.request.user]
 
-        # 5. Erstelle Liste aller Werktage (bleibt gleich)
+        # 5. Erstelle Liste aller Tage im Monat (nicht nur Werktage)
         workdays = []
         current_day = current_date
         while current_day.month == month:
-            if current_day.weekday() < 5:  # Nur Werktage (0-4 = Montag-Freitag)
-                workdays.append(current_day)
+            workdays.append(current_day)
             current_day += timedelta(days=1)
 
         # 6. Hole alle relevanten Daten für den Monat
@@ -155,19 +154,19 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
 
         # 8. Erstelle Tageseinträge
         days_data = []
-        for day in workdays:  # Äußere Schleife: Tage
+        for day in workdays:
             # Prüfe ob Tag ein Schließtag ist
             closure = ClosureDay.objects.filter(
-                models.Q(date__year=year, date__month=month) |  # Einmalige Schließtage
+                models.Q(date__year=year, date__month=month) |
                 models.Q(
                     is_recurring=True,
                     date__month=month,
-                    date__day__in=[day.day for day in workdays]  # Nur relevante Tage
+                    date__day=day.day
                 )
             ).filter(date=day).first()
             
             if closure:
-                # Bei Schließtag: Nur ein Eintrag für alle Mitarbeiter
+                # Bei Schließtag: Nur ein Eintrag
                 entry = {
                     'date': day,
                     'employee': None,
@@ -182,45 +181,93 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     'difference': 0
                 }
                 days_data.append(entry)
+            elif day.weekday() >= 5:  # Wochenende
+                # Bei Wochenende: Nur ein Eintrag
+                entry = {
+                    'date': day,
+                    'employee': None,
+                    'working_hours': None,
+                    'schedule': None,
+                    'vacation': None,
+                    'time_comp': None,
+                    'sick_leave': None,
+                    'closure': None,
+                    'soll_hours': 0,
+                    'ist_hours': 0,
+                    'difference': 0,
+                    'is_weekend': True
+                }
+                days_data.append(entry)
             else:
-                # Bei normalen Tagen: Ein Eintrag pro Mitarbeiter
-                for employee in employees:  # Innere Schleife: Mitarbeiter
+                # Normale Werktage: Filtere Mitarbeiter nach tatsächlichen Einträgen
+                day_entries = []
+                for employee in employees:
+                    # Prüfe ob es Einträge für diesen Mitarbeiter an diesem Tag gibt
+                    has_working_hours = working_hours_dict.get((day, employee.id))
+                    has_schedule = schedule_dict.get((employee.id, day.weekday()))
+                    has_vacation = next((v for v in vacations 
+                        if v.employee_id == employee.id and 
+                        v.start_date <= day <= v.end_date), None)
+                    has_time_comp = next((tc for tc in time_comps 
+                        if tc.employee_id == employee.id and 
+                        tc.date == day), None)
+                    has_sick_leave = next((sl for sl in sick_leaves 
+                        if sl.employee_id == employee.id and 
+                        sl.start_date <= day <= sl.end_date), None)
+
+                    # Nur wenn es tatsächlich Einträge gibt oder ein Schedule existiert
+                    if has_working_hours or has_schedule or has_vacation or has_time_comp or has_sick_leave:
+                        entry = {
+                            'date': day,
+                            'employee': employee,
+                            'working_hours': has_working_hours,
+                            'schedule': has_schedule,
+                            'vacation': has_vacation,
+                            'time_comp': has_time_comp,
+                            'sick_leave': has_sick_leave,
+                            'is_weekend': False
+                        }
+
+                        # Berechne Stunden nur für normale Tage
+                        if has_schedule:
+                            start = datetime.combine(date.min, has_schedule.start_time)
+                            end = datetime.combine(date.min, has_schedule.end_time)
+                            entry['soll_hours'] = (end - start).total_seconds() / 3600
+                            total_soll += entry['soll_hours']
+
+                        if has_working_hours:
+                            start = datetime.combine(date.min, has_working_hours.start_time)
+                            end = datetime.combine(date.min, has_working_hours.end_time)
+                            entry['ist_hours'] = (end - start).total_seconds() / 3600
+                            if has_working_hours.break_duration:
+                                entry['ist_hours'] -= has_working_hours.break_duration.total_seconds() / 3600
+                            total_ist += entry['ist_hours']
+
+                        entry['difference'] = entry.get('ist_hours', 0) - entry.get('soll_hours', 0)
+                        if not (has_vacation or has_time_comp or has_sick_leave):
+                            total_diff += entry['difference']
+
+                        day_entries.append(entry)
+
+                # Wenn keine Einträge für diesen Tag existieren, füge einen leeren Tag hinzu
+                if not day_entries:
                     entry = {
                         'date': day,
-                        'employee': employee,
-                        'working_hours': working_hours_dict.get((day, employee.id)),
-                        'schedule': schedule_dict.get((employee.id, day.weekday())),
-                        'vacation': next((v for v in vacations 
-                            if v.employee_id == employee.id and 
-                            v.start_date <= day <= v.end_date), None),
-                        'time_comp': next((tc for tc in time_comps 
-                            if tc.employee_id == employee.id and 
-                            tc.date == day), None),
-                        'sick_leave': next((sl for sl in sick_leaves 
-                            if sl.employee_id == employee.id and 
-                            sl.start_date <= day <= sl.end_date), None)
+                        'employee': None,
+                        'working_hours': None,
+                        'schedule': None,
+                        'vacation': None,
+                        'time_comp': None,
+                        'sick_leave': None,
+                        'closure': None,
+                        'soll_hours': 0,
+                        'ist_hours': 0,
+                        'difference': 0,
+                        'is_weekend': False
                     }
-
-                    # Berechne Stunden nur für normale Tage
-                    if entry['schedule']:
-                        start = datetime.combine(date.min, entry['schedule'].start_time)
-                        end = datetime.combine(date.min, entry['schedule'].end_time)
-                        entry['soll_hours'] = (end - start).total_seconds() / 3600
-                        total_soll += entry['soll_hours']
-
-                    if entry['working_hours']:
-                        start = datetime.combine(date.min, entry['working_hours'].start_time)
-                        end = datetime.combine(date.min, entry['working_hours'].end_time)
-                        entry['ist_hours'] = (end - start).total_seconds() / 3600
-                        if entry['working_hours'].break_duration:
-                            entry['ist_hours'] -= entry['working_hours'].break_duration.total_seconds() / 3600
-                        total_ist += entry['ist_hours']
-
-                    entry['difference'] = entry.get('ist_hours', 0) - entry.get('soll_hours', 0)
-                    if not (entry['vacation'] or entry['time_comp'] or entry['sick_leave']):
-                        total_diff += entry['difference']
-
                     days_data.append(entry)
+                else:
+                    days_data.extend(day_entries)
 
         # Entferne die doppelte Summenberechnung am Ende
         context.update({
