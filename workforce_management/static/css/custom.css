@@ -1,0 +1,245 @@
+:root {
+  --red-salsa: #f94144;
+  --orange-red: #f3722c;
+  --yellow-orange: #f8961e;
+  --maize-crayola: #f9c74f;
+  --pistachio: #90be6d;
+  --zomp: #43aa8b;
+  --queen-blue: #577590;
+
+  /* Bootstrap-Variablen überschreiben */
+  --bs-primary: var(--queen-blue);
+  --bs-secondary: var(--zomp);
+  --bs-success: var(--pistachio);
+  --bs-info: var(--queen-blue);
+  --bs-warning: var(--maize-crayola);
+  --bs-danger: var(--red-salsa);
+  --bs-light: #f8f9fa;
+  --bs-dark: #212529;
+}
+
+/* Bootstrap-Komponenten mit neuen Farben */
+.btn-primary {
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--zomp);
+  border-color: var(--zomp);
+}
+
+.btn-success {
+  background-color: var(--bs-success);
+  border-color: var(--bs-success);
+}
+
+.btn-success:hover {
+  background-color: var(--zomp);
+  border-color: var(--zomp);
+}
+
+/* Status-Badges */
+.badge.bg-primary {
+  background-color: var(--bs-primary) !important;
+}
+
+.badge.bg-secondary {
+  background-color: var(--bs-secondary) !important;
+}
+
+.badge.bg-success {
+  background-color: var(--bs-success) !important;
+}
+
+.badge.bg-warning {
+  background-color: var(--bs-warning) !important;
+}
+
+.badge.bg-info {
+  background-color: var(--bs-info) !important;
+}
+
+.badge.bg-danger {
+  background-color: var(--bs-danger) !important;
+}
+
+/* Links und Icons */
+a {
+  color: var(--bs-primary);
+}
+
+a:hover {
+  color: var(--zomp);
+}
+
+/* Tabellen */
+.table-primary {
+  background-color: var(--bs-primary) !important;
+}
+
+.table-success {
+  background-color: var(--bs-success) !important;
+}
+
+/* Outline Buttons */
+.btn-outline-primary {
+  color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+  color: white;
+}
+
+.btn-outline-success {
+  color: var(--bs-success);
+  border-color: var(--bs-success);
+}
+
+.btn-outline-success:hover {
+  background-color: var(--bs-success);
+  border-color: var(--bs-success);
+  color: white;
+}
+
+/* Alerts */
+.alert-primary {
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+  color: white;
+}
+
+.alert-success {
+  background-color: var(--bs-success);
+  border-color: var(--bs-success);
+  color: white;
+}
+
+.alert-warning {
+  background-color: var(--bs-warning);
+  border-color: var(--yellow-orange);
+  color: #856404;
+}
+
+.alert-info {
+  background-color: var(--bs-info);
+  border-color: var(--bs-info);
+  color: white;
+}
+
+.alert-danger {
+  background-color: var(--bs-danger);
+  border-color: var(--orange-red);
+  color: white;
+}
+
+/* Icons */
+.bi-umbrella {
+  color: var(--bs-success);
+}
+
+.bi-clock-history {
+  color: var(--bs-info);
+}
+
+.bi-hospital {
+  color: var(--bs-danger);
+}
+
+/* Text Colors */
+.text-primary {
+  color: var(--bs-primary) !important;
+}
+
+.text-success {
+  color: var(--bs-success) !important;
+}
+
+.text-warning {
+  color: var(--bs-warning) !important;
+}
+
+.text-danger {
+  color: var(--bs-danger) !important;
+}
+
+/* Background Colors */
+.bg-primary {
+  background-color: var(--bs-primary) !important;
+}
+
+.bg-success {
+  background-color: var(--bs-success) !important;
+}
+
+.bg-warning {
+  background-color: var(--bs-warning) !important;
+}
+
+.bg-danger {
+  background-color: var(--bs-danger) !important;
+}
+
+/* Custom Utility Classes */
+.text-pistachio {
+  color: var(--pistachio) !important;
+}
+
+.text-zomp {
+  color: var(--zomp) !important;
+}
+
+.text-queen-blue {
+  color: var(--queen-blue) !important;
+}
+
+.bg-pistachio {
+  background-color: var(--pistachio) !important;
+}
+
+.bg-zomp {
+  background-color: var(--zomp) !important;
+}
+
+.bg-queen-blue {
+  background-color: var(--queen-blue) !important;
+}
+
+/* Focus States */
+.btn:focus, 
+.btn-primary:focus {
+  box-shadow: 0 0 0 0.25rem rgba(87, 117, 144, 0.25);
+}
+
+.btn-success:focus {
+  box-shadow: 0 0 0 0.25rem rgba(144, 190, 109, 0.25);
+}
+
+/* Active States */
+.btn-primary:active,
+.btn-primary.active {
+  background-color: var(--zomp);
+  border-color: var(--zomp);
+}
+
+.btn-success:active,
+.btn-success.active {
+  background-color: var(--pistachio);
+  border-color: var(--pistachio);
+}
+
+/* Disabled States */
+.btn-primary:disabled {
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+  opacity: 0.65;
+}
+
+.btn-success:disabled {
+  background-color: var(--bs-success);
+  border-color: var(--bs-success);
+  opacity: 0.65;
+} 

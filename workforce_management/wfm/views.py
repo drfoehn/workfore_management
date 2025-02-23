@@ -284,7 +284,17 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             'current_month': month,
             'total_soll': total_soll,
             'total_ist': total_ist,
-            'total_diff': total_diff
+            'total_diff': total_diff,
+            'colors': {
+                'primary': '#90BE6D',    # Pistachio
+                'secondary': '#577590',   # Queen Blue
+                'success': '#43AA8B',     # Zomp
+                'warning': '#F9C74F',     # Maize Crayola
+                'info': '#577590',        # Queen Blue
+                'danger': '#F94144',      # Red Salsa
+                'orange': '#F3722C',      # Orange Red
+                'yellow': '#F8961E',      # Yellow Orange
+            }
         })
 
         return context
@@ -1202,10 +1212,15 @@ def api_calendar_events(request):
         }, status=500)
 
 def generate_color_for_user(user_id):
-    """Generiert eine konsistente Farbe für einen Benutzer"""
+    """Generiert eine konsistente Farbe für einen Benutzer basierend auf der CI-Palette"""
     colors = [
-        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
-        '#D4A5A5', '#9B59B6', '#3498DB', '#E67E22', '#2ECC71'
+        '#90BE6D',  # Pistachio (Hauptfarbe)
+        '#43AA8B',  # Zomp
+        '#577590',  # Queen Blue
+        '#F9C74F',  # Maize Crayola
+        '#F8961E',  # Yellow Orange
+        '#F3722C',  # Orange Red
+        '#F94144'   # Red Salsa
     ]
     return colors[user_id % len(colors)]
 
@@ -1616,27 +1631,27 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
         
         return context
 
-@login_required
-def api_working_hours_update(request, id):
-    """API für das Aktualisieren von Arbeitszeiten"""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Invalid method'}, status=405)
+# @login_required
+# def api_working_hours_update(request, id):
+#     """API für das Aktualisieren von Arbeitszeiten"""
+#     if request.method != 'POST':
+#         return JsonResponse({'error': 'Invalid method'}, status=405)
         
-    working_hours = get_object_or_404(WorkingHours, pk=id)
-    if request.user.role != 'OWNER' and working_hours.employee != request.user:
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+#     working_hours = get_object_or_404(WorkingHours, pk=id)
+#     if request.user.role != 'OWNER' and working_hours.employee != request.user:
+#         return JsonResponse({'error': 'Permission denied'}, status=403)
         
-    try:
-        data = json.loads(request.body)
-        working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-        working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-        working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
-        working_hours.notes = data.get('notes', '')
-        working_hours.save()
+#     try:
+#         data = json.loads(request.body)
+#         working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+#         working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+#         working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
+#         working_hours.notes = data.get('notes', '')
+#         working_hours.save()
         
-        return JsonResponse({'success': True})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+#         return JsonResponse({'success': True})
+#     except Exception as e:
+#         return JsonResponse({'error': str(e)}, status=400)
 
 class TherapistBookingListView(LoginRequiredMixin, ListView):
     model = TherapistBooking
