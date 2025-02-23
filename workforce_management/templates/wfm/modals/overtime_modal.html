@@ -1,120 +1,207 @@
 {% load i18n %}
 
-<div class="modal fade" id="overtimeModal" tabindex="-1">
+<div class="modal fade" id="overtimeModal" tabindex="-1" aria-labelledby="overtimeModalLabel">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">{% trans "Überstunden" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="overtimeModalLabel">{% trans "Überstunden" %}</h5>
+                <button type="button" 
+                        class="btn-close" 
+                        data-bs-dismiss="modal" 
+                        aria-label="{% trans 'Schließen' %}">
+                </button>
             </div>
             <div class="modal-body">
-                <div class="card">
-                    <div class="card-body">
-                        <table class="table">
-                            <tr>
-                                <th>{% trans "Gesamte Überstunden" %}:</th>
-                                <td id="total_overtime">0</td>
-                            </tr>
-                            <tr>
-                                <th>{% trans "Umgebuchte Stunden (Zeitausgleich)" %}:</th>
-                                <td id="transferred_hours">0</td>
-                            </tr>
-                            <tr>
-                                <th>{% trans "Zur Auszahlung" %}:</th>
-                                <td id="payment_hours">0</td>
-                            </tr>
-                            <tr>
-                                <th>{% trans "Status" %}:</th>
-                                <td id="status_badge"></td>
-                            </tr>
-                        </table>
-
-                        <form id="transferForm" method="post" action="{% url 'wfm:overtime-overview' %}" class="mt-4 d-none">
-                            {% csrf_token %}
-                            <div class="alert alert-info">
-                                <strong>{% trans "Hinweis" %}:</strong> 
-                                {% trans "Sie können bis zum 7. des Folgemonats Überstunden in Ihr Zeitausgleichskonto übertragen." %}
-                                {% trans "Danach werden die restlichen Stunden automatisch zur Auszahlung gebracht." %}
-                            </div>
-
-                            <div class="form-group">
-                                <label for="hours_for_timecomp">{% trans "Stunden für Zeitausgleich" %}:</label>
-                                <input type="number" 
-                                       class="form-control" 
-                                       id="hours_for_timecomp" 
-                                       name="hours_for_timecomp" 
-                                       min="0" 
-                                       step="0.5"
-                                       required>
-                                <small class="form-text text-muted">
-                                    {% trans "Verfügbare Stunden" %}: <span id="available_hours">0</span>
-                                </small>
-                            </div>
-
-                            <div class="mt-3">
-                                <button type="submit" class="btn btn-primary">
-                                    {% trans "Überstunden umbuchen" %}
-                                </button>
-                            </div>
-                        </form>
+                <div class="mb-3">
+                    <div class="row">
+                        <div class="col-8">{% trans "Gesamte Überstunden" %}:</div>
+                        <div class="col-4" id="totalOvertime">0</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-8">{% trans "Umgebuchte Stunden (Zeitausgleich)" %}:</div>
+                        <div class="col-4" id="transferredHours">0</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-8">{% trans "Zur Auszahlung" %}:</div>
+                        <div class="col-4" id="paymentHours">0</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-8">{% trans "Status" %}:</div>
+                        <div class="col-4" id="overtimeStatus">
+                            <span class="badge bg-warning">{% trans "Offen" %}</span>
+                        </div>
                     </div>
                 </div>
+
+                <form id="overtimeForm" class="needs-validation" novalidate>
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="hoursForTimecomp" class="form-label">
+                            {% trans "Stunden für Zeitausgleich" %}
+                        </label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="hoursForTimecomp" 
+                               name="hours_for_timecomp"
+                               step="0.5" 
+                               min="0" 
+                               required>
+                        <div class="invalid-feedback">
+                            {% trans "Bitte geben Sie die Stunden ein" %}
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" 
+                        class="btn btn-secondary" 
+                        data-bs-dismiss="modal"
+                        id="overtimeCloseButton">
+                    {% trans "Schließen" %}
+                </button>
+                <button type="button" 
+                        class="btn btn-primary" 
+                        onclick="submitOvertimeTransfer()"
+                        id="overtimeSubmitButton">
+                    {% trans "Übertragen" %}
+                </button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-function loadOvertimeStatus() {
-    fetch('{% url "wfm:overtime-overview" %}', {
+document.addEventListener('DOMContentLoaded', function() {
+    const overtimeModal = document.getElementById('overtimeModal');
+    if (overtimeModal) {
+        // Modal Events
+        overtimeModal.addEventListener('show.bs.modal', loadOvertimeData);
+        overtimeModal.addEventListener('hide.bs.modal', function() {
+            // Remove focus before hiding
+            document.activeElement.blur();
+            // Reset form
+            const form = document.getElementById('overtimeForm');
+            if (form) {
+                form.reset();
+                form.classList.remove('was-validated');
+            }
+        });
+        
+        // Handle Escape key
+        overtimeModal.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                const closeButton = document.getElementById('overtimeCloseButton');
+                if (closeButton) {
+                    closeButton.click();
+                }
+            }
+        });
+    }
+});
+
+function loadOvertimeData() {
+    fetch('{% url "wfm:api-overtime-overview" %}', {
         headers: {
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest'  // Wichtig!
         }
     })
-    .then(response => response.json())
-    .then(data => {
-        // Aktualisiere das Modal
-        document.getElementById('total_overtime').textContent = data.overtime_hours + ' {% trans "Stunden" %}';
-        document.getElementById('transferred_hours').textContent = data.transferred_hours + ' {% trans "Stunden" %}';
-        document.getElementById('payment_hours').textContent = data.payment_hours + ' {% trans "Stunden" %}';
-        document.getElementById('available_hours').textContent = data.overtime_hours;
-        
-        if (data.is_finalized) {
-            document.getElementById('status_badge').innerHTML = '<span class="badge bg-success">{% trans "Abgerechnet" %}</span>';
-            document.getElementById('transferForm').classList.add('d-none');
-        } else {
-            document.getElementById('status_badge').innerHTML = '<span class="badge bg-warning">{% trans "Offen" %}</span>';
-            if (data.can_transfer) {
-                document.getElementById('transferForm').classList.remove('d-none');
-                document.getElementById('hours_for_timecomp').max = data.overtime_hours;
-                document.getElementById('hours_for_timecomp').value = data.transferred_hours;
-            }
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
         }
+        return response.json();
+    })
+    .then(data => {
+        document.getElementById('totalOvertime').textContent = data.overtime_hours.toFixed(1);
+        document.getElementById('transferredHours').textContent = data.transferred_hours.toFixed(1);
+        document.getElementById('paymentHours').textContent = data.payment_hours.toFixed(1);
+        
+        // Status-Badge aktualisieren
+        const statusBadge = document.getElementById('overtimeStatus');
+        if (data.is_finalized) {
+            statusBadge.innerHTML = '<span class="badge bg-success">{% trans "Abgerechnet" %}</span>';
+        } else {
+            statusBadge.innerHTML = '<span class="badge bg-warning">{% trans "Offen" %}</span>';
+        }
+        
+        // Button-Status aktualisieren
+        const submitButton = document.getElementById('overtimeSubmitButton');
+        if (submitButton) {
+            submitButton.disabled = data.is_finalized || !data.can_transfer;
+        }
+        
+        // Input-Feld aktualisieren
+        const input = document.getElementById('hoursForTimecomp');
+        if (input) {
+            input.max = data.overtime_hours - data.transferred_hours;
+            input.disabled = data.is_finalized || !data.can_transfer;
+            input.value = '';  // Reset input value
+        }
+    })
+    .catch(error => {
+        console.error('Error loading overtime data:', error);
+        alert('{% trans "Fehler beim Laden der Überstunden" %}');
     });
 }
 
-document.getElementById('overtimeModal').addEventListener('show.bs.modal', loadOvertimeStatus);
-
-document.getElementById('transferForm').addEventListener('submit', function(e) {
-    e.preventDefault();
+function submitOvertimeTransfer() {
+    const form = document.getElementById('overtimeForm');
+    if (!form.checkValidity()) {
+        form.classList.add('was-validated');
+        return;
+    }
     
-    const formData = new FormData(this);
+    const hours = parseFloat(document.getElementById('hoursForTimecomp').value);
+    const submitButton = document.getElementById('overtimeSubmitButton');
     
-    fetch(this.action, {
+    // Disable button during submission
+    if (submitButton) submitButton.disabled = true;
+    
+    fetch('{% url "wfm:api-overtime-overview" %}', {
         method: 'POST',
         headers: {
-            'X-CSRFToken': formData.get('csrfmiddlewaretoken'),
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
         },
-        body: formData
+        body: JSON.stringify({
+            hours_for_timecomp: hours
+        })
     })
-    .then(response => response.text())
-    .then(() => {
-        bootstrap.Modal.getInstance(document.getElementById('overtimeModal')).hide();
-        showAlert('success', '{% trans "Überstunden wurden erfolgreich übertragen" %}');
-        setTimeout(loadOvertimeStatus, 500);
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Aktualisiere die Anzeige direkt
+            document.getElementById('totalOvertime').textContent = data.overtime_hours.toFixed(1);
+            document.getElementById('transferredHours').textContent = data.transferred_hours.toFixed(1);
+            document.getElementById('paymentHours').textContent = data.payment_hours.toFixed(1);
+            
+            // Zeige Erfolgsmeldung
+            alert('{% trans "Überstunden wurden erfolgreich übertragen" %}');
+            
+            // Remove focus and close modal
+            document.activeElement.blur();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('overtimeModal'));
+            if (modal) {
+                modal.hide();
+            }
+        } else {
+            alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+        }
     })
     .catch(error => {
-        showAlert('danger', error.message);
+        console.error('Error submitting overtime transfer:', error);
+        alert('{% trans "Fehler beim Übertragen der Stunden" %}');
+    })
+    .finally(() => {
+        // Re-enable button
+        if (submitButton) submitButton.disabled = false;
     });
-});
+}
 </script>

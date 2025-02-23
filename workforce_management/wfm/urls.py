@@ -57,9 +57,8 @@ urlpatterns = [
     path('absence-management/', views.AbsenceManagementView.as_view(), name='absence-management'),
 
     # Overtime
+    path('api/overtime/overview/', views.OvertimeOverviewView.as_view(), name='api-overtime-overview'),
     path('overtime/', views.OvertimeOverviewView.as_view(), name='overtime-overview'),
-
-    
 ] 
 
 

@@ -406,7 +406,7 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
         month = target_date.month
         
         # Berechne die Überstunden
-        total_overtime = calculate_overtime_hours(request.user, year, month)
+        total_overtime = Decimal(str(calculate_overtime_hours(request.user, year, month)))  # Convert to Decimal
         
         # Hole oder erstelle das Überstundenkonto
         overtime_account, created = OvertimeAccount.objects.get_or_create(
@@ -433,6 +433,15 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             )
         )
 
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'overtime_hours': float(overtime_account.total_overtime),
+                'transferred_hours': float(overtime_account.hours_for_timecomp),
+                'payment_hours': float(overtime_account.hours_for_payment),
+                'is_finalized': overtime_account.is_finalized,
+                'can_transfer': can_transfer
+            })
+            
         context = {
             'overtime_hours': overtime_account.total_overtime,
             'transferred_hours': overtime_account.hours_for_timecomp,
@@ -441,11 +450,7 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             'can_transfer': can_transfer,
             'month_name': target_date.strftime('%B %Y')
         }
-
-        # Wenn AJAX-Request, gib JSON zurück
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse(context)
-            
+        
         return render(request, self.template_name, context)
 
     def post(self, request):
@@ -453,7 +458,8 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             if request.user.role not in ['ASSISTANT', 'CLEANING']:
                 raise PermissionDenied
             
-            hours_for_timecomp = Decimal(request.POST.get('hours_for_timecomp', 0))
+            data = json.loads(request.body)  # Änderung hier: request.body statt request.POST
+            hours_for_timecomp = Decimal(str(data.get('hours_for_timecomp', 0)))  # Konvertiere zu Decimal
             
             today = date.today()
             if today.day <= 7:
@@ -468,37 +474,37 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             )
             
             if overtime_account.is_finalized:
-                messages.error(request, _('Überstunden wurden bereits abgerechnet'))
-                return redirect('wfm:overtime-overview')
+                return JsonResponse({
+                    'success': False,
+                    'error': _('Überstunden wurden bereits abgerechnet')
+                })
                 
-            # Berechne die verfügbaren Stunden (Gesamtstunden minus bereits umgebuchte)
+            # Berechne die verfügbaren Stunden
             available_hours = overtime_account.total_overtime - overtime_account.hours_for_timecomp
             
             if hours_for_timecomp > available_hours:
-                messages.error(request, _('Nicht genügend Überstunden verfügbar'))
-                return redirect('wfm:overtime-overview')
-                
-            # Addiere die neuen Stunden zu den bereits umgebuchten
-            overtime_account.hours_for_timecomp += hours_for_timecomp
-            overtime_account.save()  # save() Methode berechnet hours_for_payment automatisch
-            
-            messages.success(request, _('Überstunden wurden erfolgreich übertragen'))
-            
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
-                    'success': True,
-                    'overtime_hours': float(overtime_account.total_overtime),
-                    'transferred_hours': float(overtime_account.hours_for_timecomp),
-                    'payment_hours': float(overtime_account.hours_for_payment)
+                    'success': False,
+                    'error': _('Nicht genügend Überstunden verfügbar')
                 })
-            return redirect('wfm:overtime-overview')
+                
+            # Addiere die neuen Stunden
+            overtime_account.hours_for_timecomp += hours_for_timecomp
+            overtime_account.save()
+            
+            return JsonResponse({
+                'success': True,
+                'overtime_hours': float(overtime_account.total_overtime),
+                'transferred_hours': float(overtime_account.hours_for_timecomp),
+                'payment_hours': float(overtime_account.hours_for_payment)
+            })
             
         except Exception as e:
             logger.error(f"Overtime overview error: {str(e)}", exc_info=True)
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': str(e)}, status=500)
-            messages.error(request, str(e))
-            return redirect('wfm:overtime-overview')
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
 
 class VacationListView(LoginRequiredMixin, ListView):
     model = Vacation
