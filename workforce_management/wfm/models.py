@@ -6,10 +6,12 @@ from decimal import Decimal
 from django.forms import DateField as FormDateField
 from datetime import timedelta
 from django.core.exceptions import ValidationError
-from datetime import datetime
+from datetime import datetime, date
 from django.conf import settings
-from datetime import date
-from django.db.models import Sum
+from django.db.models import Q, Sum
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+
 
 class CustomUser(AbstractUser):
     ROLE_CHOICES = [
@@ -437,4 +439,52 @@ class OvertimeAccount(models.Model):
         if not self.is_finalized:
             return 0
         return self.hours_for_timecomp
+
+class ClosureDay(models.Model):
+    CLOSURE_TYPES = [
+        ('HOLIDAY', _('Gesetzlicher Feiertag')),
+        ('VACATION', _('Ordinationsurlaub')),
+        ('TRAINING', _('Fortbildung')),
+        ('OTHER', _('Sonstiges'))
+    ]
+
+    date = models.DateField(_('Datum'))
+    name = models.CharField(_('Bezeichnung'), max_length=100)
+    type = models.CharField(
+        _('Art der Schließung'),
+        max_length=20,
+        choices=CLOSURE_TYPES,
+        default='OTHER'
+    )
+    is_recurring = models.BooleanField(
+        _('Jährlich wiederkehrend'),
+        default=False,
+        help_text=_('Gilt für gesetzliche Feiertage')
+    )
+    notes = models.TextField(_('Notizen'), blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['date']
+        verbose_name = _('Schließtag')
+        verbose_name_plural = _('Schließtage')
+        unique_together = ['date', 'type']  # Verhindert doppelte Einträge
+
+    def __str__(self):
+        return f"{self.date.strftime('%d.%m.%Y')}: {self.name}"
+
+    @classmethod
+    def is_closure_day(cls, check_date):
+        """Prüft ob ein Datum ein Schließtag ist"""
+        # Prüfe einmalige Schließtage
+        if cls.objects.filter(date=check_date).exists():
+            return True
+            
+        # Prüfe wiederkehrende Feiertage (nur Monat und Tag)
+        return cls.objects.filter(
+            is_recurring=True,
+            date__month=check_date.month,
+            date__day=check_date.day
+        ).exists()
 

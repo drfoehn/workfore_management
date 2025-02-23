@@ -219,9 +219,13 @@
                             </td>
                             {% if user.role == 'OWNER' %}
                                 <td>
-                                    <span class="badge" style="background-color: {{ date_entry.employee.color|default:'#6c757d' }}">
-                                        {{ date_entry.employee.get_full_name|default:date_entry.employee.username|default:'' }}
-                                    </span>
+                                    {% if date_entry.closure %}
+                                        {# Keine Mitarbeiteranzeige bei Schließtagen #}
+                                    {% else %}
+                                        <span class="badge" style="background-color: {{ date_entry.employee.color|default:'#6c757d' }}">
+                                            {{ date_entry.employee.get_full_name|default:date_entry.employee.username|default:'' }}
+                                        </span>
+                                    {% endif %}
                                 </td>
                             {% endif %}
                             <td class="d-none d-md-table-cell text-nowrap">
@@ -248,7 +252,11 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% if date_entry.vacation %}
+                                {% if date_entry.closure %}
+                                    <span class="badge bg-secondary">
+                                        {{ date_entry.closure.get_type_display }}: {{ date_entry.closure.name }}
+                                    </span>
+                                {% elif date_entry.vacation %}
                                     <span class="badge {% if date_entry.vacation.status == 'REQUESTED' %}bg-warning{% else %}bg-primary{% endif %}">
                                         {% if date_entry.vacation.status == 'REQUESTED' %}
                                             {% trans "Beantragt" %}

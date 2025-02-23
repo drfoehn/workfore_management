@@ -13,8 +13,11 @@ from .models import (
     TherapistScheduleTemplate,
     MonthlyReport,
     OvertimeAccount,
-    UserDocument
+    UserDocument,
+    ClosureDay
 )
+from import_export import resources, fields
+from import_export.admin import ImportExportModelAdmin
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -126,3 +129,18 @@ class UserDocumentAdmin(admin.ModelAdmin):
     list_filter = ['uploaded_at', 'user']
     search_fields = ['user__username', 'title', 'notes']
     date_hierarchy = 'uploaded_at'
+
+class ClosureDayResource(resources.ModelResource):
+    class Meta:
+        model = ClosureDay
+        import_id_fields = ['date', 'type']
+        fields = ('date', 'name', 'type', 'is_recurring', 'notes')
+        export_order = fields
+
+@admin.register(ClosureDay)
+class ClosureDayAdmin(ImportExportModelAdmin):
+    list_display = ['date', 'name', 'type', 'is_recurring']
+    list_filter = ['type', 'is_recurring']
+    search_fields = ['name', 'notes']
+    date_hierarchy = 'date'
+    resource_class = ClosureDayResource

@@ -14,7 +14,8 @@ from .models import (
     TherapistBooking,
     TherapistScheduleTemplate,
     CustomUser,
-    OvertimeAccount
+    OvertimeAccount,
+    ClosureDay
 )
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count
@@ -100,7 +101,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         else:
             employees = [self.request.user]
 
-        # 5. Erstelle Liste aller Werktage
+        # 5. Erstelle Liste aller Werktage (bleibt gleich)
         workdays = []
         current_day = current_date
         while current_day.month == month:
@@ -139,10 +140,12 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             end_date__gte=current_date
         ).select_related('employee')
 
-        print(f"Debug - Gefundene Urlaube: {vacations.count()}")  # Debug
-        print(f"Debug - Gefundene Krankenstände: {sick_leaves.count()}")  # Debug
+        # Initialisiere die Summen vor der Schleife
+        total_soll = 0
+        total_ist = 0
+        total_diff = 0
 
-        # 7. Erstelle Lookup-Dictionaries
+        # 7. Erstelle Lookup-Dictionaries (bleibt gleich)
         working_hours_dict = {(wh.date, wh.employee_id): wh for wh in working_hours}
         schedule_dict = {}
         for schedule in schedules:
@@ -152,55 +155,74 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
 
         # 8. Erstelle Tageseinträge
         days_data = []
-        for day in workdays:
-            for employee in employees:
+        for day in workdays:  # Äußere Schleife: Tage
+            # Prüfe ob Tag ein Schließtag ist
+            closure = ClosureDay.objects.filter(
+                models.Q(date__year=year, date__month=month) |  # Einmalige Schließtage
+                models.Q(
+                    is_recurring=True,
+                    date__month=month,
+                    date__day__in=[day.day for day in workdays]  # Nur relevante Tage
+                )
+            ).filter(date=day).first()
+            
+            if closure:
+                # Bei Schließtag: Nur ein Eintrag für alle Mitarbeiter
                 entry = {
                     'date': day,
-                    'employee': employee,
-                    'working_hours': working_hours_dict.get((day, employee.id)),
-                    'schedule': schedule_dict.get((employee.id, day.weekday())),
-                    'vacation': next((v for v in vacations 
-                        if v.employee_id == employee.id and 
-                        v.start_date <= day <= v.end_date), None),
-                    'time_comp': next((tc for tc in time_comps 
-                        if tc.employee_id == employee.id and 
-                        tc.date == day), None),
-                    'sick_leave': next((sl for sl in sick_leaves 
-                        if sl.employee_id == employee.id and 
-                        sl.start_date <= day <= sl.end_date), None)
+                    'employee': None,
+                    'working_hours': None,
+                    'schedule': None,
+                    'vacation': None,
+                    'time_comp': None,
+                    'sick_leave': None,
+                    'closure': closure,
+                    'soll_hours': 0,
+                    'ist_hours': 0,
+                    'difference': 0
                 }
                 days_data.append(entry)
+            else:
+                # Bei normalen Tagen: Ein Eintrag pro Mitarbeiter
+                for employee in employees:  # Innere Schleife: Mitarbeiter
+                    entry = {
+                        'date': day,
+                        'employee': employee,
+                        'working_hours': working_hours_dict.get((day, employee.id)),
+                        'schedule': schedule_dict.get((employee.id, day.weekday())),
+                        'vacation': next((v for v in vacations 
+                            if v.employee_id == employee.id and 
+                            v.start_date <= day <= v.end_date), None),
+                        'time_comp': next((tc for tc in time_comps 
+                            if tc.employee_id == employee.id and 
+                            tc.date == day), None),
+                        'sick_leave': next((sl for sl in sick_leaves 
+                            if sl.employee_id == employee.id and 
+                            sl.start_date <= day <= sl.end_date), None)
+                    }
 
-        # Berechne die Summen
-        total_soll = 0
-        total_ist = 0
-        total_diff = 0
+                    # Berechne Stunden nur für normale Tage
+                    if entry['schedule']:
+                        start = datetime.combine(date.min, entry['schedule'].start_time)
+                        end = datetime.combine(date.min, entry['schedule'].end_time)
+                        entry['soll_hours'] = (end - start).total_seconds() / 3600
+                        total_soll += entry['soll_hours']
 
-        for entry in days_data:
-            # Berechne Soll-Stunden
-            if entry['schedule']:
-                start = datetime.combine(date.min, entry['schedule'].start_time)
-                end = datetime.combine(date.min, entry['schedule'].end_time)
-                soll_hours = (end - start).total_seconds() / 3600
-                entry['soll_hours'] = soll_hours  # Speichere im Dictionary statt am Objekt
-                total_soll += soll_hours
+                    if entry['working_hours']:
+                        start = datetime.combine(date.min, entry['working_hours'].start_time)
+                        end = datetime.combine(date.min, entry['working_hours'].end_time)
+                        entry['ist_hours'] = (end - start).total_seconds() / 3600
+                        if entry['working_hours'].break_duration:
+                            entry['ist_hours'] -= entry['working_hours'].break_duration.total_seconds() / 3600
+                        total_ist += entry['ist_hours']
 
-            # Berechne Ist-Stunden
-            ist_hours = 0
-            if entry['working_hours'] and entry['working_hours'].start_time and entry['working_hours'].end_time:
-                start = datetime.combine(date.min, entry['working_hours'].start_time)
-                end = datetime.combine(date.min, entry['working_hours'].end_time)
-                ist_hours = (end - start).total_seconds() / 3600
-                if entry['working_hours'].break_duration:
-                    ist_hours -= entry['working_hours'].break_duration.total_seconds() / 3600
-            entry['ist_hours'] = ist_hours  # Speichere im Dictionary
-            total_ist += ist_hours
+                    entry['difference'] = entry.get('ist_hours', 0) - entry.get('soll_hours', 0)
+                    if not (entry['vacation'] or entry['time_comp'] or entry['sick_leave']):
+                        total_diff += entry['difference']
 
-            # Berechne Differenz
-            entry['difference'] = ist_hours - (entry.get('soll_hours', 0) or 0)
-            total_diff += entry['difference']
+                    days_data.append(entry)
 
-        # 8. Kontext erweitern
+        # Entferne die doppelte Summenberechnung am Ende
         context.update({
             'dates': days_data,
             'year': year,
