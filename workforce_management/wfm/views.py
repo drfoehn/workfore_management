@@ -1282,33 +1282,30 @@ def api_working_hours_detail(request, id=None):
                 'break_duration': working_hours.break_duration.seconds // 60 if working_hours.break_duration else 30,
                 'notes': working_hours.notes or ''
             })
-        
-    elif request.method == 'POST':
-        data = json.loads(request.body)
-        date = datetime.strptime(data['date'], '%Y-%m-%d').date()
-        
-        if id:
-            # Update existierenden Eintrag
-            working_hours = get_object_or_404(WorkingHours, id=id)
-            if request.user.role != 'OWNER' and working_hours.employee != request.user:
-                raise PermissionDenied
-        else:
-            # Erstelle neuen Eintrag
-            working_hours = WorkingHours(employee=request.user, date=date)
-        
-        # Update Felder
-        if data.get('start_time'):
-            working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-        if data.get('end_time'):
-            working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-        if data.get('break_duration'):
-            working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
-        working_hours.notes = data.get('notes', '')
-        
-        working_hours.save()
-        return JsonResponse({'success': True, 'id': working_hours.id})
-        
+    
     return JsonResponse({'error': 'Invalid request'}, status=400)
+
+@login_required
+def api_working_hours_update(request, id):
+    """API für das Aktualisieren von Arbeitszeiten"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid method'}, status=405)
+        
+    working_hours = get_object_or_404(WorkingHours, pk=id)
+    if request.user.role != 'OWNER' and working_hours.employee != request.user:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+    try:
+        data = json.loads(request.body)
+        working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+        working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+        working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
+        working_hours.notes = data.get('notes', '')
+        working_hours.save()
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 @login_required
 def api_vacation_status(request):
@@ -1620,12 +1617,12 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
         return context
 
 @login_required
-def api_working_hours_update(request, pk):
+def api_working_hours_update(request, id):
     """API für das Aktualisieren von Arbeitszeiten"""
     if request.method != 'POST':
         return JsonResponse({'error': 'Invalid method'}, status=405)
         
-    working_hours = get_object_or_404(WorkingHours, pk=pk)
+    working_hours = get_object_or_404(WorkingHours, pk=id)
     if request.user.role != 'OWNER' and working_hours.employee != request.user:
         return JsonResponse({'error': 'Permission denied'}, status=403)
         
