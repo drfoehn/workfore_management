@@ -188,43 +188,107 @@ class WorkingHours(models.Model):
 
 class Vacation(models.Model):
     """Urlaubsverwaltung"""
-    STATUS_CHOICES = [
-        ('REQUESTED', 'Angefragt'),
-        ('APPROVED', 'Genehmigt'),
-        ('REJECTED', 'Abgelehnt'),
-    ]
-    
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    start_date = models.DateField(verbose_name="Urlaubsbeginn")
-    end_date = models.DateField(verbose_name="Urlaubsende")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='REQUESTED')
-    notes = models.TextField(blank=True, null=True, verbose_name="Anmerkungen")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(
+        max_length=10,
+        choices=[
+            ('REQUESTED', _('Beantragt')),
+            ('APPROVED', _('Genehmigt')),
+            ('REJECTED', _('Abgelehnt')),
+        ],
+        default='REQUESTED'
+    )
+    notes = models.TextField(blank=True)
+    
+    def calculate_vacation_hours(self):
+        """Berechnet die Urlaubsstunden basierend auf den Soll-Arbeitszeiten"""
+        total_hours = Decimal('0')
+        current_date = self.start_date
+        
+        while current_date <= self.end_date:
+            # Überspringe Wochenenden
+            if current_date.weekday() >= 5:
+                current_date += timedelta(days=1)
+                continue
+                
+            # Überspringe Schließtage
+            closure = ClosureDay.objects.filter(
+                models.Q(
+                    date=current_date,
+                    is_recurring=False
+                ) |
+                models.Q(
+                    date__month=current_date.month,
+                    date__day=current_date.day,
+                    is_recurring=True
+                )
+            ).first()
+            
+            if closure:
+                current_date += timedelta(days=1)
+                continue
+            
+            # Hole Schedule für diesen Tag
+            schedule = ScheduleTemplate.objects.filter(
+                employee=self.employee,
+                weekday=current_date.weekday(),
+                valid_from__lte=current_date
+            ).order_by('-valid_from').first()
+            
+            if schedule:
+                # Berechne Stunden für diesen Tag
+                start = datetime.combine(date.min, schedule.start_time)
+                end = datetime.combine(date.min, schedule.end_time)
+                hours = Decimal(str((end - start).total_seconds() / 3600))
+                total_hours += hours
+            
+            current_date += timedelta(days=1)
+            
+        return total_hours
 
-    @property
-    def working_days(self):
-        """Berechnet die Anzahl der Werktage zwischen Start- und Enddatum"""
-        days = 0
-        current = self.start_date
-        while current <= self.end_date:
-            if current.weekday() < 5:  # 0-4 sind Montag bis Freitag
-                days += 1
-            current += timedelta(days=1)
-        return days
+    def check_vacation_hours_available(self):
+        """Prüft ob genügend Urlaubsstunden verfügbar sind"""
+        entitlement = VacationEntitlement.objects.filter(
+            employee=self.employee,
+            year=self.start_date.year
+        ).first()
+        
+        if not entitlement:
+            return False
+            
+        needed_hours = self.calculate_vacation_hours()
+        remaining_hours = entitlement.get_remaining_hours()
+        
+        return needed_hours <= remaining_hours
 
-    class Meta:
-        ordering = ['-start_date']
+    def clean(self):
+        super().clean()
+        if self.status == 'APPROVED' and not self.check_vacation_hours_available():
+            raise ValidationError(_('Nicht genügend Urlaubsstunden verfügbar'))
 
 class VacationEntitlement(models.Model):
     """Jahresurlaub"""
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    year = models.IntegerField(verbose_name="Jahr")
-    total_days = models.PositiveIntegerField(
-        validators=[MaxValueValidator(50)],
-        verbose_name="Gesamte Urlaubstage"
-    )
+    year = models.IntegerField()
+    total_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)  # Statt total_days
     
     class Meta:
-        unique_together = ['employee', 'year']
+        unique_together = ('employee', 'year')
+
+    def get_remaining_hours(self):
+        used_hours = Decimal('0')
+        approved_vacations = Vacation.objects.filter(
+            employee=self.employee,
+            start_date__year=self.year,
+            status='APPROVED'
+        )
+        
+        for vacation in approved_vacations:
+            used_hours += vacation.calculate_vacation_hours()
+            
+        return self.total_hours - used_hours
 
 class SickLeave(models.Model):
     STATUS_CHOICES = [

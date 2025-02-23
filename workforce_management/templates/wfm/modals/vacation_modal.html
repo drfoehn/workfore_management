@@ -1,48 +1,61 @@
 {% load i18n %}
 
-<div class="modal fade" id="vacationModal" tabindex="-1">
+<div class="modal fade" id="vacationModal" tabindex="-1" aria-labelledby="vacationModalLabel">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">{% trans "Urlaub beantragen" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="vacationModalLabel">{% trans "Urlaub beantragen" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form id="vacationForm">
+                <div class="mb-3">
+                    <div class="row">
+                        <div class="col-8">{% trans "Urlaubsstunden" %} <span id="vacationYear">2024</span>:</div>
+                        <div class="col-4" id="totalHours">0</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-8">{% trans "Übertrag aus Vorjahr" %}:</div>
+                        <div class="col-4" id="carriedOverHours">0</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-8">{% trans "Genehmigte Stunden" %}:</div>
+                        <div class="col-4" id="approvedHours">0</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-8">{% trans "Beantragte Stunden" %}:</div>
+                        <div class="col-4" id="pendingHours">0</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-8">{% trans "Verbleibende Stunden" %}:</div>
+                        <div class="col-4" id="remainingHours">0</div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-8">{% trans "Stunden dieser Antrag" %}:</div>
+                        <div class="col-4" id="requestedHours">0</div>
+                    </div>
+                </div>
+
+                <form id="vacationForm" class="needs-validation" novalidate>
                     {% csrf_token %}
-                    
-                    <div class="alert alert-info">
-                        <strong>{% trans "Verfügbarer Urlaub" %}:</strong>
-                        <span id="remainingVacationDays">...</span> {% trans "Tage" %}
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label for="startDate" class="form-label">{% trans "Von" %}</label>
-                            <input type="date" class="form-control" id="startDate" name="start_date" required>
-                        </div>
-                        <div class="col">
-                            <label for="endDate" class="form-label">{% trans "Bis" %}</label>
-                            <input type="date" class="form-control" id="endDate" name="end_date" required>
-                        </div>
-                    </div>
-
-                    <div class="alert alert-secondary">
-                        <strong>{% trans "Beantragte Tage" %}:</strong>
-                        <span id="requestedDays">0</span> {% trans "Tage" %}
-                    </div>
-
                     <div class="mb-3">
-                        <label for="notes" class="form-label">{% trans "Notizen" %}</label>
-                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                        <label for="startDate" class="form-label">{% trans "Von" %}</label>
+                        <input type="date" class="form-control" id="startDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="endDate" class="form-label">{% trans "Bis" %}</label>
+                        <input type="date" class="form-control" id="endDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">{% trans "Anmerkungen" %}</label>
+                        <textarea class="form-control" id="notes" rows="3"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    {% trans "Abbrechen" %}
+                    {% trans "Schließen" %}
                 </button>
-                <button type="button" class="btn btn-primary" onclick="saveVacation()">
+                <button type="button" class="btn btn-primary" onclick="submitVacationRequest()">
                     {% trans "Beantragen" %}
                 </button>
             </div>
@@ -52,125 +65,110 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Hole verfügbare Urlaubstage beim Öffnen des Modals
-    const vacationModal = document.getElementById('vacationModal');
-    vacationModal.addEventListener('show.bs.modal', function() {
-        updateVacationStatus();
-    });
-
-    // Berechne beantragte Tage bei Datumsänderung
-    const startDate = document.getElementById('startDate');
-    const endDate = document.getElementById('endDate');
-    
-    [startDate, endDate].forEach(input => {
-        input.addEventListener('change', calculateRequestedDays);
-    });
+    const modal = document.getElementById('vacationModal');
+    if (modal) {
+        modal.addEventListener('show.bs.modal', loadVacationStatus);
+        
+        // Event-Listener für Datumsänderungen
+        const startDate = document.getElementById('startDate');
+        const endDate = document.getElementById('endDate');
+        
+        if (startDate && endDate) {
+            startDate.addEventListener('change', calculateRequestedHours);
+            endDate.addEventListener('change', calculateRequestedHours);
+        }
+    }
 });
 
-function updateVacationStatus() {
-    fetch('/api/vacation/status/')
-        .then(response => {
-            if (!response.ok) throw new Error('Network response was not ok');
-            return response.json();
-        })
+function loadVacationStatus() {
+    fetch('{% url "wfm:api-vacation-status" %}')
+        .then(response => response.json())
         .then(data => {
-            // Zeige verfügbare Tage an
-            let statusText = `${data.remaining_days} (${data.used_days} genutzt`;
-            if (data.pending_days > 0) {
-                statusText += `, ${data.pending_days} beantragt`;
-            }
-            statusText += ` von ${data.total_days})`;
-            
-            document.getElementById('remainingVacationDays').textContent = statusText;
-            
-            // Speichere die Werte für spätere Validierung
-            window.vacationData = data;
+            document.getElementById('vacationYear').textContent = data.year;
+            document.getElementById('totalHours').textContent = 
+                (data.total_hours - data.carried_over).toFixed(1);
+            document.getElementById('carriedOverHours').textContent = 
+                data.carried_over.toFixed(1);
+            document.getElementById('approvedHours').textContent = 
+                data.approved_hours.toFixed(1);
+            document.getElementById('pendingHours').textContent = 
+                data.pending_hours.toFixed(1);
+            document.getElementById('remainingHours').textContent = 
+                data.remaining_hours.toFixed(1);
+            document.getElementById('requestedHours').textContent = '0.0';
         })
         .catch(error => {
-            console.error('Error:', error);
-            document.getElementById('remainingVacationDays').textContent = 'Fehler beim Laden';
+            console.error('Error loading vacation status:', error);
+            alert('{% trans "Fehler beim Laden des Urlaubsstatus" %}');
         });
 }
 
-function calculateRequestedDays() {
+function calculateRequestedHours() {
     const startDate = document.getElementById('startDate').value;
     const endDate = document.getElementById('endDate').value;
     
-    if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        
-        if (start <= end) {
-            let days = 0;
-            let current = new Date(start);
-            
-            while (current <= end) {
-                if (current.getDay() !== 0 && current.getDay() !== 6) {
-                    days++;
-                }
-                current.setDate(current.getDate() + 1);
-            }
-            
-            document.getElementById('requestedDays').textContent = days;
-            return days;
-        }
-    }
+    if (!startDate || !endDate) return;
     
-    document.getElementById('requestedDays').textContent = '0';
-    return 0;
-}
-
-function validateVacationRequest(requestedDays) {
-    if (!window.vacationData) {
-        alert('{% trans "Urlaubsdaten konnten nicht geladen werden" %}');
-        return false;
-    }
-
-    const { remaining_days } = window.vacationData;
-    
-    if (requestedDays > remaining_days) {
-        alert(`{% trans "Nicht genügend Urlaubstage verfügbar. Verfügbar:" %} ${remaining_days}, {% trans "Beantragt:" %} ${requestedDays}`);
-        return false;
-    }
-    
-    return true;
-}
-
-function saveVacation() {
-    const form = document.getElementById('vacationForm');
-    const requestedDays = calculateRequestedDays();
-    
-    // Validiere den Antrag
-    if (!validateVacationRequest(requestedDays)) {
-        return;
-    }
-
-    const formData = {
-        start_date: form.start_date.value,
-        end_date: form.end_date.value,
-        notes: form.notes.value
-    };
-
-    fetch('/api/vacation/request/', {
+    fetch('{% url "wfm:api-vacation-calculate" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+            start_date: startDate,
+            end_date: endDate
+        })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            bootstrap.Modal.getInstance(document.getElementById('vacationModal')).hide();
-            location.reload();
+            document.getElementById('requestedHours').textContent = data.needed_hours.toFixed(1);
+            document.getElementById('remainingHours').textContent = data.remaining_hours.toFixed(1);
         } else {
-            alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+            alert(data.error);
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        alert('{% trans "Ein Fehler ist aufgetreten" %}');
+        console.error('Error calculating vacation hours:', error);
+    });
+}
+
+function submitVacationRequest() {
+    const form = document.getElementById('vacationForm');
+    if (!form.checkValidity()) {
+        form.classList.add('was-validated');
+        return;
+    }
+    
+    const data = {
+        start_date: document.getElementById('startDate').value,
+        end_date: document.getElementById('endDate').value,
+        notes: document.getElementById('notes').value
+    };
+    
+    fetch('{% url "wfm:api-vacation-request" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('{% trans "Urlaub wurde erfolgreich beantragt" %}');
+            bootstrap.Modal.getInstance(document.getElementById('vacationModal')).hide();
+            // Optional: Seite neu laden
+            window.location.reload();
+        } else {
+            alert(data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error submitting vacation request:', error);
+        alert('{% trans "Fehler beim Beantragen des Urlaubs" %}');
     });
 }
 </script> 

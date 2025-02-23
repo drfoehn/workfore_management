@@ -1,6 +1,7 @@
 from django import forms
 from .models import WorkingHours, Vacation, ScheduleTemplate, TimeCompensation
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 class WorkingHoursForm(forms.ModelForm):
     display_date = forms.CharField(
@@ -58,10 +59,32 @@ class VacationRequestForm(forms.ModelForm):
     class Meta:
         model = Vacation
         fields = ['start_date', 'end_date', 'notes']
-        widgets = {
-            'start_date': forms.DateInput(attrs={'type': 'date', 'readonly': 'readonly'}),
-            'end_date': forms.DateInput(attrs={'type': 'date'}),
-        }
+        
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['start_date'].widget = forms.DateInput(attrs={'type': 'date'})
+        self.fields['end_date'].widget = forms.DateInput(attrs={'type': 'date'})
+        
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('start_date')
+        end_date = cleaned_data.get('end_date')
+        
+        if start_date and end_date:
+            if start_date > end_date:
+                raise ValidationError(_('Enddatum muss nach Startdatum liegen'))
+                
+            # Erstelle temporäres Objekt für Stundenberechnung
+            temp_vacation = Vacation(
+                employee=self.instance.employee if self.instance else None,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            if not temp_vacation.check_vacation_hours_available():
+                raise ValidationError(_('Nicht genügend Urlaubsstunden verfügbar'))
+                
+        return cleaned_data
 
 class TimeCompensationForm(forms.ModelForm):
     class Meta:

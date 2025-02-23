@@ -697,9 +697,9 @@ class MonthlyOverviewView(LoginRequiredMixin, ListView):
             'total_scheduled': round(total_scheduled, 2),
             'total_actual': round(total_actual, 2),
             'total_difference': round(total_actual - total_scheduled, 2),
-            'vacation_days_total': vacation_entitlement.total_days if vacation_entitlement else 0,
+            'vacation_days_total': vacation_entitlement.total_hours if vacation_entitlement else 0,
             'vacation_days_used': used_vacation_days,
-            'vacation_days_remaining': (vacation_entitlement.total_days - used_vacation_days) if vacation_entitlement else 0,
+            'vacation_days_remaining': (vacation_entitlement.total_hours - used_vacation_days) if vacation_entitlement else 0,
             'overtime_total': round(available_overtime, 2)
         })
         
@@ -813,73 +813,70 @@ def save_working_hours(request, date=None):
 
 @login_required
 def api_vacation_request(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body.decode('utf-8'))
+    """API-Endpunkt für Urlaubsanträge"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid method'}, status=405)
+        
+    try:
+        data = json.loads(request.body)
+        start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+        
+        # Erstelle temporären Urlaubsantrag zur Stundenberechnung
+        temp_vacation = Vacation(
+            employee=request.user,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # Berechne benötigte Stunden
+        needed_hours = temp_vacation.calculate_vacation_hours()
+        
+        # Prüfe verfügbare Stunden
+        entitlement = VacationEntitlement.objects.filter(
+            employee=request.user,
+            year=start_date.year
+        ).first()
+        
+        if not entitlement:
+            return JsonResponse({
+                'error': _('Kein Urlaubsanspruch für dieses Jahr')
+            }, status=400)
             
-            # Validiere die Daten
-            required_fields = ['start_date', 'end_date']
-            if not all(field in data and data[field] for field in required_fields):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Bitte Start- und Enddatum angeben'
-                })
-
-            # Parse dates
-            start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
-            end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
-            
-            # Berechne Werktage
-            requested_days = sum(1 for date in (start_date + timedelta(n) for n in range((end_date - start_date).days + 1)) if date.weekday() < 5)
-            
-            # Prüfe verfügbare Urlaubstage
-            vacation_entitlement = VacationEntitlement.objects.filter(
-                employee=request.user,
-                year=start_date.year
-            ).first()
-            
-            if not vacation_entitlement:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Keine Urlaubstage für dieses Jahr eingetragen'
-                })
-            
-            used_vacation_days = Vacation.objects.filter(
+        # Berechne bereits verwendete Stunden
+        used_hours = sum(
+            v.calculate_vacation_hours() 
+            for v in Vacation.objects.filter(
                 employee=request.user,
                 start_date__year=start_date.year,
                 status='APPROVED'
-            ).count()
-            
-            remaining_days = vacation_entitlement.total_days - used_vacation_days
-            
-            if requested_days > remaining_days:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Nicht genügend Urlaubstage verfügbar. Verfügbar: {remaining_days}, Angefragt: {requested_days}'
-                })
-
-            # Erstelle den Urlaubsantrag
-            vacation = Vacation.objects.create(
-                employee=request.user,
-                start_date=start_date,
-                end_date=end_date,
-                notes=data.get('notes', ''),
-                status='REQUESTED'
             )
-            
-            return JsonResponse({'success': True})
-            
-        except Exception as e:
-            logger.error(f"Vacation request error: {str(e)}", exc_info=True)
+        )
+        
+        remaining_hours = entitlement.total_hours - used_hours
+        
+        if needed_hours > remaining_hours:
             return JsonResponse({
-                'success': False,
-                'error': str(e)
-            })
-    
-    return JsonResponse({
-        'success': False,
-        'error': 'Ungültige Anfrage'
-    })
+                'error': _('Nicht genügend Urlaubsstunden verfügbar')
+            }, status=400)
+            
+        # Speichere den Urlaubsantrag
+        vacation = Vacation.objects.create(
+            employee=request.user,
+            start_date=start_date,
+            end_date=end_date,
+            notes=data.get('notes', '')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'needed_hours': float(needed_hours),
+            'remaining_hours': float(remaining_hours - needed_hours)
+        })
+        
+    except Exception as e:
+        logger.error(f"Vacation request error: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 def api_time_compensation_request(request):
@@ -1332,10 +1329,9 @@ def api_working_hours_update(request, id):
 def api_vacation_status(request):
     """API-Endpunkt für den aktuellen Urlaubsstatus"""
     try:
-        # Hole das aktuelle Jahr
         current_year = timezone.now().year
         
-        # Hole den Urlaubsanspruch für das aktuelle Jahr
+        # Hole Urlaubsanspruch für aktuelles Jahr
         entitlement = VacationEntitlement.objects.filter(
             employee=request.user,
             year=current_year
@@ -1343,43 +1339,68 @@ def api_vacation_status(request):
         
         if not entitlement:
             return JsonResponse({
-                'total_days': 0,
-                'used_days': 0,
-                'pending_days': 0,
-                'remaining_days': 0
+                'total_hours': 0,
+                'approved_hours': 0,
+                'pending_hours': 0,
+                'remaining_hours': 0,
+                'year': current_year
             })
         
-        # Hole genehmigte und beantragte Urlaube
+        # Genehmigte Urlaubsstunden
         approved_vacations = Vacation.objects.filter(
             employee=request.user,
             start_date__year=current_year,
             status='APPROVED'
         )
+        approved_hours = sum(
+            vacation.calculate_vacation_hours() 
+            for vacation in approved_vacations
+        )
         
+        # Beantragte (noch nicht genehmigte) Urlaubsstunden
         pending_vacations = Vacation.objects.filter(
             employee=request.user,
             start_date__year=current_year,
             status='REQUESTED'
         )
+        pending_hours = sum(
+            vacation.calculate_vacation_hours() 
+            for vacation in pending_vacations
+        )
         
-        # Berechne die Tage
-        used_days = sum(vacation.working_days for vacation in approved_vacations)
-        pending_days = sum(vacation.working_days for vacation in pending_vacations)
-        total_days = entitlement.total_days
-        remaining_days = total_days - used_days
+        # Übertrag vom Vorjahr (falls vorhanden)
+        last_year = current_year - 1
+        last_year_entitlement = VacationEntitlement.objects.filter(
+            employee=request.user,
+            year=last_year
+        ).first()
+        
+        last_year_remaining = Decimal('0')
+        if last_year_entitlement:
+            last_year_used = sum(
+                vacation.calculate_vacation_hours()
+                for vacation in Vacation.objects.filter(
+                    employee=request.user,
+                    start_date__year=last_year,
+                    status='APPROVED'
+                )
+            )
+            last_year_remaining = max(last_year_entitlement.total_hours - last_year_used, Decimal('0'))
+        
+        total_hours = entitlement.total_hours + last_year_remaining
         
         return JsonResponse({
-            'total_days': total_days,
-            'used_days': used_days,
-            'pending_days': pending_days,
-            'remaining_days': remaining_days
+            'total_hours': float(total_hours),
+            'approved_hours': float(approved_hours),
+            'pending_hours': float(pending_hours),
+            'remaining_hours': float(total_hours - approved_hours),
+            'year': current_year,
+            'carried_over': float(last_year_remaining)
         })
         
     except Exception as e:
         logger.error(f"Vacation status error: {str(e)}", exc_info=True)
-        return JsonResponse({
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 def api_therapist_booking_delete(request, pk):
@@ -1637,28 +1658,6 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
         
         return context
 
-# @login_required
-# def api_working_hours_update(request, id):
-#     """API für das Aktualisieren von Arbeitszeiten"""
-#     if request.method != 'POST':
-#         return JsonResponse({'error': 'Invalid method'}, status=405)
-        
-#     working_hours = get_object_or_404(WorkingHours, pk=id)
-#     if request.user.role != 'OWNER' and working_hours.employee != request.user:
-#         return JsonResponse({'error': 'Permission denied'}, status=403)
-        
-#     try:
-#         data = json.loads(request.body)
-#         working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-#         working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-#         working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
-#         working_hours.notes = data.get('notes', '')
-#         working_hours.save()
-        
-#         return JsonResponse({'success': True})
-#     except Exception as e:
-#         return JsonResponse({'error': str(e)}, status=400)
-
 class TherapistBookingListView(LoginRequiredMixin, ListView):
     model = TherapistBooking
     template_name = 'wfm/therapist_booking_list.html'
@@ -1738,7 +1737,6 @@ class AbsenceListView(LoginRequiredMixin, ListView):
     context_object_name = 'absences'
 
     def get_queryset(self):
-        # Leeres Queryset, da wir die Daten über get_context_data bereitstellen
         return []
 
     def get_context_data(self, **kwargs):
@@ -1761,23 +1759,105 @@ class AbsenceListView(LoginRequiredMixin, ListView):
             end_date__gte=today
         ).order_by('start_date')
         
-        # Hole Urlaubsanspruch für das aktuelle Jahr
+        # Urlaubsübersicht
         entitlement = VacationEntitlement.objects.filter(
             employee=self.request.user,
             year=today.year
         ).first()
         
         if entitlement:
-            used_days = sum(v.working_days for v in Vacation.objects.filter(
+            # Genehmigte Urlaubsstunden
+            approved_vacations = Vacation.objects.filter(
                 employee=self.request.user,
                 start_date__year=today.year,
                 status='APPROVED'
-            ))
+            )
+            approved_hours = sum(
+                vacation.calculate_vacation_hours() 
+                for vacation in approved_vacations
+            )
+            
+            # Beantragte Urlaubsstunden
+            pending_vacations = Vacation.objects.filter(
+                employee=self.request.user,
+                start_date__year=today.year,
+                status='REQUESTED'
+            )
+            pending_hours = sum(
+                vacation.calculate_vacation_hours() 
+                for vacation in pending_vacations
+            )
+            
+            # Übertrag aus Vorjahr
+            last_year = today.year - 1
+            last_year_entitlement = VacationEntitlement.objects.filter(
+                employee=self.request.user,
+                year=last_year
+            ).first()
+            
+            last_year_remaining = Decimal('0')
+            if last_year_entitlement:
+                last_year_used = sum(
+                    vacation.calculate_vacation_hours()
+                    for vacation in Vacation.objects.filter(
+                        employee=self.request.user,
+                        start_date__year=last_year,
+                        status='APPROVED'
+                    )
+                )
+                last_year_remaining = max(
+                    last_year_entitlement.total_hours - last_year_used, 
+                    Decimal('0')
+                )
+            
+            total_hours = entitlement.total_hours + last_year_remaining
+            
             context['vacation_info'] = {
-                'total': entitlement.total_days,
-                'used': used_days,
-                'remaining': entitlement.total_days - used_days,
-                'today': today  # Füge das aktuelle Datum hinzu für die Anzeige des Jahres
+                'year': today.year,
+                'entitlement': entitlement.total_hours,
+                'carried_over': last_year_remaining,
+                'total_available': total_hours,
+                'approved_hours': approved_hours,
+                'pending_hours': pending_hours,
+                'remaining_hours': total_hours - approved_hours
+            }
+
+        # Zeitausgleich-Übersicht
+        if self.request.user.role in ['ASSISTANT', 'CLEANING']:
+            # Berechne Überstunden für das aktuelle Jahr
+            total_overtime = Decimal('0')
+            for month in range(1, 13):
+                overtime_account = OvertimeAccount.objects.filter(
+                    employee=self.request.user,
+                    year=today.year,
+                    month=month,
+                    is_finalized=True
+                ).first()
+                if overtime_account:
+                    total_overtime += overtime_account.hours_for_timecomp
+
+            # Bereits genommener Zeitausgleich
+            approved_timecomp = TimeCompensation.objects.filter(
+                employee=self.request.user,
+                date__year=today.year,
+                status='APPROVED'
+            )
+            approved_timecomp_hours = sum(tc.hours for tc in approved_timecomp)
+
+            # Beantragter Zeitausgleich
+            pending_timecomp = TimeCompensation.objects.filter(
+                employee=self.request.user,
+                date__year=today.year,
+                status='REQUESTED'
+            )
+            pending_timecomp_hours = sum(tc.hours for tc in pending_timecomp)
+
+            context['timecomp_info'] = {
+                'year': today.year,
+                'total_hours': total_overtime,
+                'approved_hours': approved_timecomp_hours,
+                'pending_hours': pending_timecomp_hours,
+                'remaining_hours': total_overtime - approved_timecomp_hours
             }
         
         return context
@@ -2025,3 +2105,57 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
             
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def api_calculate_vacation_hours(request):
+    """API-Endpunkt zur Berechnung der Urlaubsstunden (ohne Speicherung)"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid method'}, status=405)
+        
+    try:
+        data = json.loads(request.body)
+        start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+        
+        # Erstelle temporären Urlaubsantrag zur Stundenberechnung
+        temp_vacation = Vacation(
+            employee=request.user,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # Berechne benötigte Stunden
+        needed_hours = temp_vacation.calculate_vacation_hours()
+        
+        # Prüfe verfügbare Stunden
+        entitlement = VacationEntitlement.objects.filter(
+            employee=request.user,
+            year=start_date.year
+        ).first()
+        
+        if not entitlement:
+            return JsonResponse({
+                'error': _('Kein Urlaubsanspruch für dieses Jahr')
+            }, status=400)
+            
+        # Berechne bereits verwendete Stunden
+        used_hours = sum(
+            v.calculate_vacation_hours() 
+            for v in Vacation.objects.filter(
+                employee=request.user,
+                start_date__year=start_date.year,
+                status='APPROVED'
+            )
+        )
+        
+        remaining_hours = entitlement.total_hours - used_hours
+        
+        return JsonResponse({
+            'success': True,
+            'needed_hours': float(needed_hours),
+            'remaining_hours': float(remaining_hours - needed_hours)
+        })
+        
+    except Exception as e:
+        logger.error(f"Vacation calculation error: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)

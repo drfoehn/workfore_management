@@ -20,21 +20,43 @@
         </div>
     </div>
 
-    {% if vacation_info %}
-    <div class="alert alert-info">
-        <h6 class="mb-0">{% trans "Urlaubsübersicht" %} {{ today.year }}</h6>
-        <div class="row align-items-center">
-            <div class="col-auto">
-                <small class="text-muted">{% trans "Gesamt:" %}</small>
-                <strong>{{ vacation_info.total }}</strong>
+    <!-- Urlaubsübersicht -->
+    <div class="card mb-4">
+        <div class="card-header bg-pistachio text-white">
+            <h5 class="card-title mb-0">{% trans "Urlaubsübersicht" %} {{ vacation_info.year }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>{% trans "Urlaubsanspruch" %}:</strong> {{ vacation_info.entitlement|floatformat:1 }}h</p>
+                    <p><strong>{% trans "Übertrag aus Vorjahr" %}:</strong> {{ vacation_info.carried_over|floatformat:1 }}h</p>
+                    <p><strong>{% trans "Gesamt verfügbar" %}:</strong> {{ vacation_info.total_available|floatformat:1 }}h</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>{% trans "Genehmigt" %}:</strong> {{ vacation_info.approved_hours|floatformat:1 }}h</p>
+                    <p><strong>{% trans "Beantragt" %}:</strong> {{ vacation_info.pending_hours|floatformat:1 }}h</p>
+                    <p><strong>{% trans "Noch verfügbar" %}:</strong> {{ vacation_info.remaining_hours|floatformat:1 }}h</p>
+                </div>
             </div>
-            <div class="col-auto">
-                <small class="text-muted">{% trans "Genommen:" %}</small>
-                <strong>{{ vacation_info.used }}</strong>
-            </div>
-            <div class="col-auto">
-                <small class="text-muted">{% trans "Verfügbar:" %}</small>
-                <strong>{{ vacation_info.remaining }}</strong>
+        </div>
+    </div>
+
+    <!-- Zeitausgleich-Übersicht -->
+    {% if timecomp_info %}
+    <div class="card mb-4">
+        <div class="card-header bg-queen-blue text-white">
+            <h5 class="card-title mb-0">{% trans "Zeitausgleich-Übersicht" %} {{ timecomp_info.year }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>{% trans "Verfügbare Stunden" %}:</strong> {{ timecomp_info.total_hours|floatformat:1 }}h</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>{% trans "Genehmigt" %}:</strong> {{ timecomp_info.approved_hours|floatformat:1 }}h</p>
+                    <p><strong>{% trans "Beantragt" %}:</strong> {{ timecomp_info.pending_hours|floatformat:1 }}h</p>
+                    <p><strong>{% trans "Noch verfügbar" %}:</strong> {{ timecomp_info.remaining_hours|floatformat:1 }}h</p>
+                </div>
             </div>
         </div>
     </div>

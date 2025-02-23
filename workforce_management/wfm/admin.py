@@ -74,7 +74,7 @@ class VacationAdmin(admin.ModelAdmin):
 
 @admin.register(VacationEntitlement)
 class VacationEntitlementAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'year', 'total_days')
+    list_display = ('employee', 'year', 'total_hours')
     list_filter = ('year', 'employee')
     search_fields = ('employee__username',)
 
