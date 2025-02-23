@@ -458,8 +458,8 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             if request.user.role not in ['ASSISTANT', 'CLEANING']:
                 raise PermissionDenied
             
-            data = json.loads(request.body)  # Änderung hier: request.body statt request.POST
-            hours_for_timecomp = Decimal(str(data.get('hours_for_timecomp', 0)))  # Konvertiere zu Decimal
+            data = json.loads(request.body)
+            hours_for_timecomp = Decimal(str(data.get('hours_for_timecomp', 0)))
             
             today = date.today()
             if today.day <= 7:
@@ -473,12 +473,6 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
                 month=target_date.month
             )
             
-            if overtime_account.is_finalized:
-                return JsonResponse({
-                    'success': False,
-                    'error': _('Überstunden wurden bereits abgerechnet')
-                })
-                
             # Berechne die verfügbaren Stunden
             available_hours = overtime_account.total_overtime - overtime_account.hours_for_timecomp
             
@@ -490,7 +484,7 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
                 
             # Addiere die neuen Stunden
             overtime_account.hours_for_timecomp += hours_for_timecomp
-            overtime_account.save()
+            overtime_account.save()  # Dies setzt automatisch is_finalized = True
             
             return JsonResponse({
                 'success': True,
@@ -2159,3 +2153,26 @@ def api_calculate_vacation_hours(request):
     except Exception as e:
         logger.error(f"Vacation calculation error: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
+
+class SickLeaveManagementView(OwnerRequiredMixin, ListView):
+    template_name = 'wfm/sick_leave_management.html'
+    context_object_name = 'sick_leaves'
+
+    def get_queryset(self):
+        return SickLeave.objects.all().select_related('employee').order_by('-start_date')
+
+    def post(self, request, *args, **kwargs):
+        try:
+            sick_leave_id = request.POST.get('id')
+            action = request.POST.get('action')
+            
+            sick_leave = SickLeave.objects.get(id=sick_leave_id)
+            
+            if action == 'toggle':
+                # Toggle zwischen SUBMITTED und PENDING
+                sick_leave.status = 'PENDING' if sick_leave.status == 'SUBMITTED' else 'SUBMITTED'
+                sick_leave.save()
+                return JsonResponse({'success': True})
+                
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)

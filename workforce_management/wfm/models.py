@@ -364,6 +364,28 @@ class TimeCompensation(models.Model):
     def __str__(self):
         return f"{self.employee} - {self.date} ({self.hours}h)"
 
+    def check_hours_available(self):
+        """Prüft ob genügend Zeitausgleichsstunden verfügbar sind"""
+        # Hole alle finalisierten Überstundenkonten
+        overtime_accounts = OvertimeAccount.objects.filter(
+            employee=self.employee,
+            hours_for_timecomp__gt=0  # Nur Konten mit umgebuchten Stunden
+        )
+        
+        # Berechne verfügbare Stunden
+        total_available = sum(account.hours_for_timecomp for account in overtime_accounts)
+        
+        # Berechne bereits verwendete Stunden
+        used_hours = TimeCompensation.objects.filter(
+            employee=self.employee,
+            status='APPROVED'
+        ).aggregate(total=Sum('hours'))['total'] or 0
+        
+        # Berechne noch verfügbare Stunden
+        remaining_hours = total_available - used_hours
+        
+        return self.hours <= remaining_hours
+
 class TherapistBooking(models.Model):
     """Raumbuchungen für Therapeuten"""
     STATUS_CHOICES = [
@@ -470,13 +492,14 @@ class OvertimeAccount(models.Model):
     finalized_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        if not self.pk:  # Wenn neuer Eintrag
-            self.hours_for_payment = self.total_overtime
-            self.hours_for_timecomp = 0
-        else:  # Bei Update
-            # Stelle sicher, dass die Summe stimmt
-            self.hours_for_payment = self.total_overtime - self.hours_for_timecomp
-
+        # Berechne hours_for_payment
+        self.hours_for_payment = self.total_overtime - self.hours_for_timecomp
+        
+        # Wenn Stunden für Zeitausgleich umgebucht wurden, sind diese sofort verfügbar
+        if self.hours_for_timecomp > 0:
+            self.is_finalized = True
+            self.finalized_at = timezone.now()
+            
         super().save(*args, **kwargs)
 
     class Meta:

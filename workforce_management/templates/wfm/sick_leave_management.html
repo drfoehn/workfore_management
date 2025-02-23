@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="mb-4">{% trans "Krankenstandsverwaltung" %}</h1>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle" id="sickLeaveTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="sortable" data-sort="employee">{% trans "Mitarbeiter" %} <i class="bi bi-arrow-down-up"></i></th>
+                            <th class="sortable" data-sort="start">{% trans "Von" %} <i class="bi bi-arrow-down-up"></i></th>
+                            <th class="sortable" data-sort="end">{% trans "Bis" %} <i class="bi bi-arrow-down-up"></i></th>
+                            <th class="sortable" data-sort="status">{% trans "Status" %} <i class="bi bi-arrow-down-up"></i></th>
+                            <th>{% trans "Krankmeldung" %}</th>
+                            <th class="sortable" data-sort="notes">{% trans "Notizen" %} <i class="bi bi-arrow-down-up"></i></th>
+                            <th class="text-end">{% trans "Aktionen" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sick_leave in sick_leaves %}
+                        <tr>
+                            <td data-employee="{{ sick_leave.employee.get_full_name }}">
+                                <span class="badge" style="background-color: {{ sick_leave.employee.color }}">
+                                    {{ sick_leave.employee.get_full_name }}
+                                </span>
+                            </td>
+                            <td data-start="{{ sick_leave.start_date|date:'Y-m-d' }}">
+                                {{ sick_leave.start_date|date:"d.m.Y" }}
+                            </td>
+                            <td data-end="{{ sick_leave.end_date|date:'Y-m-d' }}">
+                                {{ sick_leave.end_date|date:"d.m.Y" }}
+                            </td>
+                            <td data-status="{{ sick_leave.status }}">
+                                <span class="badge {% if sick_leave.status == 'SUBMITTED' %}bg-warning
+                                                  {% else %}bg-secondary{% endif %}">
+                                    {{ sick_leave.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if sick_leave.certificate %}
+                                <a href="{{ sick_leave.certificate.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-file-earmark-medical"></i> {% trans "Anzeigen" %}
+                                </a>
+                                {% else %}
+                                <span class="text-muted">{% trans "Keine Krankmeldung" %}</span>
+                                {% endif %}
+                            </td>
+                            <td data-notes="{{ sick_leave.notes }}">{{ sick_leave.notes|default:"-" }}</td>
+                            <td class="text-end">
+                                <button type="button" 
+                                        class="btn btn-sm btn-outline-primary"
+                                        onclick="toggleStatus({{ sick_leave.id }})"
+                                        title="{% trans 'Status ändern' %}">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4">
+                                <i class="bi bi-hospital display-4 d-block text-muted"></i>
+                                {% trans "Keine Krankmeldungen vorhanden" %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Sortierung
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('sickLeaveTable');
+    const headers = table.querySelectorAll('th.sortable');
+    let currentSort = { column: 'start', direction: 'desc' }; // Standard: Nach Datum absteigend
+
+    headers.forEach(header => {
+        header.addEventListener('click', () => {
+            const column = header.dataset.sort;
+            const direction = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
+            
+            // Entferne alte Sortier-Indikatoren
+            headers.forEach(h => h.classList.remove('sorting-asc', 'sorting-desc'));
+            
+            // Setze neuen Sortier-Indikator
+            header.classList.add(`sorting-${direction}`);
+            
+            // Sortiere die Tabelle
+            sortTable(column, direction);
+            
+            // Aktualisiere den aktuellen Sortierzustand
+            currentSort = { column, direction };
+        });
+    });
+});
+
+function sortTable(column, direction) {
+    const table = document.getElementById('sickLeaveTable');
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+    // Sortiere die Zeilen
+    const sortedRows = rows.sort((a, b) => {
+        const aValue = a.querySelector(`td[data-${column}]`)?.dataset[column] || '';
+        const bValue = b.querySelector(`td[data-${column}]`)?.dataset[column] || '';
+        
+        if (direction === 'asc') {
+            return aValue.localeCompare(bValue);
+        } else {
+            return bValue.localeCompare(aValue);
+        }
+    });
+
+    // Leere und fülle die Tabelle neu
+    tbody.innerHTML = '';
+    sortedRows.forEach(row => tbody.appendChild(row));
+}
+
+// Status Toggle
+function toggleStatus(id) {
+    const formData = new FormData();
+    formData.append('id', id);
+    formData.append('action', 'toggle');
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch('{% url "wfm:sick-leave-management" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            throw new Error(data.error);
+        }
+    })
+    .catch(error => {
+        alert(error.message);
+    });
+}
+</script>
+
+<style>
+.sortable {
+    cursor: pointer;
+    position: relative;
+}
+
+.sortable:hover {
+    background-color: #f8f9fa;
+}
+
+.sorting-asc .bi-arrow-down-up::before {
+    content: "\f12d"; /* Bootstrap Icon für aufsteigend */
+}
+
+.sorting-desc .bi-arrow-down-up::before {
+    content: "\f12c"; /* Bootstrap Icon für absteigend */
+}
+</style>
+{% endblock %} 

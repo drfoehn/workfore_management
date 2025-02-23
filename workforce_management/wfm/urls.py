@@ -60,6 +60,9 @@ urlpatterns = [
     # Overtime
     path('api/overtime/overview/', views.OvertimeOverviewView.as_view(), name='api-overtime-overview'),
     path('overtime/', views.OvertimeOverviewView.as_view(), name='overtime-overview'),
+
+    # Sick Leave Management
+    path('sick-leave-management/', views.SickLeaveManagementView.as_view(), name='sick-leave-management'),
 ] 
 
 
