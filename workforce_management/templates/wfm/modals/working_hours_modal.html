@@ -89,7 +89,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function fillWorkingHoursModal(data) {
+// Die Funktion muss global verfügbar sein
+window.fillWorkingHoursModal = function(data) {
     document.getElementById('workingHoursId').value = data.id || '';
     document.getElementById('workDate').value = data.date;
     document.getElementById('startTime').value = data.start_time || '';

@@ -98,7 +98,8 @@
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
         headerToolbar: {
             left: 'prev,next today',
@@ -130,6 +131,27 @@ document.addEventListener('DOMContentLoaded', function() {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
+        },
+        eventClick: function(info) {
+            // Wenn es ein Arbeitszeiteneintrag ist (id beginnt mit 'work_')
+            if (info.event.id.startsWith('work_')) {
+                const workingHoursId = info.event.id.replace('work_', '');
+                
+                // Öffne das Modal mit den Daten des Events
+                const modal = new bootstrap.Modal(document.getElementById('workingHoursModal'));
+                
+                // Lade die Daten und zeige das Modal
+                fetch(`/api/working-hours/${workingHoursId}/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        fillWorkingHoursModal(data);
+                        modal.show();
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('{% trans "Fehler beim Laden der Daten" %}');
+                    });
+            }
         }
     });
     
