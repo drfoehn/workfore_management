@@ -12,18 +12,45 @@
             <div class="d-flex gap-2 align-items-center">
                 <!-- Monatsnavigation -->
                 <div class="btn-group">
-                    <a href="?month={{ prev_month.month }}&year={{ prev_month.year }}" 
+                    <a href="?month={{ prev_month.month }}&year={{ prev_month.year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
                        class="btn btn-outline-primary">
                         <i class="bi bi-chevron-left"></i>
                     </a>
                     <button class="btn btn-outline-primary" disabled>
                         {{ month_name }}
                     </button>
-                    <a href="?month={{ next_month.month }}&year={{ next_month.year }}" 
+                    <a href="?month={{ next_month.month }}&year={{ next_month.year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
                        class="btn btn-outline-primary">
                         <i class="bi bi-chevron-right"></i>
                     </a>
                 </div>
+                
+                <!-- Therapeuten Filter -->
+                {% if user.role == 'OWNER' %}
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        {% if selected_therapist %}
+                            {{ selected_therapist.get_full_name|default:selected_therapist.username }}
+                        {% else %}
+                            {% trans "Alle Therapeuten" %}
+                        {% endif %}
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <a class="dropdown-item" href="?month={{ current_date.month }}&year={{ current_date.year }}">
+                                {% trans "Alle Therapeuten" %}
+                            </a>
+                        </li>
+                        {% for therapist in therapists %}
+                            <li>
+                                <a class="dropdown-item" href="?month={{ current_date.month }}&year={{ current_date.year }}&therapist={{ therapist.id }}">
+                                    {{ therapist.get_full_name|default:therapist.username }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
                 
                 <!-- Kalender-Button -->
                 <a href="{% url 'wfm:therapist-calendar' %}" 

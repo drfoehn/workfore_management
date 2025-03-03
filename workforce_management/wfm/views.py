@@ -1736,10 +1736,16 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         # Basis-Queryset
         queryset = TherapistBooking.objects.select_related('therapist')
         
-        # Filter nach Benutzer und Datum
+        # Hole den ausgewählten Therapeuten
+        selected_therapist = self.request.GET.get('therapist')
+        
+        # Filter nach Benutzer
         if self.request.user.role != 'OWNER':
             queryset = queryset.filter(therapist=self.request.user)
-        
+        elif selected_therapist:  # Nur für Owner: Nach Therapeut filtern
+            queryset = queryset.filter(therapist_id=selected_therapist)
+            
+        # Rest des bestehenden Codes bleibt gleich...
         return queryset.filter(
             date__gte=start_date,
             date__lte=end_date
@@ -1806,6 +1812,12 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             'totals': totals
         })
         
+        # Füge Therapeuten-Kontext hinzu
+        if self.request.user.role == 'OWNER':
+            context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
+            selected_therapist_id = self.request.GET.get('therapist')
+            if selected_therapist_id:
+                context['selected_therapist'] = get_object_or_404(CustomUser, id=selected_therapist_id)
         return context
 
 @login_required
