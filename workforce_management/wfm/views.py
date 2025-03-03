@@ -18,8 +18,8 @@ from .models import (
     ClosureDay
 )
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
-from django.db.models import Sum, Count
-from django.db.models.functions import ExtractMonth, ExtractYear
+from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper
+from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute
 from datetime import date, datetime, timedelta, time
 import calendar
 from django.db import models
@@ -1421,13 +1421,59 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
         
-        # Hole den ausgewählten Therapeuten
-        therapist_id = self.request.GET.get('therapist')
-        if therapist_id:
-            context['selected_therapist'] = CustomUser.objects.filter(id=therapist_id).first()
+        # Hole alle Buchungen
+        bookings = TherapistBooking.objects.select_related('therapist').all()
+        
+        # Wenn nicht Owner, dann nur eigene Buchungen mit Details
+        if self.request.user.role != 'OWNER':
+            # Teile die Buchungen in eigene und fremde
+            own_bookings = []
+            other_bookings = []
             
+            for booking in bookings:
+                if booking.therapist == self.request.user:
+                    own_bookings.append({
+                        'id': booking.id,
+                        'title': f"{booking.therapist.get_full_name()}",
+                        'start': f"{booking.date}T{booking.start_time}",
+                        'end': f"{booking.date}T{booking.end_time}",
+                        'color': booking.therapist.color,
+                        'extendedProps': {
+                            'hours': str(booking.hours),
+                            'actual_hours': str(booking.actual_hours) if booking.actual_hours else None,
+                            'notes': booking.notes
+                        }
+                    })
+                else:
+                    other_bookings.append({
+                        'id': None,  # Keine ID für fremde Buchungen
+                        'title': "Belegt",  # Nur "Belegt" anzeigen
+                        'start': f"{booking.date}T{booking.start_time}",
+                        'end': f"{booking.date}T{booking.end_time}",
+                        'color': '#808080',  # Grau für fremde Buchungen
+                        'editable': False,  # Nicht editierbar
+                    })
+            
+            # Kombiniere eigene und fremde Buchungen
+            events = own_bookings + other_bookings
+        else:
+            # Für Owner alle Details anzeigen
+            events = [{
+                'id': booking.id,
+                'title': f"{booking.therapist.get_full_name()}",
+                'start': f"{booking.date}T{booking.start_time}",
+                'end': f"{booking.date}T{booking.end_time}",
+                'color': booking.therapist.color,
+                'extendedProps': {
+                    'hours': str(booking.hours),
+                    'actual_hours': str(booking.actual_hours) if booking.actual_hours else None,
+                    'notes': booking.notes
+                }
+            } for booking in bookings]
+        
+        context['events'] = json.dumps(events)
+        context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
         return context
 
 @login_required
@@ -1448,18 +1494,31 @@ def api_therapist_calendar_events(request):
         
     events = []
     for booking in bookings:
-        events.append({
-            'id': booking.id,
-            'title': f"{booking.therapist.get_full_name()} ({booking.hours}h)",
-            'start': f"{booking.date}T{booking.start_time}",
-            'end': f"{booking.date}T{booking.end_time}",
-            'color': booking.therapist.color,
-            'therapist': {
-                'id': booking.therapist.id,
-                'name': booking.therapist.get_full_name()
-            },
-            'status': booking.status
-        })
+        # Für Owner oder eigene Buchungen: volle Details
+        if request.user.role == 'OWNER' or booking.therapist == request.user:
+            events.append({
+                'id': booking.id,
+                'title': f"{booking.therapist.get_full_name()} ({booking.hours}h)",
+                'start': f"{booking.date}T{booking.start_time}",
+                'end': f"{booking.date}T{booking.end_time}",
+                'color': booking.therapist.color,
+                'therapist': {
+                    'id': booking.therapist.id,
+                    'name': booking.therapist.get_full_name()
+                },
+                'status': booking.status
+            })
+        else:
+            # Für fremde Buchungen: nur Zeit anzeigen
+            events.append({
+                'id': None,  # Keine ID für fremde Buchungen
+                'title': f"{booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}",
+                'start': f"{booking.date}T{booking.start_time}",
+                'end': f"{booking.date}T{booking.end_time}",
+                'color': '#808080',  # Grau für fremde Buchungen
+                'editable': False,
+                'status': 'BLOCKED'  # Spezialstatus für blockierte Zeiten
+            })
         
     return JsonResponse(events, safe=False)
 
@@ -1658,10 +1717,96 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
     context_object_name = 'bookings'
 
     def get_queryset(self):
+        # Hole den ausgewählten Monat aus den URL-Parametern oder nutze den aktuellen Monat
+        selected_month = self.request.GET.get('month')
+        selected_year = self.request.GET.get('year')
+        
+        if selected_month and selected_year:
+            current_date = date(int(selected_year), int(selected_month), 1)
+        else:
+            current_date = timezone.now().date()
+            
+        # Berechne Start- und Enddatum des Monats
+        start_date = date(current_date.year, current_date.month, 1)
+        if current_date.month == 12:
+            end_date = date(current_date.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
+
+        # Basis-Queryset
         queryset = TherapistBooking.objects.select_related('therapist')
+        
+        # Filter nach Benutzer und Datum
         if self.request.user.role != 'OWNER':
             queryset = queryset.filter(therapist=self.request.user)
-        return queryset.order_by('-date', 'start_time')
+        
+        return queryset.filter(
+            date__gte=start_date,
+            date__lte=end_date
+        ).order_by('date', 'start_time')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Hole den ausgewählten Monat oder nutze den aktuellen
+        selected_month = self.request.GET.get('month')
+        selected_year = self.request.GET.get('year')
+        
+        if selected_month and selected_year:
+            current_date = date(int(selected_year), int(selected_month), 1)
+        else:
+            current_date = timezone.now().date()
+            
+        # Berechne vorherigen und nächsten Monat
+        if current_date.month == 1:
+            prev_month = date(current_date.year - 1, 12, 1)
+        else:
+            prev_month = date(current_date.year, current_date.month - 1, 1)
+            
+        if current_date.month == 12:
+            next_month = date(current_date.year + 1, 1, 1)
+        else:
+            next_month = date(current_date.year, current_date.month + 1, 1)
+        
+        # Berechne die Summen für den aktuellen Monat
+        queryset = self.get_queryset()
+        
+        # Berechne die Stunden direkt in der Abfrage
+        queryset = queryset.annotate(
+            booked_hours=ExpressionWrapper(
+                (ExtractHour('end_time') + ExtractMinute('end_time') / 60.0) -
+                (ExtractHour('start_time') + ExtractMinute('start_time') / 60.0),
+                output_field=DecimalField()
+            )
+        )
+        
+        # Berechne die Summen
+        totals = {
+            'total_actual_hours': queryset.aggregate(
+                sum=Sum('actual_hours')
+            )['sum'] or Decimal('0'),
+            'total_extra_hours': queryset.aggregate(
+                sum=Sum(Case(
+                    When(
+                        actual_hours__gt=F('booked_hours'),
+                        then=F('actual_hours') - F('booked_hours')
+                    ),
+                    default=0,
+                    output_field=DecimalField()
+                ))
+            )['sum'] or Decimal('0')
+        }
+        totals['total_sum'] = totals['total_actual_hours'] + totals['total_extra_hours']
+        
+        context.update({
+            'current_date': current_date,
+            'prev_month': prev_month,
+            'next_month': next_month,
+            'month_name': current_date.strftime('%B %Y'),
+            'totals': totals
+        })
+        
+        return context
 
 @login_required
 def api_therapist_booking_detail(request, pk):

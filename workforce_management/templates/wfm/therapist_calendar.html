@@ -142,25 +142,51 @@ document.addEventListener('DOMContentLoaded', function() {
         slotMaxTime: '20:00:00',
         allDaySlot: false,
         height: 'auto',
+        eventDidMount: function(info) {
+            if (info.event.id || '{{ user.role }}' === 'OWNER') {
+                var tooltip = new bootstrap.Tooltip(info.el, {
+                    title: function() {
+                        var content = info.event.title;
+                        if (info.event.extendedProps.hours) {
+                            content += '<br>Gebucht: ' + info.event.extendedProps.hours + ' Std';
+                        }
+                        if (info.event.extendedProps.actual_hours) {
+                            content += '<br>Verwendet: ' + info.event.extendedProps.actual_hours + ' Std';
+                        }
+                        if (info.event.extendedProps.notes) {
+                            content += '<br>Notizen: ' + info.event.extendedProps.notes;
+                        }
+                        return content;
+                    },
+                    html: true,
+                    placement: 'top',
+                    trigger: 'hover',
+                    container: 'body'
+                });
+            }
+        },
         eventClick: function(info) {
-            openBookingModal(info.event.id.replace('book_', ''));
+            if (info.event.id || '{{ user.role }}' === 'OWNER') {
+                openBookingModal(info.event.id);
+            }
         },
         events: function(info, successCallback, failureCallback) {
             fetch('/api/therapist-calendar/events/?start=' + info.startStr + '&end=' + info.endStr{% if selected_therapist %} + '&therapist={{ selected_therapist.id }}'{% endif %})
                 .then(response => response.json())
                 .then(data => {
                     successCallback(data.map(event => ({
-                        id: 'book_' + event.id,
+                        id: event.id ? 'book_' + event.id : null,
                         title: event.title,
                         start: event.start,
                         end: event.end,
                         backgroundColor: event.color,
                         borderColor: event.color,
                         className: 'status-' + event.status,
-                        extendedProps: {
+                        editable: event.id !== null,  // Nur eigene Events editierbar
+                        extendedProps: event.id ? {
                             therapist: event.therapist,
                             status: event.status
-                        }
+                        } : {}
                     })));
                 })
                 .catch(error => {

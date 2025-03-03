@@ -6,35 +6,30 @@
 {% block content %}
 {% csrf_token %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h2 class="mb-0">{% trans "Therapeuten-Buchungen" %}</h2>
-        <div class="d-flex gap-2">
-            <a href="{% url 'wfm:therapist-calendar' %}{% if selected_therapist %}?therapist={{ selected_therapist.id }}{% endif %}" 
-               class="btn btn-outline-primary">
-                <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
-            </a>
-            <div class="dropdown">
-                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    {% if selected_therapist %}
-                        {{ selected_therapist.get_full_name|default:selected_therapist.username }}
-                    {% else %}
-                        {% trans "Alle Therapeuten" %}
-                    {% endif %}
-                </button>
-                <ul class="dropdown-menu">
-                    <li>
-                        <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}">
-                            {% trans "Alle Therapeuten" %}
-                        </a>
-                    </li>
-                    {% for therapist in therapists %}
-                        <li>
-                            <a class="dropdown-item" href="{% url 'wfm:therapist-booking-list' %}?therapist={{ therapist.id }}">
-                                {{ therapist.get_full_name|default:therapist.username }}
-                            </a>
-                        </li>
-                    {% endfor %}
-                </ul>
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">{% trans "Buchungen" %}</h2>
+            <div class="d-flex gap-2 align-items-center">
+                <!-- Monatsnavigation -->
+                <div class="btn-group">
+                    <a href="?month={{ prev_month.month }}&year={{ prev_month.year }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <button class="btn btn-outline-primary" disabled>
+                        {{ month_name }}
+                    </button>
+                    <a href="?month={{ next_month.month }}&year={{ next_month.year }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+                
+                <!-- Kalender-Button -->
+                <a href="{% url 'wfm:therapist-calendar' %}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
+                </a>
             </div>
         </div>
     </div>
@@ -98,6 +93,27 @@
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<!-- Monatliche Übersicht nur für den aktuellen Monat -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">{% trans "Monatsübersicht" %}</h5>
+    </div>
+    <div class="card-body">
+        <table class="table">
+            <tr>
+                <th>{% trans "Verwendete Stunden" %}</th>
+                <th>{% trans "Mehrstunden" %}</th>
+                <th>{% trans "Gesamt" %}</th>
+            </tr>
+            <tr>
+                <td>{{ totals.total_actual_hours|floatformat:2 }}</td>
+                <td>{{ totals.total_extra_hours|floatformat:2 }}</td>
+                <td>{{ totals.total_sum|floatformat:2 }}</td>
+            </tr>
+        </table>
     </div>
 </div>
 
