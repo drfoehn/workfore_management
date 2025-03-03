@@ -938,6 +938,10 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
         # Hole das ausgewählte Jahr oder nutze das aktuelle
         year = int(self.request.GET.get('year', timezone.now().year))
         current_date = timezone.now().date()
+        room_rate = self.request.user.room_rate or Decimal('0')
+        
+        # Debug-Ausgabe
+        print(f"User: {self.request.user}, Role: {self.request.user.role}")
         
         # Berechne die Monatsstatistiken
         months = []
@@ -955,24 +959,64 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
                 date__lte=end_date
             )
             
-            # Berechne die Statistiken
-            stats = self.calculate_stats(queryset)
-            room_rate = self.request.user.room_rate or Decimal('0')
+            # Debug-Ausgabe
+            print(f"Monat {month_num}: {queryset.count()} Buchungen gefunden")
+            if queryset.exists():
+                print("Erste Buchung:", queryset.first().__dict__)
             
-            # Sicherstellen, dass alle Werte Decimal sind und nicht None
-            total_hours = stats['total_booked'] or Decimal('0')
-            used_hours = stats['total_actual'] or Decimal('0')
-            total_difference = stats['total_extra'] or Decimal('0')
-            total_amount = total_difference * room_rate
+            # Berechne die Stunden direkt in der Abfrage
+            queryset = queryset.annotate(
+                booked_hours=ExpressionWrapper(
+                    (ExtractHour('end_time') + ExtractMinute('end_time') / 60.0) -
+                    (ExtractHour('start_time') + ExtractMinute('start_time') / 60.0),
+                    output_field=DecimalField()
+                )
+            )
+            
+            # Berechne die Summen
+            totals = {
+                'total_booked': queryset.aggregate(
+                    sum=Sum('booked_hours')
+                )['sum'] or Decimal('0'),
+                'total_actual': queryset.aggregate(
+                    sum=Sum('actual_hours')
+                )['sum'] or Decimal('0'),
+                'total_extra': queryset.aggregate(
+                    sum=Sum(Case(
+                        When(
+                            actual_hours__gt=F('booked_hours'),
+                            then=F('actual_hours') - F('booked_hours')
+                        ),
+                        default=0,
+                        output_field=DecimalField()
+                    ))
+                )['sum'] or Decimal('0')
+            }
+            
+            # Berechne die zusätzlichen Kosten
+            extra_costs = queryset.annotate(
+                extra_hours=Case(
+                    When(
+                        actual_hours__gt=F('booked_hours'),
+                        then=F('actual_hours') - F('booked_hours')
+                    ),
+                    default=0,
+                    output_field=DecimalField()
+                )
+            ).annotate(
+                cost=F('extra_hours') * room_rate
+            ).aggregate(
+                total_cost=Sum('cost')
+            )['total_cost'] or Decimal('0')
             
             months.append({
                 'number': month_num,
                 'name': date(year, month_num, 1).strftime('%B'),
                 'is_current': current_date.year == year and current_date.month == month_num,
-                'total_hours': total_hours,
-                'used_hours': used_hours,
-                'total_difference': total_difference,
-                'total_amount': total_amount
+                'total_hours': totals['total_booked'],
+                'used_hours': totals['total_actual'],
+                'total_difference': totals['total_extra'],
+                'total_amount': extra_costs
             })
         
         # Berechne die Jahressummen
@@ -987,30 +1031,42 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
             'year': year,
             'months': months,
             'year_totals': year_totals,
-            'room_rate': self.request.user.room_rate or Decimal('0')
+            'room_rate': room_rate
         })
         
         return context
 
     def calculate_stats(self, queryset):
-        return queryset.annotate(
+        # Berechne die Stunden direkt in der Abfrage
+        queryset = queryset.annotate(
             booked_hours=ExpressionWrapper(
                 (ExtractHour('end_time') + ExtractMinute('end_time') / 60.0) -
                 (ExtractHour('start_time') + ExtractMinute('start_time') / 60.0),
                 output_field=DecimalField()
             )
-        ).aggregate(
-            total_booked=Sum('booked_hours') or Decimal('0'),
-            total_actual=Sum('actual_hours') or Decimal('0'),
-            total_extra=Sum(Case(
-                When(
-                    actual_hours__gt=F('booked_hours'),
-                    then=F('actual_hours') - F('booked_hours')
-                ),
-                default=0,
-                output_field=DecimalField()
-            )) or Decimal('0')
         )
+        
+        # Berechne die Summen
+        totals = {
+            'total_booked': queryset.aggregate(
+                sum=Sum('booked_hours')
+            )['sum'] or Decimal('0'),
+            'total_actual': queryset.aggregate(
+                sum=Sum('actual_hours')
+            )['sum'] or Decimal('0'),
+            'total_extra': queryset.aggregate(
+                sum=Sum(Case(
+                    When(
+                        actual_hours__gt=F('booked_hours'),
+                        then=F('actual_hours') - F('booked_hours')
+                    ),
+                    default=0,
+                    output_field=DecimalField()
+                ))
+            )['sum'] or Decimal('0')
+        }
+        
+        return totals
 
     def get_month_detail(self, year, month):
         """Zeigt die Detailansicht für einen bestimmten Monat"""
@@ -1073,7 +1129,7 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
         })
         
         # Verwende das Detail-Template
-        self.template_name = 'wfm/therapist_monthly_detail.html'
+        self.template_name = 'wfm/therapist_monthly_overview.html'
         return context
 
 @login_required
