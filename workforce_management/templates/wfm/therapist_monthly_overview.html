@@ -11,11 +11,13 @@
             <div class="col">
                 <h5 class="mb-0">{% trans "Raumnutzung" %}</h5>
             </div>
+            {% if request.user.role == 'THERAPIST' %}
             <div class="col text-end">
                 <span class="badge bg-light text-dark">
                     {% trans "Stundensatz für Mehrstunden" %}: {{ room_rate|floatformat:2 }} €/h
                 </span>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -47,6 +49,22 @@
         </div>
     </div>
     <div class="card-body">
+        <!-- Nach der Jahr-Navigation -->
+        {% if request.user.role == 'OWNER' %}
+        <div class="mb-3">
+            <form method="get" class="d-flex gap-2 align-items-center">
+                <input type="hidden" name="year" value="{{ year }}">
+                <select name="therapist" class="form-select" onchange="this.form.submit()">
+                    <option value="">{% trans "Alle Therapeuten" %}</option>
+                    {% for therapist in therapists %}
+                        <option value="{{ therapist.id }}" {% if selected_therapist_id == therapist.id|stringformat:"s" %}selected{% endif %}>
+                            {{ therapist.get_full_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        {% endif %}
         <div class="row row-cols-1 row-cols-md-3 g-4">
             {% for month_data in months %}
             <div class="col">
