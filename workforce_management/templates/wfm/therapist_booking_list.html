@@ -110,61 +110,9 @@
     </div>
 </div>
 
-<!-- Modal für Buchungen -->
-<div class="modal fade" id="bookingModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">{% trans "Buchung bearbeiten" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="bookingForm">
-                    <input type="hidden" id="bookingId">
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Therapeut" %}</label>
-                        <input type="text" class="form-control" id="therapistName" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Datum" %}</label>
-                        <input type="date" class="form-control" id="bookingDate" {% if not user.role == 'OWNER' %}readonly{% endif %}>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="form-label">{% trans "Von" %}</label>
-                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Bis" %}</label>
-                            <input type="time" class="form-control" id="endTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="form-label">{% trans "Gebucht (Std)" %}</label>
-                            <input type="number" class="form-control" id="bookedHours" readonly>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Verwendet (Std)" %}</label>
-                            <input type="number" class="form-control" id="actualHours" step="0.25" min="0">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Notizen" %}</label>
-                        <textarea class="form-control" id="notes" rows="3"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                {% if user.role == 'OWNER' %}
-                    <button type="button" class="btn btn-danger" onclick="deleteBooking()">{% trans "Löschen" %}</button>
-                {% endif %}
-                <button type="button" class="btn btn-primary" onclick="saveBooking()">{% trans "Speichern" %}</button>
-            </div>
-        </div>
-    </div>
-</div>
+{# Wichtig: Modal einbinden #}
+{% include "wfm/modals/booking_modal.html" %}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -179,36 +127,75 @@ function openBookingModal(id) {
             return response.json();
         })
         .then(data => {
-            document.getElementById('bookingId').value = data.id;
-            document.getElementById('therapistName').value = data.therapist.username;
-            document.getElementById('bookingDate').value = data.date;
-            document.getElementById('startTime').value = data.start_time;
-            document.getElementById('endTime').value = data.end_time;
-            document.getElementById('bookedHours').value = data.hours;
-            document.getElementById('actualHours').value = data.actual_hours || '';
-            document.getElementById('notes').value = data.notes || '';
+            console.log('Received booking data:', data);
+            
+            // Überprüfen der Therapeuten-Daten
+            if (!data.therapist || !data.therapist.id) {
+                console.error('No therapist data:', data);
+                throw new Error('Keine Therapeuten-Daten gefunden');
+            }
+            
+            // Überprüfen, ob alle DOM-Elemente existieren
+            const elements = {
+                'bookingId': document.getElementById('bookingId'),
+                'therapistName': document.getElementById('therapistName'),
+                'therapistId': document.getElementById('therapistId'),
+                'bookingDate': document.getElementById('bookingDate'),
+                'startTime': document.getElementById('startTime'),
+                'endTime': document.getElementById('endTime'),
+                'bookedHours': document.getElementById('bookedHours'),
+                'actualHours': document.getElementById('actualHours'),
+                'notes': document.getElementById('notes')
+            };
+            
+            // Prüfen, ob alle Elemente gefunden wurden
+            for (const [key, element] of Object.entries(elements)) {
+                if (!element) {
+                    console.error(`Element not found: ${key}`);
+                    throw new Error(`Element nicht gefunden: ${key}`);
+                }
+            }
+            
+            // Wenn alles existiert, setzen wir die Werte
+            elements.bookingId.value = data.id;
+            elements.therapistName.value = data.therapist.name;
+            elements.therapistId.value = data.therapist.id;
+            elements.bookingDate.value = data.date;
+            elements.startTime.value = data.start_time;
+            elements.endTime.value = data.end_time;
+            elements.bookedHours.value = data.hours;
+            elements.actualHours.value = data.actual_hours || '';
+            elements.notes.value = data.notes || '';
             
             new bootstrap.Modal(document.getElementById('bookingModal')).show();
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Fehler beim Laden der Daten');
+            alert('Fehler beim Laden der Daten: ' + error.message);
         });
 }
 
 function saveBooking() {
-    const id = document.getElementById('bookingId').value;
+    const bookingId = document.getElementById('bookingId').value;
+    if (!bookingId) {
+        console.error('No booking ID found');
+        return;
+    }
+
     const data = {
-        booking_id: id,
+        id: bookingId,
         actual_hours: document.getElementById('actualHours').value,
         notes: document.getElementById('notes').value
     };
     
-    if (userRole === 'OWNER') {
+    if ('{{ user.role }}' === 'OWNER') {
+        data.therapist_id = document.getElementById('therapistId').value;
         data.date = document.getElementById('bookingDate').value;
         data.start_time = document.getElementById('startTime').value;
         data.end_time = document.getElementById('endTime').value;
     }
+    
+    console.log('Sending booking data:', data);
     
     fetch('/api/therapist-booking/update/', {
         method: 'POST',

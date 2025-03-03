@@ -2176,3 +2176,7 @@ class SickLeaveManagementView(OwnerRequiredMixin, ListView):
                 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
+# TODO: Abgelehnte Anträge anzeigen in Liste und Kalender
+# TODO: BEi ABlehnung Begründung einfügen
+# TODO: Check og abgelehnte Abwesenheiten eh nicht bei den Tagen weggezählt werden
