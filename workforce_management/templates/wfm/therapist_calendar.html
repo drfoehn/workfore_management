@@ -36,6 +36,7 @@
                 </a>
             </div>
 
+            {% if user.role == 'OWNER' %}
             <!-- Therapeuten Filter -->
             <div class="dropdown">
                 <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
@@ -47,17 +48,20 @@
                 </button>
                 <ul class="dropdown-menu">
                     <li>
-                        <a class="dropdown-item" href="?">{% trans "Alle Therapeuten" %}</a>
+                        <a class="dropdown-item" href="{% url 'wfm:therapist-calendar' %}">
+                            {% trans "Alle Therapeuten" %}
+                        </a>
                     </li>
                     {% for therapist in therapists %}
                         <li>
-                            <a class="dropdown-item" href="?therapist={{ therapist.id }}">
+                            <a class="dropdown-item" href="{% url 'wfm:therapist-calendar' %}?therapist={{ therapist.id }}">
                                 {{ therapist.get_full_name|default:therapist.username }}
                             </a>
                         </li>
                     {% endfor %}
                 </ul>
             </div>
+            {% endif %}
         </div>
     </div>
     <div class="card-body">
@@ -171,7 +175,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         },
         events: function(info, successCallback, failureCallback) {
-            fetch('/api/therapist-calendar/events/?start=' + info.startStr + '&end=' + info.endStr{% if selected_therapist %} + '&therapist={{ selected_therapist.id }}'{% endif %})
+            var url = '/api/therapist-calendar/events/?start=' + info.startStr + '&end=' + info.endStr;
+            {% if selected_therapist %}
+            url += '&therapist={{ selected_therapist.id }}';
+            {% endif %}
+            
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     successCallback(data.map(event => ({

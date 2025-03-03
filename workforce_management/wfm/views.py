@@ -1422,58 +1422,15 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Hole alle Buchungen
-        bookings = TherapistBooking.objects.select_related('therapist').all()
+        # Hole den ausgewählten Therapeuten
+        selected_therapist_id = self.request.GET.get('therapist')
+        if selected_therapist_id:
+            context['selected_therapist'] = get_object_or_404(CustomUser, id=selected_therapist_id)
         
-        # Wenn nicht Owner, dann nur eigene Buchungen mit Details
-        if self.request.user.role != 'OWNER':
-            # Teile die Buchungen in eigene und fremde
-            own_bookings = []
-            other_bookings = []
-            
-            for booking in bookings:
-                if booking.therapist == self.request.user:
-                    own_bookings.append({
-                        'id': booking.id,
-                        'title': f"{booking.therapist.get_full_name()}",
-                        'start': f"{booking.date}T{booking.start_time}",
-                        'end': f"{booking.date}T{booking.end_time}",
-                        'color': booking.therapist.color,
-                        'extendedProps': {
-                            'hours': str(booking.hours),
-                            'actual_hours': str(booking.actual_hours) if booking.actual_hours else None,
-                            'notes': booking.notes
-                        }
-                    })
-                else:
-                    other_bookings.append({
-                        'id': None,  # Keine ID für fremde Buchungen
-                        'title': "Belegt",  # Nur "Belegt" anzeigen
-                        'start': f"{booking.date}T{booking.start_time}",
-                        'end': f"{booking.date}T{booking.end_time}",
-                        'color': '#808080',  # Grau für fremde Buchungen
-                        'editable': False,  # Nicht editierbar
-                    })
-            
-            # Kombiniere eigene und fremde Buchungen
-            events = own_bookings + other_bookings
-        else:
-            # Für Owner alle Details anzeigen
-            events = [{
-                'id': booking.id,
-                'title': f"{booking.therapist.get_full_name()}",
-                'start': f"{booking.date}T{booking.start_time}",
-                'end': f"{booking.date}T{booking.end_time}",
-                'color': booking.therapist.color,
-                'extendedProps': {
-                    'hours': str(booking.hours),
-                    'actual_hours': str(booking.actual_hours) if booking.actual_hours else None,
-                    'notes': booking.notes
-                }
-            } for booking in bookings]
+        # Therapeutenliste für Owner
+        if self.request.user.role == 'OWNER':
+            context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
         
-        context['events'] = json.dumps(events)
-        context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
         return context
 
 @login_required
@@ -1484,9 +1441,15 @@ def api_therapist_calendar_events(request):
     
     bookings = TherapistBooking.objects.select_related('therapist')
     
-    if therapist_id:
+    # Filter nach Therapeut
+    if request.user.role != 'OWNER':
+        # Für normale Therapeuten: Zeige eigene Buchungen mit Details, andere nur als "Belegt"
+        bookings = bookings.all()  # Alle Buchungen laden für die "Belegt"-Anzeige
+    elif therapist_id:
+        # Für Owner mit ausgewähltem Therapeuten
         bookings = bookings.filter(therapist_id=therapist_id)
     
+    # Filter nach Datum
     if start:
         bookings = bookings.filter(date__gte=start[:10])
     if end:
