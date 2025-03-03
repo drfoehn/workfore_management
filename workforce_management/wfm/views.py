@@ -1767,6 +1767,24 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         }
         totals['total_sum'] = totals['total_actual_hours'] + totals['total_extra_hours']
         
+        # Berechne die zusätzlichen Kosten basierend auf den Mehrstunden
+        extra_costs = queryset.annotate(
+            extra_hours=Case(
+                When(
+                    actual_hours__gt=F('booked_hours'),
+                    then=F('actual_hours') - F('booked_hours')
+                ),
+                default=0,
+                output_field=DecimalField()
+            )
+        ).annotate(
+            cost=F('extra_hours') * F('therapist__room_rate')
+        ).aggregate(
+            total_cost=Sum('cost')
+        )['total_cost'] or Decimal('0')
+        
+        totals['extra_costs'] = extra_costs
+        
         context.update({
             'current_date': current_date,
             'prev_month': prev_month,
