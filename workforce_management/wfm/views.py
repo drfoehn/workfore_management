@@ -929,98 +929,151 @@ def api_time_compensation_request(request):
         'error': 'Ungültige Anfrage'
     }, status=400)
 
-class TherapistMonthlyOverviewView(LoginRequiredMixin, ListView):
+class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
     template_name = 'wfm/therapist_monthly_overview.html'
-    context_object_name = 'days'
-
-    def dispatch(self, request, *args, **kwargs):
-        if request.user.role != 'THERAPIST':
-            return redirect('wfm:monthly-overview')
-        return super().dispatch(request, *args, **kwargs)
-
-    def get_queryset(self):
-        year = int(self.request.GET.get('year', datetime.now().year))
-        month = int(self.request.GET.get('month', datetime.now().month))
-        
-        num_days = calendar.monthrange(year, month)[1]
-        days = []
-        
-        for day in range(1, num_days + 1):
-            date = datetime(year, month, day).date()
-            
-            # Hole die Standard-Buchungen für diesen Wochentag
-            schedule = TherapistScheduleTemplate.objects.filter(
-                therapist=self.request.user,
-                weekday=date.weekday()
-            )
-            scheduled_hours = sum(Decimal(str(template.hours)) for template in schedule)
-            
-            # Hole alle tatsächlichen Buchungen für diesen Tag
-            bookings = TherapistBooking.objects.filter(
-                therapist=self.request.user,
-                date=date
-            )
-            
-            # Berechne die Stunden
-            total_hours = scheduled_hours
-            if bookings.exists():
-                total_hours = sum(Decimal(str(booking.hours)) for booking in bookings)
-            
-            # Setze verwendete Stunden standardmäßig auf gebuchte Stunden
-            used_hours = total_hours
-            if bookings.filter(status='USED').exists():
-                used_hours = sum(
-                    booking.actual_hours or Decimal(str(booking.hours))
-                    for booking in bookings.filter(status='USED')
-                )
-            
-            # Berechne die Differenz - nur positive Werte (Mehrstunden)
-            difference = Decimal('0')
-            if used_hours > total_hours:
-                difference = used_hours - total_hours
-            
-            days.append({
-                'date': date,
-                'schedule': schedule,
-                'bookings': bookings,
-                'total_hours': round(total_hours, 2),
-                'used_hours': round(used_hours, 2),
-                'difference': round(difference, 2)
-            })
-        
-        return days
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        year = int(self.request.GET.get('year', datetime.now().year))
-        month = int(self.request.GET.get('month', datetime.now().month))
         
-        context['year'] = year
-        context['month'] = month
-        context['month_name'] = calendar.month_name[month]
+        # Hole das ausgewählte Jahr oder nutze das aktuelle
+        year = int(self.request.GET.get('year', timezone.now().year))
+        current_date = timezone.now().date()
         
-        # Berechne die Gesamtsummen für den Monat
-        total_hours = sum(day['total_hours'] for day in context['days'])
-        used_hours = sum(day['used_hours'] for day in context['days'])
+        # Berechne die Monatsstatistiken
+        months = []
+        for month_num in range(1, 13):
+            start_date = date(year, month_num, 1)
+            if month_num == 12:
+                end_date = date(year + 1, 1, 1) - timedelta(days=1)
+            else:
+                end_date = date(year, month_num + 1, 1) - timedelta(days=1)
+            
+            # Hole die Buchungen für diesen Monat
+            queryset = TherapistBooking.objects.filter(
+                therapist=self.request.user,
+                date__gte=start_date,
+                date__lte=end_date
+            )
+            
+            # Berechne die Statistiken
+            stats = self.calculate_stats(queryset)
+            room_rate = self.request.user.room_rate or Decimal('0')
+            
+            # Sicherstellen, dass alle Werte Decimal sind und nicht None
+            total_hours = stats['total_booked'] or Decimal('0')
+            used_hours = stats['total_actual'] or Decimal('0')
+            total_difference = stats['total_extra'] or Decimal('0')
+            total_amount = total_difference * room_rate
+            
+            months.append({
+                'number': month_num,
+                'name': date(year, month_num, 1).strftime('%B'),
+                'is_current': current_date.year == year and current_date.month == month_num,
+                'total_hours': total_hours,
+                'used_hours': used_hours,
+                'total_difference': total_difference,
+                'total_amount': total_amount
+            })
         
-        # Summiere nur die positiven Differenzen (Mehrstunden)
-        total_difference = sum(
-            day['difference']  # difference ist bereits auf Mehrstunden beschränkt
-            for day in context['days']
-        )
-        
-        room_rate = self.request.user.room_rate or 0
-        
-        # Berechne den zu zahlenden Betrag (keine negativen Differenzen)
-        billable_hours = max(used_hours, total_hours)
+        # Berechne die Jahressummen
+        year_totals = {
+            'total_hours': sum(month['total_hours'] for month in months),
+            'used_hours': sum(month['used_hours'] for month in months),
+            'total_difference': sum(month['total_difference'] for month in months),
+            'total_amount': sum(month['total_amount'] for month in months)
+        }
         
         context.update({
-            'total_hours': round(total_hours, 2),
-            'used_hours': round(used_hours, 2),
-            'total_difference': round(total_difference, 2),
-            'total_amount': round(billable_hours * room_rate, 2)
+            'year': year,
+            'months': months,
+            'year_totals': year_totals,
+            'room_rate': self.request.user.room_rate or Decimal('0')
         })
         
+        return context
+
+    def calculate_stats(self, queryset):
+        return queryset.annotate(
+            booked_hours=ExpressionWrapper(
+                (ExtractHour('end_time') + ExtractMinute('end_time') / 60.0) -
+                (ExtractHour('start_time') + ExtractMinute('start_time') / 60.0),
+                output_field=DecimalField()
+            )
+        ).aggregate(
+            total_booked=Sum('booked_hours') or Decimal('0'),
+            total_actual=Sum('actual_hours') or Decimal('0'),
+            total_extra=Sum(Case(
+                When(
+                    actual_hours__gt=F('booked_hours'),
+                    then=F('actual_hours') - F('booked_hours')
+                ),
+                default=0,
+                output_field=DecimalField()
+            )) or Decimal('0')
+        )
+
+    def get_month_detail(self, year, month):
+        """Zeigt die Detailansicht für einen bestimmten Monat"""
+        context = {}
+        
+        # Berechne Start- und Enddatum des Monats
+        start_date = date(year, month, 1)
+        if month == 12:
+            end_date = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = date(year, month + 1, 1) - timedelta(days=1)
+        
+        # Hole alle Buchungen für diesen Monat
+        bookings = TherapistBooking.objects.filter(
+            therapist=self.request.user,
+            date__gte=start_date,
+            date__lte=end_date
+        ).order_by('date', 'start_time')
+        
+        # Gruppiere Buchungen nach Datum
+        days = []
+        current_date = start_date
+        while current_date <= end_date:
+            day_bookings = [b for b in bookings if b.date == current_date]
+            
+            # Berechne die Stunden für diesen Tag
+            total_hours = sum(booking.hours for booking in day_bookings)
+            used_hours = sum(booking.actual_hours or booking.hours for booking in day_bookings)
+            difference = max(0, used_hours - total_hours)  # Nur positive Differenzen (Mehrstunden)
+            
+            days.append({
+                'date': current_date,
+                'weekday': current_date.strftime('%A'),
+                'bookings': day_bookings,
+                'total_hours': total_hours,
+                'used_hours': used_hours,
+                'difference': difference
+            })
+            
+            current_date += timedelta(days=1)
+        
+        # Berechne die Monatssummen
+        monthly_totals = {
+            'total_hours': sum(day['total_hours'] for day in days),
+            'used_hours': sum(day['used_hours'] for day in days),
+            'total_difference': sum(day['difference'] for day in days)
+        }
+        
+        # Berechne die zusätzlichen Kosten
+        room_rate = self.request.user.room_rate or Decimal('0')
+        monthly_totals['total_amount'] = monthly_totals['total_difference'] * room_rate
+        
+        context.update({
+            'days': days,
+            'month': month,
+            'year': year,
+            'month_name': date(year, month, 1).strftime('%B'),
+            'totals': monthly_totals,
+            'room_rate': room_rate
+        })
+        
+        # Verwende das Detail-Template
+        self.template_name = 'wfm/therapist_monthly_detail.html'
         return context
 
 @login_required
