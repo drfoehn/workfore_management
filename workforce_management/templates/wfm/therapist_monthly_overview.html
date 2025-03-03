@@ -105,6 +105,39 @@
             </div>
             {% endfor %}
         </div>
+        <!-- Nach den Monatskarten, aber noch in der card-body -->
+        <div class="row mt-4">
+            <div class="col">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">{% trans "Jahressummen" %} {{ year }}</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <td>{% trans "Gesamt Reserviert" %}</td>
+                                <td class="text-end">{{ year_totals.total_hours|floatformat:2 }} h</td>
+                            </tr>
+                            <tr>
+                                <td>{% trans "Gesamt Verwendet" %}</td>
+                                <td class="text-end">{{ year_totals.used_hours|floatformat:2 }} h</td>
+                            </tr>
+                            <tr>
+                                <td>{% trans "Gesamt Mehrstunden" %}</td>
+                                <td class="text-end {% if year_totals.total_difference > 0 %}text-success{% endif %}">
+                                    {% if year_totals.total_difference > 0 %}+{% endif %}
+                                    {{ year_totals.total_difference|floatformat:2 }} h
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>{% trans "Gesamt Zusatzkosten" %}</td>
+                                <td class="text-end">{{ year_totals.total_amount|floatformat:2 }} €</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
