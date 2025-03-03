@@ -1665,57 +1665,71 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
 
 @login_required
 def api_therapist_booking_detail(request, pk):
-    """API-Endpunkt für Therapeuten-Buchungsdetails"""
-    if request.user.role != 'OWNER':
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+    """API-Endpunkt zum Abrufen einer Therapeuten-Buchung"""
+    try:
+        # Erlaube Zugriff für Owner und den zugewiesenen Therapeuten
+        booking = TherapistBooking.objects.get(id=pk)
+        if not (request.user.role == 'OWNER' or request.user == booking.therapist):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
-    booking = get_object_or_404(TherapistBooking, pk=pk)
-    return JsonResponse({
-        'id': booking.id,
-        'therapist': {
-            'id': booking.therapist.id,
-            'name': booking.therapist.get_full_name()
-        },
-        'date': booking.date.strftime('%Y-%m-%d'),
-        'start_time': booking.start_time.strftime('%H:%M'),
-        'end_time': booking.end_time.strftime('%H:%M'),
-        'hours': booking.hours,
-        'status': booking.status
-    })
+        return JsonResponse({
+            'id': booking.id,
+            'therapist': {
+                'id': booking.therapist.id,
+                'name': booking.therapist.get_full_name()
+            },
+            'date': booking.date.strftime('%Y-%m-%d'),
+            'start_time': booking.start_time.strftime('%H:%M'),
+            'end_time': booking.end_time.strftime('%H:%M'),
+            'hours': booking.hours,
+            'actual_hours': booking.actual_hours,
+            'notes': booking.notes,
+            'status': booking.status
+        })
+        
+    except TherapistBooking.DoesNotExist:
+        return JsonResponse({
+            'error': 'Buchung nicht gefunden'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
 
 @login_required
 def api_therapist_booking_update(request):
     """API-Endpunkt zum Aktualisieren einer Therapeuten-Buchung"""
-    if request.method != 'POST' or request.user.role != 'OWNER':
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
         
     try:
         data = json.loads(request.body)
         booking = TherapistBooking.objects.get(id=data['id'])
         
-        # Aktualisiere die Buchung
-        booking.therapist_id = data['therapist_id']
-        booking.date = datetime.strptime(data['date'], '%Y-%m-%d').date()
-        booking.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-        booking.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-        booking.status = data.get('status', booking.status)
+        # Prüfe Berechtigungen
+        if request.user.role == 'OWNER':
+            # Owner darf alles ändern
+            booking.therapist_id = data.get('therapist_id', booking.therapist_id)
+            booking.date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+            booking.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+            booking.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+            booking.status = data.get('status', booking.status)
+            if 'actual_hours' in data and data['actual_hours']:
+                booking.actual_hours = Decimal(data['actual_hours'])
+            if 'notes' in data:
+                booking.notes = data['notes']
+        elif request.user == booking.therapist:
+            # Therapeut darf nur actual_hours und notes ändern
+            if 'actual_hours' in data and data['actual_hours']:
+                booking.actual_hours = Decimal(data['actual_hours'])
+            if 'notes' in data:
+                booking.notes = data['notes']
+        else:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+            
         booking.save()
         
-        return JsonResponse({
-            'success': True,
-            'booking': {
-                'id': booking.id,
-                'therapist': {
-                    'id': booking.therapist.id,
-                    'name': booking.therapist.get_full_name()
-                },
-                'date': booking.date.strftime('%Y-%m-%d'),
-                'start_time': booking.start_time.strftime('%H:%M'),
-                'end_time': booking.end_time.strftime('%H:%M'),
-                'hours': booking.hours,
-                'status': booking.status
-            }
-        })
+        return JsonResponse({'success': True})
         
     except TherapistBooking.DoesNotExist:
         return JsonResponse({

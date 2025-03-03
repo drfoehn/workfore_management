@@ -67,17 +67,8 @@
                             <td>{{ booking.end_time|time:"H:i" }}</td>
                             <td>{{ booking.hours|floatformat:2 }}</td>
                             <td>{{ booking.actual_hours|default_if_none:"-"|floatformat:2 }}</td>
-                            <td class="{% if booking.difference is not None %}text-danger{% endif %}">
-                                <!-- Debug Info -->
-                                {% if debug %}
-                                    
-                                {% endif %}
-                                <!-- Normale Anzeige -->
-                                {% if booking.difference is not None %}
-                                    {{ booking.difference|floatformat:2 }}
-                                {% else %}
-                                    -
-                                {% endif %}
+                            <td class="{% if booking.actual_hours is not None and booking.difference > 0 %}text-danger{% endif %}">
+                                {{ booking.difference|default:"-"|floatformat:2 }}
                             </td>
                             <td>{{ booking.notes|default:"-" }}</td>
                             <td>

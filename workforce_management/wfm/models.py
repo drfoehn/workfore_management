@@ -402,6 +402,12 @@ class TherapistBooking(models.Model):
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='RESERVED')
 
+    def save(self, *args, **kwargs):
+        # Wenn actual_hours nicht gesetzt ist, setze es auf die gebuchten Stunden
+        if self.actual_hours is None:
+            self.actual_hours = self.hours
+        super().save(*args, **kwargs)
+
     @property
     def hours(self):
         """Berechnet die gebuchten Stunden"""
@@ -409,6 +415,14 @@ class TherapistBooking(models.Model):
         end = datetime.combine(date.min, self.end_time)
         duration = end - start
         return Decimal(str(duration.total_seconds() / 3600))
+
+    @property
+    def difference(self):
+        """Berechnet die Differenz zwischen gebuchten und tatsächlichen Stunden.
+        Positiv nur wenn mehr Stunden verwendet als gebucht wurden."""
+        if self.actual_hours is None or self.actual_hours <= self.hours:
+            return None
+        return self.actual_hours - self.hours
 
     def clean(self):
         if self.start_time and self.end_time and self.start_time >= self.end_time:

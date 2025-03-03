@@ -98,7 +98,7 @@ class Command(BaseCommand):
             VacationEntitlement.objects.create(
                 employee=employee,
                 year=today.year,
-                total_days=25
+                total_hours=300
             )
             
             # Arbeitszeiten der letzten 30 Tage
