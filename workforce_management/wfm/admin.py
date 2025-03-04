@@ -21,24 +21,65 @@ from import_export.admin import ImportExportModelAdmin
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'hourly_rate', 'room_rate', 'color')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'phone', 'employed_since')
     list_filter = ('role', 'is_active')
-    search_fields = ('username', 'email', 'first_name', 'last_name')
+    search_fields = ('username', 'email', 'first_name', 'last_name', 'phone', 'mobile', 'street', 'city')
     
     # Basis-Felder von UserAdmin
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
-        (_('Persönliche Informationen'), {'fields': ('first_name', 'last_name', 'email', 'color')}),
-        (_('Berechtigungen'), {'fields': ('role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        (_('Vergütung'), {'fields': ('hourly_rate', 'room_rate')}),
-        (_('Wichtige Daten'), {'fields': ('last_login', 'date_joined')}),
+        (_('Persönliche Informationen'), {
+            'fields': (
+                'first_name', 
+                'last_name', 
+                'email',
+                'phone',
+                'mobile',
+                'date_of_birth',
+                'street',
+                'zip_code',
+                'city',
+                'color'
+            )
+        }),
+        (_('Beschäftigung'), {
+            'fields': (
+                'role',
+                'employed_since',
+                'hourly_rate',
+                'room_rate'
+            )
+        }),
+        (_('Berechtigungen'), {
+            'fields': (
+                'is_active',
+                'is_staff',
+                'is_superuser',
+                'groups',
+                'user_permissions'
+            )
+        }),
+        (_('Wichtige Daten'), {
+            'fields': ('last_login', 'date_joined')
+        }),
     )
     
     # Felder für das Anlegen neuer Benutzer
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username', 'password1', 'password2', 'role', 'hourly_rate', 'room_rate'),
+            'fields': (
+                'username',
+                'password1',
+                'password2',
+                'email',
+                'first_name',
+                'last_name',
+                'role',
+                'employed_since',
+                'hourly_rate',
+                'room_rate'
+            ),
         }),
     )
 
@@ -125,9 +166,9 @@ class OvertimeAccountAdmin(admin.ModelAdmin):
 
 @admin.register(UserDocument)
 class UserDocumentAdmin(admin.ModelAdmin):
-    list_display = ['user', 'title', 'uploaded_at']
-    list_filter = ['uploaded_at', 'user']
-    search_fields = ['user__username', 'title', 'notes']
+    list_display = ['display_name', 'user', 'uploaded_at']
+    list_filter = ['user']
+    search_fields = ['display_name', 'notes']
     date_hierarchy = 'uploaded_at'
 
 class ClosureDayResource(resources.ModelResource):

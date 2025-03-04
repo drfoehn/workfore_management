@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Mitarbeiter" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Therapeuten -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-heart-pulse"></i> {% trans "Therapeuten" %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if therapists %}
+                <div class="list-group list-group-flush">
+                    {% for therapist in therapists %}
+                    <a href="{% url 'wfm:employee-detail' therapist.id %}" 
+                       class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-0">{{ therapist.get_full_name }}</h6>
+                            <small class="text-muted">{{ therapist.email }}</small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">
+                            {{ therapist.room_rate|default:"-" }} €/h
+                        </span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">{% trans "Keine Therapeuten vorhanden" %}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Assistenten -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-workspace"></i> {% trans "Assistenten" %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if assistants %}
+                <div class="list-group list-group-flush">
+                    {% for assistant in assistants %}
+                    <a href="{% url 'wfm:employee-detail' assistant.id %}" 
+                       class="list-group-item list-group-item-action">
+                        <h6 class="mb-0">{{ assistant.get_full_name }}</h6>
+                        <small class="text-muted">{{ assistant.email }}</small>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">{% trans "Keine Assistenten vorhanden" %}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Owner -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-fill"></i> {% trans "Geschäftsführung" %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if owners %}
+                <div class="list-group list-group-flush">
+                    {% for owner in owners %}
+                    <a href="{% url 'wfm:employee-detail' owner.id %}" 
+                       class="list-group-item list-group-item-action">
+                        <h6 class="mb-0">{{ owner.get_full_name }}</h6>
+                        <small class="text-muted">{{ owner.email }}</small>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">{% trans "Keine Geschäftsführer vorhanden" %}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -85,6 +85,11 @@
                         <ul class="dropdown-menu dropdown-menu-end">
                         
                             <li>
+                                <a class="dropdown-item" href="{% url 'wfm:user-documents' %}">
+                                    <i class="bi bi-file-earmark-text"></i> {% trans "Dokumente" %}
+                                </a>
+                            </li>
+                            <li>
                                 <form method="post" action="{% url 'wfm:logout' %}" class="dropdown-item">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-link p-0">

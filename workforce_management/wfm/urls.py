@@ -63,6 +63,14 @@ urlpatterns = [
 
     # Sick Leave Management
     path('sick-leave-management/', views.SickLeaveManagementView.as_view(), name='sick-leave-management'),
+
+    # Dokumente
+    path('documents/', views.UserDocumentListView.as_view(), name='user-documents'),
+
+    # Mitarbeiter
+    path('employees/', views.EmployeeListView.as_view(), name='employee-list'),
+    path('employee/<int:pk>/', views.EmployeeDetailView.as_view(), name='employee-detail'),
+
 ] 
 
 

@@ -1,58 +1,67 @@
 {% extends "base.html" %}
 {% load i18n %}
 
+{% block title %}{% trans "Dokumente" %} - {{ block.super }}{% endblock %}
+
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>{% trans "Dokumente" %}</h2>
+        <h5 class="mb-0">{% trans "Dokumente" %}</h5>
     </div>
     <div class="card-body">
-        <form method="post" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="mb-3">
-                <label class="form-label">{% trans "Titel" %}</label>
-                <input type="text" name="title" class="form-control" required>
+        {% if request.user.role == 'OWNER' %}
+        <!-- Benutzerfilter für Owner -->
+        <form method="get" class="mb-4">
+            <div class="row g-2">
+                <div class="col-auto">
+                    <select name="user" class="form-select" onchange="this.form.submit()">
+                        <option value="">{% trans "Alle Benutzer" %}</option>
+                        {% for user in users %}
+                            <option value="{{ user.id }}" {% if selected_user == user.id|stringformat:"s" %}selected{% endif %}>
+                                {{ user.get_full_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
-            <div class="mb-3">
-                <label class="form-label">{% trans "Datei" %}</label>
-                <input type="file" name="file" class="form-control" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">{% trans "Notizen" %}</label>
-                <textarea name="notes" class="form-control"></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">{% trans "Hochladen" %}</button>
         </form>
+        {% endif %}
 
-        <hr>
-
+        <!-- Dokumentenliste -->
         <div class="table-responsive">
-            <table class="table">
+            <table class="table table-striped">
                 <thead>
                     <tr>
-                        <th>{% trans "Titel" %}</th>
-                        <th>{% trans "Hochgeladen am" %}</th>
+                        <th>{% trans "Anzeigename" %}</th>
+                        <th>{% trans "Originaldatei" %}</th>
+                        <th>{% trans "Notizen" %}</th>
+                        <th>{% trans "Hochgeladen" %}</th>
+                        {% if request.user.role == 'OWNER' %}
+                            <th>{% trans "Benutzer" %}</th>
+                        {% endif %}
                         <th>{% trans "Aktionen" %}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for doc in documents %}
                     <tr>
-                        <td>{{ doc.title }}</td>
+                        <td>{{ doc.display_name }}</td>
+                        <td>{{ doc.original_filename }}</td>
+                        <td>{{ doc.notes|default:"-" }}</td>
                         <td>{{ doc.uploaded_at|date:"d.m.Y H:i" }}</td>
+                        {% if request.user.role == 'OWNER' %}
+                            <td>{{ doc.user.get_full_name }}</td>
+                        {% endif %}
                         <td>
-                            <div class="btn-group">
-                                <a href="{{ doc.file.url }}" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-download"></i>
-                                </a>
-                                {% if user.role == 'OWNER' %}
-                                <button type="button" 
-                                        class="btn btn-sm btn-outline-danger"
-                                        onclick="deleteDocument({{ doc.id }})">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                {% endif %}
-                            </div>
+                            <a href="{{ doc.file.url }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{% if request.user.role == 'OWNER' %}6{% else %}5{% endif %}" class="text-center">
+                            {% trans "Keine Dokumente vorhanden." %}
                         </td>
                     </tr>
                     {% endfor %}

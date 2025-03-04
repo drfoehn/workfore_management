@@ -93,7 +93,19 @@
             </div>
         </div>
 
-        
+        <!-- Im Owner-Bereich des Dashboards -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">{% trans "Mitarbeiter" %}</h5>
+                </div>
+                <div class="card-body">
+                    <a href="{% url 'wfm:employee-list' %}" class="btn btn-primary w-100">
+                        <i class="bi bi-people"></i> {% trans "Mitarbeiterübersicht" %}
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 
     {% elif user.role == 'ASSISTANT' or user.role == 'CLEANING' %}

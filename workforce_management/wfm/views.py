@@ -15,7 +15,8 @@ from .models import (
     TherapistScheduleTemplate,
     CustomUser,
     OvertimeAccount,
-    ClosureDay
+    ClosureDay,
+    UserDocument
 )
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper
@@ -2449,3 +2450,232 @@ class SickLeaveManagementView(OwnerRequiredMixin, ListView):
 # TODO: Abgelehnte Anträge anzeigen in Liste und Kalender
 # TODO: BEi ABlehnung Begründung einfügen
 # TODO: Check og abgelehnte Abwesenheiten eh nicht bei den Tagen weggezählt werden
+
+class UserDocumentListView(LoginRequiredMixin, ListView):
+    model = UserDocument
+    template_name = 'wfm/user_documents.html'
+    context_object_name = 'documents'
+
+    def get_queryset(self):
+        if self.request.user.role == 'OWNER':
+            # Owner sieht alle Dokumente mit Benutzerfilter-Option
+            user_id = self.request.GET.get('user')
+            if user_id:
+                return UserDocument.objects.filter(user_id=user_id)
+            return UserDocument.objects.all()
+        else:
+            # Andere sehen nur ihre eigenen Dokumente
+            return UserDocument.objects.filter(user=self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.user.role == 'OWNER':
+            context['users'] = CustomUser.objects.all()
+            context['selected_user'] = self.request.GET.get('user')
+        return context
+
+# @login_required
+# def upload_document(request):
+#     if request.method == 'POST':
+#         form = UserDocumentForm(request.POST, request.FILES)
+#         if form.is_valid():
+#             document = form.save(commit=False)
+#             document.user = request.user
+#             document.original_filename = request.FILES['file'].name
+#             document.save()
+#             messages.success(request, _('Dokument erfolgreich hochgeladen.'))
+#             return redirect('wfm:user-documents')
+#     return redirect('wfm:user-documents')
+
+@login_required
+def delete_document(request, pk):
+    document = get_object_or_404(UserDocument, pk=pk)
+    if request.user.role == 'OWNER' or document.user == request.user:
+        document.delete()
+        messages.success(request, _('Dokument erfolgreich gelöscht.'))
+    return redirect('wfm:user-documents')
+
+class EmployeeDetailView(LoginRequiredMixin, DetailView):
+    model = CustomUser
+    template_name = 'wfm/employee_detail.html'
+    context_object_name = 'employee'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        employee = self.get_object()
+        current_year = timezone.now().year
+        today = date.today()
+
+        # Berechne Alter und Betriebszugehörigkeit
+        if employee.date_of_birth:
+            age = relativedelta(today, employee.date_of_birth).years
+            context['age'] = age
+
+        if employee.employed_since:
+            years_employed = relativedelta(today, employee.employed_since).years
+            months_employed = relativedelta(today, employee.employed_since).months
+            context['years_employed'] = years_employed
+            context['months_employed'] = months_employed
+
+        # Hole die Dokumente
+        context['documents'] = employee.documents.all()
+
+        # Hole Urlaubsanspruch und berechne verwendete Stunden
+        vacation_entitlement = VacationEntitlement.objects.filter(
+            employee=employee,
+            year=current_year
+        ).first()
+        context['vacation_entitlement'] = vacation_entitlement
+
+        # Hole genommenen Urlaub
+        vacations = Vacation.objects.filter(
+            employee=employee,
+            start_date__year=current_year
+        ).order_by('-start_date')
+        context['vacations'] = vacations
+
+        # Berechne verwendete Urlaubsstunden (8 Stunden pro Tag)
+        if vacation_entitlement:
+            used_vacation_hours = sum((v.end_date - v.start_date).days + 1 for v in vacations) * 8
+            context['used_vacation_hours'] = used_vacation_hours
+            context['vacation_progress_percent'] = int((used_vacation_hours / vacation_entitlement.total_hours) * 100)
+
+        # Hole Krankmeldungen
+        context['sick_leaves'] = SickLeave.objects.filter(
+            employee=employee
+        ).order_by('-start_date')[:5]
+
+        # Hole Überstunden
+        context['overtime_accounts'] = OvertimeAccount.objects.filter(
+            employee=employee,
+            year=current_year
+        ).order_by('-month')
+
+        if employee.role == 'THERAPIST':
+            # Hole die letzten Raumbuchungen für Therapeuten
+            context['bookings'] = TherapistBooking.objects.filter(
+                therapist=employee
+            ).order_by('-date')[:5]
+
+        # Berechne verfügbare Zeitausgleichstage
+        overtime_total = OvertimeAccount.objects.filter(
+            employee=employee,
+            year=current_year,
+            is_finalized=True
+        ).aggregate(
+            total=Sum('hours_for_timecomp')
+        )['total'] or 0
+
+        used_timecomp = TimeCompensation.objects.filter(
+            employee=employee,
+            date__year=current_year,
+            status='APPROVED'
+        ).count() * 8  # 8 Stunden pro Tag
+
+        available_timecomp_hours = max(0, overtime_total - used_timecomp)
+        context['available_timecomp_days'] = available_timecomp_hours / 8
+        context['available_timecomp_hours'] = available_timecomp_hours
+
+        # Hole Wochenarbeitszeiten
+        weekdays = range(0, 7)  # 0 = Montag, 6 = Sonntag
+        weekly_schedule = []
+        total_weekly_hours = Decimal('0.00')
+        
+        if employee.role == 'THERAPIST':
+            schedule_model = TherapistScheduleTemplate
+            schedule_filter = {'therapist': employee}
+        else:
+            schedule_model = ScheduleTemplate
+            schedule_filter = {'employee': employee}
+
+        for weekday in weekdays:
+            schedule = schedule_model.objects.filter(
+                **schedule_filter,
+                weekday=weekday
+            ).order_by('-valid_from').first()
+
+            if schedule:
+                total_weekly_hours += schedule.hours
+
+            weekly_schedule.append({
+                'weekday': dict(schedule_model.WEEKDAY_CHOICES)[weekday],
+                'schedule': schedule
+            })
+        
+        context['weekly_schedule'] = weekly_schedule
+        context['total_weekly_hours'] = total_weekly_hours
+
+        # Hole nur zukünftige Urlaube
+        context['future_vacations'] = Vacation.objects.filter(
+            employee=employee,
+            start_date__gte=today
+        ).order_by('start_date')
+
+        # Hole zukünftige Zeitausgleiche
+        context['future_timecomps'] = TimeCompensation.objects.filter(
+            employee=employee,
+            date__gte=today
+        ).order_by('date')
+
+        # Hole alle Arbeitszeitpläne (nicht nur den aktuellsten)
+        weekdays = range(0, 7)
+        if employee.role == 'THERAPIST':
+            schedule_model = TherapistScheduleTemplate
+            schedule_filter = {'therapist': employee}
+        else:
+            schedule_model = ScheduleTemplate
+            schedule_filter = {'employee': employee}
+
+        # Hole alle unique valid_from Daten
+        schedule_periods = schedule_model.objects.filter(
+            **schedule_filter
+        ).values('valid_from').distinct().order_by('-valid_from')
+
+        schedule_history = []
+        for period in schedule_periods:
+            weekly_schedule = []
+            total_hours = Decimal('0.00')
+            
+            for weekday in weekdays:
+                schedule = schedule_model.objects.filter(
+                    **schedule_filter,
+                    valid_from=period['valid_from'],
+                    weekday=weekday
+                ).first()
+
+                if schedule:
+                    total_hours += schedule.hours
+
+                weekly_schedule.append({
+                    'weekday': dict(schedule_model.WEEKDAY_CHOICES)[weekday],
+                    'schedule': schedule
+                })
+            
+            schedule_history.append({
+                'valid_from': period['valid_from'],
+                'schedule': weekly_schedule,
+                'total_hours': total_hours
+            })
+
+        context['schedule_history'] = schedule_history
+
+        return context
+
+    def get_queryset(self):
+        # Nur Owner dürfen alle Mitarbeiter sehen, andere nur sich selbst
+        if self.request.user.role == 'OWNER':
+            return CustomUser.objects.all()
+        return CustomUser.objects.filter(id=self.request.user.id)
+
+class EmployeeListView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
+    template_name = 'wfm/employee_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Mitarbeiter nach Rollen gruppieren
+        context['therapists'] = CustomUser.objects.filter(role='THERAPIST').order_by('first_name', 'last_name')
+        context['assistants'] = CustomUser.objects.filter(role='ASSISTANT').order_by('first_name', 'last_name')
+        context['owners'] = CustomUser.objects.filter(role='OWNER').order_by('first_name', 'last_name')
+        
+        return context

@@ -44,6 +44,16 @@ class CustomUser(AbstractUser):
         help_text=_("Farbe für die Anzeige in Kalendern und Listen")
     )
 
+    # Neue persönliche Informationen
+    phone = models.CharField(max_length=20, blank=True, verbose_name=_("Telefon"))
+    mobile = models.CharField(max_length=20, blank=True, verbose_name=_("Mobil"))
+    email = models.EmailField(blank=True, verbose_name=_("E-Mail"))
+    street = models.CharField(max_length=100, blank=True, verbose_name=_("Straße"))
+    zip_code = models.CharField(max_length=10, blank=True, verbose_name=_("PLZ"))
+    city = models.CharField(max_length=100, blank=True, verbose_name=_("Ort"))
+    date_of_birth = models.DateField(null=True, blank=True, verbose_name=_("Geburtsdatum"))
+    employed_since = models.DateField(null=True, blank=True, verbose_name=_("Angestellt seit"))
+
     def save(self, *args, **kwargs):
         if not self.color:
             colors = [
@@ -473,26 +483,24 @@ class TherapistScheduleTemplate(models.Model):
 
 class UserDocument(models.Model):
     """Dokumente für Benutzer (Verträge etc.)"""
-    user = models.ForeignKey(
-        CustomUser, 
-        on_delete=models.CASCADE,
-        related_name='documents'
-    )
-    title = models.CharField(max_length=255, verbose_name=_("Titel"))
-    file = models.FileField(
-        upload_to='user_documents/%Y/%m/',
-        verbose_name=_("Datei")
-    )
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='documents')
+    file = models.FileField(upload_to='user_documents/%Y/%m/%d/')
+    display_name = models.CharField(max_length=255, verbose_name=_("Anzeigename"), default="")
     uploaded_at = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True, verbose_name=_("Notizen"))
+    notes = models.TextField(blank=True, verbose_name=_("Notizen"), default="")
 
     class Meta:
-        verbose_name = _("Benutzerdokument")
-        verbose_name_plural = _("Benutzerdokumente")
+        verbose_name = _("Dokument")
+        verbose_name_plural = _("Dokumente")
         ordering = ['-uploaded_at']
 
     def __str__(self):
-        return f"{self.user.username} - {self.title}"
+        return f"{self.display_name} ({self.file.name})"
+
+    def save(self, *args, **kwargs):
+        if not self.display_name:
+            self.display_name = self.file.name
+        super().save(*args, **kwargs)
 
 class OvertimeAccount(models.Model):
     """Überstundenkonto für Zeitausgleich"""
