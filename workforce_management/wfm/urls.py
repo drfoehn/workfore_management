@@ -51,6 +51,7 @@ urlpatterns = [
     path('api/therapist-booking/<int:pk>/', views.api_therapist_booking_detail, name='api-therapist-booking-detail'),
     path('api/therapist-booking/update/', views.api_therapist_booking_update, name='api-therapist-booking-update'),
     path('api/therapist-booking/<int:pk>/delete/', views.api_therapist_booking_delete, name='api-therapist-booking-delete'),
+    path('api/therapist-booking/mark-as-paid/', views.api_therapist_booking_mark_as_paid, name='api-therapist-booking-mark-as-paid'),
     
     # Absences
     path('absences/', views.AbsenceListView.as_view(), name='absence-list'),
@@ -70,6 +71,12 @@ urlpatterns = [
     # Mitarbeiter
     path('employees/', views.EmployeeListView.as_view(), name='employee-list'),
     path('employee/<int:pk>/', views.EmployeeDetailView.as_view(), name='employee-detail'),
+
+    # Finance Overview
+    path('finance-overview/', views.FinanceOverviewView.as_view(), name='finance-overview'),
+
+    # New API endpoint
+    path('api/mark-extra-hours-as-paid/', views.api_mark_extra_hours_as_paid, name='api-mark-extra-hours-as-paid'),
 
 ] 
 

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Finanzübersicht" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Navigation -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Finanzübersicht" %}</h1>
+        <div class="btn-group">
+            <a href="?month={{ prev_month.month }}&year={{ prev_month.year }}" 
+               class="btn btn-outline-primary">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            <button class="btn btn-outline-primary" disabled>
+                {{ month_name }}
+            </button>
+            <a href="?month={{ next_month.month }}&year={{ next_month.year }}" 
+               class="btn btn-outline-primary">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- Zusammenfassung -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">{% trans "Einnahmen" %}</h5>
+                    <h3 class="mb-0">{{ total_income|floatformat:2 }}€</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5 class="card-title">{% trans "Ausgaben" %}</h5>
+                    <h3 class="mb-0">{{ total_expenses|floatformat:2 }}€</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Einnahmen -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">{% trans "Einnahmen" %}</h5>
+                </div>
+                <div class="card-body">
+                    <h6>{% trans "Therapeuten-Buchungen" %}</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Therapeut" %}</th>
+                                    <th>{% trans "Art" %}</th>
+                                    <th class="text-end">{% trans "Stunden" %}</th>
+                                    <th class="text-end">{% trans "Betrag" %}</th>
+                                    <th class="text-center">{% trans "Aktion" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for income in grouped_income %}
+                                    <!-- Reguläre Buchungen -->
+                                    <tr>
+                                        <td rowspan="2">{{ income.name }}</td>
+                                        <td>{% trans "Standard" %}</td>
+                                        <td class="text-end">{{ income.regular.hours|floatformat:1 }}h</td>
+                                        <td class="text-end">{{ income.regular.amount|floatformat:2 }}€</td>
+                                        <td></td>
+                                    </tr>
+                                    <!-- Mehrstunden -->
+                                    <tr {% if income.extra.hours > 0 %}class="table-warning"{% endif %}>
+                                        <td>{% trans "Mehrstunden" %}</td>
+                                        <td class="text-end">{{ income.extra.hours|floatformat:1 }}h</td>
+                                        <td class="text-end">{{ income.extra.amount|floatformat:2 }}€</td>
+                                        <td class="text-center">
+                                            {% if income.extra.hours > 0 %}
+                                            <button class="btn btn-sm btn-success mark-as-paid" 
+                                                    data-therapist-id="{{ income.therapist_id }}"
+                                                    data-month="{{ current_date|date:'m' }}"
+                                                    data-year="{{ current_date|date:'Y' }}">
+                                                {% trans "Als bezahlt markieren" %}
+                                            </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ausgaben -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">{% trans "Ausgaben" %}</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Assistenten -->
+                    <h6>{% trans "Assistenten" %}</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Name" %}</th>
+                                    <th class="text-end">{% trans "Stunden" %}</th>
+                                    <th class="text-end">{% trans "Betrag" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for expense in assistant_expenses %}
+                                <tr>
+                                    <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
+                                    <td class="text-end">{{ expense.regular_hours|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Reinigungskräfte -->
+                    <h6>{% trans "Reinigungskräfte" %}</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Name" %}</th>
+                                    <th class="text-end">{% trans "Stunden" %}</th>
+                                    <th class="text-end">{% trans "Betrag" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for expense in cleaning_expenses %}
+                                <tr>
+                                    <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
+                                    <td class="text-end">{{ expense.regular_hours|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Überstunden -->
+                    <h6>{% trans "Überstunden" %}</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Name" %}</th>
+                                    <th>{% trans "Position" %}</th>
+                                    <th class="text-end">{% trans "Stunden" %}</th>
+                                    <th class="text-end">{% trans "Betrag" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for expense in overtime_expenses %}
+                                <tr>
+                                    <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
+                                    <td>{{ expense.employee__role }}</td>
+                                    <td class="text-end">{{ expense.hours|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('.mark-as-paid').click(function() {
+        const therapistId = $(this).data('therapist-id');
+        const month = $(this).data('month');
+        const year = $(this).data('year');
+        
+        if (confirm('{% trans "Möchten Sie die Mehrstunden als bezahlt markieren?" %}')) {
+            $.ajax({
+                url: '{% url "wfm:api-mark-extra-hours-as-paid" %}',
+                method: 'POST',
+                data: JSON.stringify({
+                    therapist_id: therapistId,
+                    month: month,
+                    year: year
+                }),
+                contentType: 'application/json',
+                success: function(response) {
+                    if (response.success) {
+                        location.reload();
+                    } else {
+                        alert(response.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+                    }
+                },
+                error: function() {
+                    alert('{% trans "Ein Fehler ist aufgetreten" %}');
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %} 

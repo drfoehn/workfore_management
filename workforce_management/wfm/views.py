@@ -19,8 +19,8 @@ from .models import (
     UserDocument
 )
 from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
-from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper
-from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute
+from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value
+from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute, Coalesce
 from datetime import date, datetime, timedelta, time
 import calendar
 from django.db import models
@@ -1794,129 +1794,76 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
 
 class TherapistBookingListView(LoginRequiredMixin, ListView):
     model = TherapistBooking
-    template_name = 'wfm/therapist_booking_list.html'
     context_object_name = 'bookings'
+    template_name = 'wfm/therapist_booking_list.html'
+
 
     def get_queryset(self):
-        # Hole den ausgewählten Monat aus den URL-Parametern oder nutze den aktuellen Monat
-        selected_month = self.request.GET.get('month')
-        selected_year = self.request.GET.get('year')
+        queryset = super().get_queryset()
         
-        if selected_month and selected_year:
-            current_date = date(int(selected_year), int(selected_month), 1)
-        else:
-            current_date = timezone.now().date()
-            
-        # Berechne Start- und Enddatum des Monats
-        start_date = date(current_date.year, current_date.month, 1)
-        if current_date.month == 12:
-            end_date = date(current_date.year + 1, 1, 1) - timedelta(days=1)
-        else:
-            end_date = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
-
-        # Basis-Queryset
-        queryset = TherapistBooking.objects.select_related('therapist')
+        # Filter by month/year
+        month = self.request.GET.get('month')
+        year = self.request.GET.get('year')
+        if not month or not year:
+            today = timezone.now()
+            month = today.month
+            year = today.year
         
-        # Hole den ausgewählten Therapeuten
-        selected_therapist = self.request.GET.get('therapist')
+        queryset = queryset.filter(date__month=month, date__year=year)
         
-        # Filter nach Benutzer
-        if self.request.user.role != 'OWNER':
+        # Filter by therapist if specified
+        therapist_id = self.request.GET.get('therapist')
+        if therapist_id:
+            queryset = queryset.filter(therapist_id=therapist_id)
+        elif self.request.user.role == 'THERAPIST':
             queryset = queryset.filter(therapist=self.request.user)
-        elif selected_therapist:  # Nur für Owner: Nach Therapeut filtern
-            queryset = queryset.filter(therapist_id=selected_therapist)
-            
-        # Rest des bestehenden Codes bleibt gleich...
-        return queryset.filter(
-            date__gte=start_date,
-            date__lte=end_date
-        ).order_by('date', 'start_time')
+        
+        return queryset.order_by('date', 'start_time')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Hole den ausgewählten Monat oder nutze den aktuellen
-        selected_month = self.request.GET.get('month')
-        selected_year = self.request.GET.get('year')
-        
-        if selected_month and selected_year:
-            current_date = date(int(selected_year), int(selected_month), 1)
+        # Get current month/year
+        month = self.request.GET.get('month')
+        year = self.request.GET.get('year')
+        if not month or not year:
+            today = timezone.now()
+            month = today.month
+            year = today.year
         else:
-            current_date = timezone.now().date()
+            month = int(month)
+            year = int(year)
             
-        # Berechne vorherigen und nächsten Monat
-        if current_date.month == 1:
-            prev_month = date(current_date.year - 1, 12, 1)
-        else:
-            prev_month = date(current_date.year, current_date.month - 1, 1)
-            
-        if current_date.month == 12:
-            next_month = date(current_date.year + 1, 1, 1)
-        else:
-            next_month = date(current_date.year, current_date.month + 1, 1)
+        current_date = date(year, month, 1)
+        context['current_date'] = current_date
+        context['month_name'] = current_date.strftime('%B %Y')
         
-        # Berechne die Summen für den aktuellen Monat
-        queryset = self.get_queryset()
+        # Calculate prev/next month
+        context['prev_month'] = (current_date - relativedelta(months=1))
+        context['next_month'] = (current_date + relativedelta(months=1))
         
-        # Berechne die Stunden direkt in der Abfrage
-        queryset = queryset.annotate(
-            booked_hours=ExpressionWrapper(
-                (ExtractHour('end_time') + ExtractMinute('end_time') / 60.0) -
-                (ExtractHour('start_time') + ExtractMinute('start_time') / 60.0),
-                output_field=DecimalField()
-            )
-        )
-        
-        # Berechne die Summen
-        totals = {
-            'total_actual_hours': queryset.aggregate(
-                sum=Sum('actual_hours')
-            )['sum'] or Decimal('0'),
-            'total_extra_hours': queryset.aggregate(
-                sum=Sum(Case(
-                    When(
-                        actual_hours__gt=F('booked_hours'),
-                        then=F('actual_hours') - F('booked_hours')
-                    ),
-                    default=0,
-                    output_field=DecimalField()
-                ))
-            )['sum'] or Decimal('0')
-        }
-        totals['total_sum'] = totals['total_actual_hours'] + totals['total_extra_hours']
-        
-        # Berechne die zusätzlichen Kosten basierend auf den Mehrstunden
-        extra_costs = queryset.annotate(
-            extra_hours=Case(
-                When(
-                    actual_hours__gt=F('booked_hours'),
-                    then=F('actual_hours') - F('booked_hours')
-                ),
-                default=0,
-                output_field=DecimalField()
-            )
-        ).annotate(
-            cost=F('extra_hours') * F('therapist__room_rate')
-        ).aggregate(
-            total_cost=Sum('cost')
-        )['total_cost'] or Decimal('0')
-        
-        totals['extra_costs'] = extra_costs
-        
-        context.update({
-            'current_date': current_date,
-            'prev_month': prev_month,
-            'next_month': next_month,
-            'month_name': current_date.strftime('%B %Y'),
-            'totals': totals
-        })
-        
-        # Füge Therapeuten-Kontext hinzu
         if self.request.user.role == 'OWNER':
+            # Get all therapists for filter
             context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
-            selected_therapist_id = self.request.GET.get('therapist')
-            if selected_therapist_id:
-                context['selected_therapist'] = get_object_or_404(CustomUser, id=selected_therapist_id)
+            
+            # Get selected therapist
+            therapist_id = self.request.GET.get('therapist')
+            if therapist_id:
+                context['selected_therapist'] = CustomUser.objects.get(id=therapist_id)
+            
+            # Calculate totals for the month
+            bookings = context['bookings']
+            total_hours = sum(b.actual_hours or 0 for b in bookings)
+            pending_bookings = [b for b in bookings if b.payment_status == 'PENDING']
+            pending_hours = sum(b.actual_hours or 0 for b in pending_bookings)
+            pending_amount = sum((b.actual_hours or 0) * b.therapist.room_rate for b in pending_bookings)
+            
+            context.update({
+                'total_hours': total_hours,
+                'pending_hours': pending_hours,
+                'pending_amount': pending_amount
+            })
+            
         return context
 
 @login_required
@@ -2504,7 +2451,7 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         employee = self.get_object()
         current_year = timezone.now().year
-        today = date.today()
+        today = timezone.now().date()
 
         # Berechne Alter und Betriebszugehörigkeit
         if employee.date_of_birth:
@@ -2659,6 +2606,43 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
 
         context['schedule_history'] = schedule_history
 
+        # Zahlungsübersicht für Therapeuten
+        if employee.role == 'THERAPIST':
+            payment_overview = []
+            current_date = timezone.now().date()
+            
+            # Zeige die letzten 6 Monate
+            for i in range(6):
+                date = current_date - relativedelta(months=i)
+                bookings = TherapistBooking.objects.filter(
+                    therapist=employee,
+                    date__year=date.year,
+                    date__month=date.month,
+                    status='COMPLETED'  # Nur abgeschlossene Buchungen
+                )
+                
+                total_hours = bookings.aggregate(
+                    total=Sum('actual_hours')
+                )['total'] or 0
+                
+                pending_bookings = bookings.filter(payment_status='PENDING')
+                pending_hours = pending_bookings.aggregate(
+                    total=Sum('actual_hours')
+                )['total'] or 0
+                
+                pending_amount = pending_hours * employee.room_rate
+                
+                payment_overview.append({
+                    'year': date.year,
+                    'month': date.month,
+                    'month_name': date.strftime('%B'),
+                    'total_hours': total_hours,
+                    'pending_hours': pending_hours,
+                    'pending_amount': pending_amount
+                })
+            
+            context['payment_overview'] = payment_overview
+
         return context
 
     def get_queryset(self):
@@ -2679,3 +2663,188 @@ class EmployeeListView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         context['owners'] = CustomUser.objects.filter(role='OWNER').order_by('first_name', 'last_name')
         
         return context
+
+@login_required
+def api_therapist_booking_mark_as_paid(request):
+    if request.user.role != 'OWNER':
+        return JsonResponse({'success': False, 'error': _('Keine Berechtigung')})
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': _('Ungültige Anfrage')})
+    
+    try:
+        data = json.loads(request.body)
+        booking_ids = data.get('booking_ids', [])
+        
+        TherapistBooking.objects.filter(id__in=booking_ids).update(
+            payment_status='PAID',
+            payment_date=timezone.now().date()
+        )
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+class FinanceOverviewView(LoginRequiredMixin, TemplateView):
+    template_name = 'wfm/finance_overview.html'
+
+    def get_context_data(self, **kwargs):
+        if self.request.user.role != 'OWNER':
+            raise PermissionDenied
+            
+        context = super().get_context_data(**kwargs)
+        
+        month = self.request.GET.get('month')
+        year = self.request.GET.get('year')
+        if not month or not year:
+            today = timezone.now()
+            month = today.month
+            year = today.year
+        else:
+            month = int(month)
+            year = int(year)
+
+        # Create current_date for navigation
+        current_date = date(year, month, 1)
+
+        print(f"\nDebug: Berechne für {month}/{year}")
+            
+        # 1. Einnahmen von Therapeuten
+        therapist_income = TherapistBooking.objects.filter(
+            date__year=year,
+            date__month=month
+        ).select_related('therapist').values(
+            'therapist__id',
+            'therapist__first_name',
+            'therapist__last_name',
+            'therapist__room_rate',
+            'payment_status'  # Payment Status hinzufügen für die Gruppierung
+        ).annotate(
+            hours=Coalesce(Sum('actual_hours'), Value(0, output_field=DecimalField())),
+            amount=ExpressionWrapper(
+                Sum(F('actual_hours') * F('therapist__room_rate')),
+                output_field=DecimalField(max_digits=10, decimal_places=2)
+            )
+        ).order_by('therapist__first_name', 'therapist__last_name', '-payment_status')  # PENDING kommt vor PAID
+
+        # Gruppiere die Ergebnisse nach Therapeut
+        grouped_income = {}
+        for entry in therapist_income:
+            therapist_id = entry['therapist__id']
+            if therapist_id not in grouped_income:
+                grouped_income[therapist_id] = {
+                    'name': f"{entry['therapist__first_name']} {entry['therapist__last_name']}",
+                    'therapist_id': therapist_id,
+                    'regular': {'hours': 0, 'amount': 0},
+                    'extra': {'hours': 0, 'amount': 0}
+                }
+            
+            if entry['payment_status'] == 'PENDING':
+                grouped_income[therapist_id]['extra']['hours'] = entry['hours']
+                grouped_income[therapist_id]['extra']['amount'] = entry['amount']
+            else:
+                grouped_income[therapist_id]['regular']['hours'] = entry['hours']
+                grouped_income[therapist_id]['regular']['amount'] = entry['amount']
+
+        context['grouped_income'] = grouped_income.values()
+
+        # 2. Ausgaben für Mitarbeiter
+        # a) Assistenten
+        assistant_hours = WorkingHours.objects.filter(
+            date__year=year,
+            date__month=month,
+            employee__role='ASSISTANT'
+        )
+        print(f"\nGefundene Assistenten-Stunden: {assistant_hours.count()}")
+
+        assistant_expenses = assistant_hours.select_related('employee').values(
+            'employee__first_name',
+            'employee__last_name'
+        ).annotate(
+            regular_hours=Coalesce(Sum('ist_hours'), Value(0, output_field=DecimalField())),
+            amount=ExpressionWrapper(
+                Sum(F('ist_hours') * F('employee__hourly_rate')),
+                output_field=DecimalField(max_digits=10, decimal_places=2)
+            )
+        ).order_by('employee__first_name', 'employee__last_name')
+
+        print("\nAssistant Expenses:")
+        for a in assistant_expenses:
+            print(f"{a['employee__first_name']} {a['employee__last_name']}: {a['regular_hours']}h = {a['amount']}€")
+
+        # b) Reinigungskräfte
+        cleaning_hours = WorkingHours.objects.filter(
+            date__year=year,
+            date__month=month,
+            employee__role='CLEANING'
+        )
+        print(f"\nGefundene Reinigungs-Stunden: {cleaning_hours.count()}")
+
+        cleaning_expenses = cleaning_hours.select_related('employee').values(
+            'employee__first_name',
+            'employee__last_name'
+        ).annotate(
+            regular_hours=Coalesce(Sum('ist_hours'), Value(0, output_field=DecimalField())),
+            amount=ExpressionWrapper(
+                Sum(F('ist_hours') * F('employee__hourly_rate')),
+                output_field=DecimalField(max_digits=10, decimal_places=2)
+            )
+        ).order_by('employee__first_name', 'employee__last_name')
+
+        # Berechne Summen
+        total_income = sum(
+            income['regular']['amount'] + income['extra']['amount'] 
+            for income in grouped_income.values()
+        )
+        total_expenses = (
+            sum(a['amount'] for a in assistant_expenses) +
+            sum(c['amount'] for c in cleaning_expenses)
+        )
+
+        print(f"\nSummen:")
+        print(f"Total Income: {total_income}€")
+        print(f"Total Expenses: {total_expenses}€")
+
+        context.update({
+            'grouped_income': grouped_income.values(),  # Gruppierte Einnahmen
+            'assistant_expenses': assistant_expenses,
+            'cleaning_expenses': cleaning_expenses,
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'current_date': current_date,  # Für die Navigation
+            'month_name': current_date.strftime('%B %Y'),
+            'prev_month': (current_date - relativedelta(months=1)),
+            'next_month': (current_date + relativedelta(months=1))
+        })
+        
+        return context
+
+@login_required
+def api_mark_extra_hours_as_paid(request):
+    if request.user.role != 'OWNER':
+        return JsonResponse({'success': False, 'error': _('Keine Berechtigung')})
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': _('Ungültige Anfrage')})
+    
+    try:
+        data = json.loads(request.body)
+        therapist_id = data.get('therapist_id')
+        month = data.get('month')
+        year = data.get('year')
+        
+        # Markiere alle Mehrstunden als bezahlt
+        TherapistBooking.objects.filter(
+            therapist_id=therapist_id,
+            date__year=year,
+            date__month=month,
+            actual_hours__gt=F('booked_hours'),
+            payment_status='PENDING'
+        ).update(
+            payment_status='PAID',
+            payment_date=timezone.now().date()
+        )
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})

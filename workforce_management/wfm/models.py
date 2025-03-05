@@ -404,6 +404,11 @@ class TherapistBooking(models.Model):
         ('CANCELLED', _('Storniert')),
     ]
 
+    PAYMENT_STATUS_CHOICES = [
+        ('PENDING', _('Ausstehend')),
+        ('PAID', _('Bezahlt')),
+    ]
+    
     therapist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     date = models.DateField()
     start_time = models.TimeField()
@@ -411,6 +416,17 @@ class TherapistBooking(models.Model):
     actual_hours = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='RESERVED')
+    payment_status = models.CharField(
+        max_length=10,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='PENDING',
+        verbose_name=_('Zahlungsstatus')
+    )
+    payment_date = models.DateField(
+        null=True, 
+        blank=True,
+        verbose_name=_('Bezahlt am')
+    )
 
     def save(self, *args, **kwargs):
         # Wenn actual_hours nicht gesetzt ist, setze es auf die gebuchten Stunden

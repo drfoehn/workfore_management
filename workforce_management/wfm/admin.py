@@ -18,6 +18,8 @@ from .models import (
 )
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
+from django.utils import timezone
+from django.contrib import messages
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -85,11 +87,24 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(TherapistBooking)
 class TherapistBookingAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'date', 'start_time', 'end_time', 'status')
-    list_filter = ('status', 'date', 'therapist')
+    list_display = ('therapist', 'date', 'start_time', 'end_time', 'status', 'payment_status', 'payment_date')
+    list_filter = ('status', 'payment_status', 'date', 'therapist')
     search_fields = ('therapist__username', 'notes')
     date_hierarchy = 'date'
     ordering = ('-date', 'start_time')
+    actions = ['mark_as_paid']
+
+    def mark_as_paid(self, request, queryset):
+        updated = queryset.update(
+            payment_status='PAID',
+            payment_date=timezone.now().date()
+        )
+        self.message_user(
+            request,
+            _(f'{updated} Buchungen wurden als bezahlt markiert.'),
+            messages.SUCCESS
+        )
+    mark_as_paid.short_description = _('Als bezahlt markieren')
 
 @admin.register(TimeCompensation)
 class TimeCompensationAdmin(admin.ModelAdmin):

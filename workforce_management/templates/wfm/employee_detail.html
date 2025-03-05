@@ -362,6 +362,47 @@
             </div>
         </div>
         
+        <!-- Im Therapeuten-Bereich nach der Standardbuchungszeiten-Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">{% trans "Zahlungsübersicht" %}</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Monat" %}</th>
+                                <th class="text-end">{% trans "Gebuchte Stunden" %}</th>
+                                <th class="text-end">{% trans "Offener Betrag" %}</th>
+                                <th class="text-center">{% trans "Status" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for month in payment_overview %}
+                            <tr>
+                                <td>{{ month.month_name }} {{ month.year }}</td>
+                                <td class="text-end">{{ month.total_hours|floatformat:1 }} h</td>
+                                <td class="text-end">{{ month.pending_amount|floatformat:2 }} €</td>
+                                <td class="text-center">
+                                    {% if month.pending_hours > 0 %}
+                                        <span class="badge bg-warning">
+                                            {{ month.pending_hours|floatformat:1 }} h {% trans "ausstehend" %}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-success">
+                                            {% trans "Vollständig bezahlt" %}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
         {% endif %}
 
 
