@@ -14,6 +14,11 @@
                     <h5 class="card-title mb-0">{% trans "Mitarbeiter-Verwaltung" %}</h5>
                 </div>
                 <div class="card-body">
+                    <div class="card-body">
+                        <a href="{% url 'wfm:employee-list' %}" class="btn btn-primary w-100">
+                            <i class="bi bi-people"></i> {% trans "Mitarbeiterübersicht" %}
+                        </a>
+                    </div>
                     <div class="list-group">
                         <a href="{% url 'wfm:working-hours-list' %}" class="list-group-item list-group-item-action">
                             {% trans "Assistenzen-Liste" %}
@@ -93,19 +98,7 @@
             </div>
         </div>
 
-        <!-- Im Owner-Bereich des Dashboards -->
-        <div class="col-md-6 col-lg-4">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">{% trans "Mitarbeiter" %}</h5>
-                </div>
-                <div class="card-body">
-                    <a href="{% url 'wfm:employee-list' %}" class="btn btn-primary w-100">
-                        <i class="bi bi-people"></i> {% trans "Mitarbeiterübersicht" %}
-                    </a>
-                </div>
-            </div>
-        </div>
+        
     </div>
 
     {% elif user.role == 'ASSISTANT' or user.role == 'CLEANING' %}
@@ -335,8 +328,8 @@
 {% include "wfm/modals/time_compensation_modal.html" %}
 {% include "wfm/modals/sick_leave_modal.html" %}
 {% elif user.role == 'THERAPIST' %}
-{% include "wfm/modals/actual_hours_modal.html" %}
-{% include "wfm/modals/absence_modal.html" %}
+{% comment %} {% include "wfm/modals/actual_hours_modal.html" %} {% endcomment %}
+{% comment %} {% include "wfm/modals/absence_modal.html" %} {% endcomment %}
 {% endif %}
 
 <!-- Admin Bestätigungs-Modal -->

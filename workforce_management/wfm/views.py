@@ -2450,8 +2450,23 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         employee = self.get_object()
+        
+        # Get selected year or use current year
+        selected_year = self.request.GET.get('year')
         current_year = timezone.now().year
         today = timezone.now().date()
+        
+        if selected_year:
+            selected_year = int(selected_year)
+        else:
+            selected_year = current_year
+            
+        context['selected_year'] = selected_year
+        context['current_year'] = current_year
+        
+        # Liste der verfügbaren Jahre (von Anstellungsbeginn bis heute)
+        start_year = employee.employed_since.year if employee.employed_since else current_year
+        context['available_years'] = range(current_year, start_year - 1, -1)
 
         # Berechne Alter und Betriebszugehörigkeit
         if employee.date_of_birth:
@@ -2470,14 +2485,14 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
         # Hole Urlaubsanspruch und berechne verwendete Stunden
         vacation_entitlement = VacationEntitlement.objects.filter(
             employee=employee,
-            year=current_year
+            year=selected_year  # Verwende selected_year statt current_year
         ).first()
         context['vacation_entitlement'] = vacation_entitlement
 
-        # Hole genommenen Urlaub
+        # Hole genommenen Urlaub für das ausgewählte Jahr
         vacations = Vacation.objects.filter(
             employee=employee,
-            start_date__year=current_year
+            start_date__year=selected_year  # Verwende selected_year
         ).order_by('-start_date')
         context['vacations'] = vacations
 
@@ -2487,15 +2502,16 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
             context['used_vacation_hours'] = used_vacation_hours
             context['vacation_progress_percent'] = int((used_vacation_hours / vacation_entitlement.total_hours) * 100)
 
-        # Hole Krankmeldungen
+        # Hole Krankmeldungen für das ausgewählte Jahr
         context['sick_leaves'] = SickLeave.objects.filter(
-            employee=employee
-        ).order_by('-start_date')[:5]
+            employee=employee,
+            start_date__year=selected_year  # Verwende selected_year
+        ).order_by('-start_date')
 
-        # Hole Überstunden
+        # Hole Überstunden für das ausgewählte Jahr
         context['overtime_accounts'] = OvertimeAccount.objects.filter(
             employee=employee,
-            year=current_year
+            year=selected_year  # Verwende selected_year
         ).order_by('-month')
 
         if employee.role == 'THERAPIST':
@@ -2559,10 +2575,20 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
         ).order_by('start_date')
 
         # Hole zukünftige Zeitausgleiche
-        context['future_timecomps'] = TimeCompensation.objects.filter(
+        future_timecomps = TimeCompensation.objects.filter(
             employee=employee,
             date__gte=today
+        ).select_related(
+            'employee'  # Falls wir employee-Informationen brauchen
         ).order_by('date')
+
+        all_timecomps = TimeCompensation.objects.filter(employee=employee).order_by('-date') #Sortiere nach Datum, neuste zuerst
+        context['all_timecomps'] = all_timecomps
+        context['future_timecomps'] = future_timecomps
+
+        # Füge die Status-Display-Methode hinzu
+        for timecomp in future_timecomps:
+            timecomp.get_status_display = dict(TimeCompensation.STATUS_CHOICES)[timecomp.status]
 
         # Hole alle Arbeitszeitpläne (nicht nur den aktuellsten)
         weekdays = range(0, 7)

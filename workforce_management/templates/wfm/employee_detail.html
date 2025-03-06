@@ -164,9 +164,10 @@
     <div class="col-md-8">
         {% if employee.role == 'ASSISTANT' or employee.role == 'CLEANING' %}
         <!-- Urlaubsübersicht -->
+        <h4>{{ current_year }}</h4>
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="mb-0">{% trans "Urlaubsübersicht" %} {{ current_year }}</h5>
+                <h5 class="mb-0">{% trans "Urlaubsübersicht" %} </h5>
             </div>
             <div class="card-body">
                 {% if vacation_entitlement %}
@@ -254,7 +255,10 @@
                                 <tr>
                                     <td>{{ timecomp.date|date:"d.m.Y" }}</td>
                                     <td>
-                                        <span class="badge bg-{{ timecomp.status|lower }}">
+                                        <span class="badge {% if timecomp.status == 'REQUESTED' %}bg-warning
+                                                          {% elif timecomp.status == 'APPROVED' %}bg-success
+                                                          {% elif timecomp.status == 'REJECTED' %}bg-danger
+                                                          {% endif %}">
                                             {{ timecomp.get_status_display }}
                                         </span>
                                     </td>
@@ -296,7 +300,9 @@
                                 <td>{{ sick_leave.start_date|date:"d.m.Y" }}</td>
                                 <td>{{ sick_leave.end_date|date:"d.m.Y" }}</td>
                                 <td>
-                                    <span class="badge bg-{{ sick_leave.status|lower }}">
+                                    <span class="badge {% if sick_leave.status == 'PENDING' %}bg-danger
+                                                      {% elif sick_leave.status == 'SUBMITTED' %}bg-success
+                                                      {% endif %}">
                                         {{ sick_leave.get_status_display }}
                                     </span>
                                 </td>
