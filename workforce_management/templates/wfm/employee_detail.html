@@ -205,7 +205,10 @@
                                 <td>{{ vacation.start_date|date:"d.m.Y" }}</td>
                                 <td>{{ vacation.end_date|date:"d.m.Y" }}</td>
                                 <td>
-                                    <span class="badge bg-{{ vacation.status|lower }}">
+                                    <span class="badge {% if vacation.status == 'REQUESTED' %}bg-warning
+                                                          {% elif vacation.status == 'APPROVED' %}bg-success
+                                                          {% elif vacation.status == 'REJECTED' %}bg-danger
+                                                          {% endif %}">
                                         {{ vacation.get_status_display }}
                                     </span>
                                 </td>
@@ -273,7 +276,7 @@
                 {% endif %}
             </div>
         </div>
-        {% endif %}
+        
 
         
 
@@ -317,6 +320,7 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
         {% if employee.role == 'THERAPIST' %}
         <!-- Für Therapeuten -->
         <div class="card mb-4">

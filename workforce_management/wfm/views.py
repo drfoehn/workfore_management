@@ -2817,6 +2817,26 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
             )
         ).order_by('employee__first_name', 'employee__last_name')
 
+        # c) Überstunden-Ausgaben
+        overtime_expenses = WorkingHours.objects.filter(
+            date__year=year,
+            date__month=month,
+            ist_hours__gt=F('soll_hours')
+        ).select_related('employee').values(
+            'employee__first_name',
+            'employee__last_name',
+            'employee__role'
+        ).annotate(
+            hours=ExpressionWrapper(
+                Sum(F('ist_hours') - F('soll_hours')),
+                output_field=DecimalField()
+            ),
+            amount=ExpressionWrapper(
+                Sum((F('ist_hours') - F('soll_hours')) * F('employee__hourly_rate')),
+                output_field=DecimalField(max_digits=10, decimal_places=2)
+            )
+        ).order_by('employee__first_name', 'employee__last_name')
+
         # Berechne Summen
         total_income = sum(
             income['regular']['amount'] + income['extra']['amount'] 
@@ -2824,7 +2844,8 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
         )
         total_expenses = (
             sum(a['amount'] for a in assistant_expenses) +
-            sum(c['amount'] for c in cleaning_expenses)
+            sum(c['amount'] for c in cleaning_expenses) +
+            sum(o['amount'] for o in overtime_expenses)  # Überstunden zu Gesamtausgaben hinzufügen
         )
 
         print(f"\nSummen:")
@@ -2832,12 +2853,13 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
         print(f"Total Expenses: {total_expenses}€")
 
         context.update({
-            'grouped_income': grouped_income.values(),  # Gruppierte Einnahmen
+            'grouped_income': grouped_income.values(),
             'assistant_expenses': assistant_expenses,
             'cleaning_expenses': cleaning_expenses,
+            'overtime_expenses': overtime_expenses,  # Überstunden zum Kontext hinzufügen
             'total_income': total_income,
             'total_expenses': total_expenses,
-            'current_date': current_date,  # Für die Navigation
+            'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
             'prev_month': (current_date - relativedelta(months=1)),
             'next_month': (current_date + relativedelta(months=1))
@@ -2874,3 +2896,78 @@ def api_mark_extra_hours_as_paid(request):
         return JsonResponse({'success': True})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+@login_required
+def api_working_hours_create(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            date = parse_date(data.get('date'))
+            
+            # Prüfe ob bereits ein Eintrag für diesen Tag existiert
+            existing_entry = WorkingHours.objects.filter(
+                employee=request.user,
+                date=date
+            ).first()
+            
+            if existing_entry:
+                return JsonResponse({
+                    'success': False,
+                    'error': _('Für diesen Tag wurde bereits ein Eintrag erstellt')
+                }, status=400)
+
+            # Hole den Arbeitsplan für diesen Tag
+            schedule = ScheduleTemplate.objects.filter(
+                employee=request.user,
+                weekday=date.weekday()
+            ).order_by('-valid_from').first()
+            
+            # Standardmäßig die geplanten Stunden verwenden
+            soll_hours = schedule.hours if schedule else Decimal('0.00')
+            ist_hours = data.get('ist_hours')
+            
+            # Wenn keine IST-Stunden angegeben wurden, verwende die SOLL-Stunden
+            if ist_hours is None or ist_hours == '':
+                ist_hours = soll_hours
+            else:
+                ist_hours = Decimal(str(ist_hours))  # Konvertiere zu Decimal
+
+            working_hours = WorkingHours.objects.create(
+                employee=request.user,
+                date=date,
+                soll_hours=soll_hours,  # Geplante Stunden aus dem Schedule
+                ist_hours=ist_hours,    # Tatsächliche Stunden (oder geplante wenn nicht angegeben)
+                notes=data.get('notes', '')
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'id': working_hours.id,
+                'soll_hours': float(working_hours.soll_hours),
+                'ist_hours': float(working_hours.ist_hours)
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=400)
+            
+    return JsonResponse({'error': 'Invalid request'}, status=400)
+
+@login_required
+def api_get_scheduled_hours(request):
+    date = parse_date(request.GET.get('date'))
+    if not date:
+        return JsonResponse({'error': 'Invalid date'}, status=400)
+        
+    schedule = ScheduleTemplate.objects.filter(
+        employee=request.user,
+        weekday=date.weekday()
+    ).order_by('-valid_from').first()
+    
+    scheduled_hours = float(schedule.hours) if schedule else 0.0
+    
+    return JsonResponse({
+        'scheduled_hours': scheduled_hours
+    })

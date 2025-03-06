@@ -12,7 +12,9 @@
 </div>
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
+        {% if user.role == 'ASSISTANT' or user.role == 'CLEANING' %}
         <h1 class="h2">{% trans "Meine Arbeitszeiten" %}</h1>
+        {% endif %}
         
         <div class="btn-group">
            
@@ -505,6 +507,20 @@ document.addEventListener('DOMContentLoaded', function() {
             html: true,
             container: 'body'
         });
+    });
+});
+
+$(document).ready(function() {
+    $('#date').change(function() {
+        const date = $(this).val();
+        if (date) {
+            $.get(`{% url 'wfm:api-get-scheduled-hours' %}?date=${date}`, function(response) {
+                $('#scheduled_hours').text(response.scheduled_hours);
+                if (!$('#ist_hours').val()) {
+                    $('#ist_hours').attr('placeholder', response.scheduled_hours + 'h');
+                }
+            });
+        }
     });
 });
 </script>
