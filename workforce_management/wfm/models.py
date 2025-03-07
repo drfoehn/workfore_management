@@ -212,20 +212,33 @@ class WorkingHours(models.Model):
             start = datetime.combine(self.date, self.start_time)
             end = datetime.combine(self.date, self.end_time)
             duration = end - start
-            self.ist_hours = Decimal(str(duration.total_seconds() / 3600))
+            
+            # Debug-Ausgaben
+            print(f"\nDebug WorkingHours save:")
+            print(f"Start: {start}")
+            print(f"End: {end}")
+            print(f"Raw duration: {duration}")
+            print(f"Duration in hours: {duration.total_seconds() / 3600}")
             
             if self.break_duration:
-                self.ist_hours -= Decimal(str(self.break_duration.total_seconds() / 3600))
+                duration -= self.break_duration
+                print(f"Break duration: {self.break_duration}")
+                print(f"Duration after break: {duration}")
+                print(f"Hours after break: {duration.total_seconds() / 3600}")
+            
+            self.ist_hours = Decimal(str(duration.total_seconds() / 3600))
+            print(f"Final ist_hours: {self.ist_hours}")
         else:
-            self.ist_hours = Decimal('0')  # Setze auf 0 wenn keine Zeiten vorhanden
+            self.ist_hours = Decimal('0')
 
         # Berechne Soll-Stunden
         if self.soll_start and self.soll_end:
             start = datetime.combine(self.date, self.soll_start)
             end = datetime.combine(self.date, self.soll_end)
-            self.soll_hours = Decimal(str((end - start).total_seconds() / 3600))
+            duration = end - start
+            self.soll_hours = Decimal(str(duration.total_seconds() / 3600))
         else:
-            self.soll_hours = Decimal('0')  # Setze auf 0 wenn keine Zeiten vorhanden
+            self.soll_hours = Decimal('0')
 
         super().save(*args, **kwargs)
 

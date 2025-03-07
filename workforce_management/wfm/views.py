@@ -2618,11 +2618,12 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
             total_hours = Decimal('0.00')
             
             for weekday in weekdays:
+                # Hier ist die Änderung: Hole das letzte gültige Template VOR diesem Datum
                 schedule = schedule_model.objects.filter(
                     **schedule_filter,
-                    valid_from=period['valid_from'],
-                    weekday=weekday
-                ).first()
+                    weekday=weekday,
+                    valid_from__lte=period['valid_from']  # Wichtig: __lte statt = 
+                ).order_by('-valid_from').first()
 
                 if schedule:
                     total_hours += schedule.hours
