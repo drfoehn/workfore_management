@@ -278,6 +278,24 @@ class Vacation(models.Model):
         if self.status == 'APPROVED' and not self.check_vacation_hours_available():
             raise ValidationError(_('Nicht genügend Urlaubsstunden verfügbar'))
 
+    def save(self, *args, **kwargs):
+        # Prüfe ob es eine Statusänderung von REQUESTED/PENDING zu APPROVED gibt
+        if self.pk:  # Wenn es ein existierender Eintrag ist
+            old_instance = Vacation.objects.get(pk=self.pk)
+            if (old_instance.status in ['REQUESTED', 'PENDING'] and 
+                self.status == 'APPROVED'):
+                # Lösche WorkingHours für die Urlaubstage
+                current_date = self.start_date
+                while current_date <= self.end_date:
+                    if current_date.weekday() < 5:  # Nur Werktage
+                        WorkingHours.objects.filter(
+                            employee=self.employee,
+                            date=current_date
+                        ).delete()
+                    current_date += timedelta(days=1)
+        
+        super().save(*args, **kwargs)
+
 class VacationEntitlement(models.Model):
     """Jahresurlaub"""
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -322,6 +340,24 @@ class SickLeave(models.Model):
     
     def __str__(self):
         return f"{self.employee} - {self.start_date} bis {self.end_date}"
+
+    def save(self, *args, **kwargs):
+        # Bei Krankmeldungen immer die WorkingHours löschen
+        if self.pk:  # Wenn es ein existierender Eintrag ist
+            old_instance = SickLeave.objects.get(pk=self.pk)
+            if (old_instance.status in ['PENDING'] and 
+                self.status == 'SUBMITTED'):
+                # Lösche WorkingHours für die Krankheitstage
+                current_date = self.start_date
+                while current_date <= self.end_date:
+                    if current_date.weekday() < 5:  # Nur Werktage
+                        WorkingHours.objects.filter(
+                            employee=self.employee,
+                            date=current_date
+                        ).delete()
+                    current_date += timedelta(days=1)
+        
+        super().save(*args, **kwargs)
 
 class MonthlyReport(models.Model):
     """Monatlicher Abrechnungsbericht"""
@@ -395,6 +431,20 @@ class TimeCompensation(models.Model):
         remaining_hours = total_available - used_hours
         
         return self.hours <= remaining_hours
+
+    def save(self, *args, **kwargs):
+        # Prüfe ob es eine Statusänderung von REQUESTED/PENDING zu APPROVED gibt
+        if self.pk:  # Wenn es ein existierender Eintrag ist
+            old_instance = TimeCompensation.objects.get(pk=self.pk)
+            if (old_instance.status in ['REQUESTED', 'PENDING'] and 
+                self.status == 'APPROVED'):
+                # Lösche WorkingHours für den Tag des Zeitausgleichs
+                WorkingHours.objects.filter(
+                    employee=self.employee,
+                    date=self.date
+                ).delete()
+        
+        super().save(*args, **kwargs)
 
 class TherapistBooking(models.Model):
     """Raumbuchungen für Therapeuten"""
