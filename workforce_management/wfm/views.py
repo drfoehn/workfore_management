@@ -116,9 +116,17 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             employee__in=employees
         ).select_related('employee')
 
-        schedules = ScheduleTemplate.objects.filter(
-            employee__in=employees
-        ).order_by('-valid_from')
+        # Hier ist die Änderung: Hole nur die aktuellsten Templates pro Wochentag
+        schedules = []
+        for employee in employees:
+            for weekday in range(7):
+                template = ScheduleTemplate.objects.filter(
+                    employee=employee,
+                    weekday=weekday,
+                    valid_from__lte=current_date  # Nur Templates die zum aktuellen Monat gültig sind
+                ).order_by('-valid_from').first()
+                if template:
+                    schedules.append(template)
 
         vacations = Vacation.objects.filter(
             employee__in=employees,
@@ -145,7 +153,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         total_ist = 0
         total_diff = 0
 
-        # 7. Erstelle Lookup-Dictionaries (bleibt gleich)
+        # 7. Erstelle Lookup-Dictionaries
         working_hours_dict = {(wh.date, wh.employee_id): wh for wh in working_hours}
         schedule_dict = {}
         for schedule in schedules:

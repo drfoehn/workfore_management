@@ -113,6 +113,65 @@ class ScheduleTemplate(models.Model):
     def __str__(self):
         return f"{self.employee.username} - {self.get_weekday_display()} (ab {self.valid_from})"
 
+    def save(self, *args, **kwargs):
+        # Debug: Zeige das aktuelle Template
+        print(f"\nSaving template for {self.employee}, weekday={self.weekday}, valid_from={self.valid_from}")
+        
+        # Speichere zuerst das aktuelle Template
+        super().save(*args, **kwargs)
+        
+        # Hole das aktuelle Datum
+        today = timezone.now().date()
+        print(f"Today's date: {today}")
+        
+        # Hole alle Templates für diesen Mitarbeiter und Wochentag
+        all_templates = ScheduleTemplate.objects.filter(
+            employee=self.employee,
+            weekday=self.weekday
+        ).exclude(pk=self.pk)
+        
+        # Manuell die Templates mit späterem Datum filtern
+        future_templates = []
+        for template in all_templates:
+            # Vergleiche die Datumsobjekte direkt
+            if template.valid_from >= self.valid_from:
+                print(f"Will update template: ID={template.pk}, valid_from={template.valid_from}")
+                future_templates.append(template)
+        
+        # Aktualisiere jedes Template einzeln
+        for template in future_templates:
+            print(f"Updating template {template.pk} from {template.valid_from}")
+            template.start_time = self.start_time
+            template.end_time = self.end_time
+            template.save(update_fields=['start_time', 'end_time'])
+        
+        # Debug: Zeige alle Templates nach dem Update
+        print("\nAll templates after update:")
+        for template in ScheduleTemplate.objects.filter(
+            employee=self.employee,
+            weekday=self.weekday
+        ).order_by('valid_from'):
+            print(f"- ID: {template.pk}, valid_from: {template.valid_from}, "
+                  f"time: {template.start_time}-{template.end_time}")
+        
+        # Aktualisiere WorkingHours nur für zukünftige Tage
+        current_date = max(self.valid_from, today)  # Starte ab heute oder valid_from
+        end_date = current_date + timedelta(days=365)
+        
+        while current_date <= end_date:
+            if current_date.weekday() == self.weekday:
+                WorkingHours.objects.update_or_create(
+                    employee=self.employee,
+                    date=current_date,
+                    defaults={
+                        'start_time': self.start_time,
+                        'end_time': self.end_time,
+                        'soll_hours': self.hours,
+                        'ist_hours': self.hours
+                    }
+                )
+            current_date += timedelta(days=1)
+
 class GermanDateField(models.DateField):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
