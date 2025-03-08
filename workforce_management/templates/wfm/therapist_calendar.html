@@ -82,31 +82,88 @@
 document.addEventListener('DOMContentLoaded', function() {
     var calendarEl = document.getElementById('calendar');
     var calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'timeGridWeek',
         locale: 'de',
+        initialView: 'dayGridMonth',
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
-            right: ''  // View-Buttons sind jetzt in der Card-Header
+            right: 'dayGridMonth,timeGridWeek'
         },
-        slotMinTime: '07:00:00',
-        slotMaxTime: '20:00:00',
-        allDaySlot: false,
         height: 'auto',
+        firstDay: 1,
+        slotMinTime: '06:00:00',
+        slotMaxTime: '22:00:00',
+        nowIndicator: true,
+        businessHours: {
+            daysOfWeek: [1, 2, 3, 4, 5, 6],
+            startTime: '08:00',
+            endTime: '20:00',
+        },
+        eventTimeFormat: {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        },
+        events: function(info, successCallback, failureCallback) {
+            console.log('Fetching events for:', info.startStr, 'to', info.endStr);
+            
+            var url = '/api/therapist-calendar/events/?start=' + info.startStr + '&end=' + info.endStr;
+            {% if selected_therapist %}
+            url += '&therapist={{ selected_therapist.id }}';
+            {% endif %}
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Received raw events:', data);
+                    
+                    const events = data.map(event => {
+                        const mappedEvent = {
+                            id: event.id,
+                            title: event.title,
+                            start: event.start,
+                            end: event.end,
+                            backgroundColor: event.backgroundColor,
+                            borderColor: event.backgroundColor,
+                            display: 'block',  // Wichtig für die Anzeige
+                            allDay: false      // Wichtig für die korrekte Zeitdarstellung
+                        };
+                        
+                        // Nur für nicht-blockierte Events
+                        if (!event.className?.includes('blocked-time')) {
+                            mappedEvent.extendedProps = {
+                                therapist: event.extendedProps.therapist,
+                                hours: event.extendedProps.hours,
+                                actual_hours: event.extendedProps.actual_hours,
+                                notes: event.extendedProps.notes
+                            };
+                        }
+                        
+                        if (event.className) {
+                            mappedEvent.className = event.className;
+                        }
+                        
+                        return mappedEvent;
+                    });
+                    
+                    console.log('Mapped events:', events);
+                    successCallback(events);
+                })
+                .catch(error => {
+                    console.error('Error fetching events:', error);
+                    failureCallback(error);
+                });
+        },
         eventDidMount: function(info) {
-            if (info.event.id || '{{ user.role }}' === 'OWNER') {
-                var tooltip = new bootstrap.Tooltip(info.el, {
+            // Tooltip nur für nicht-blockierte Events
+            if (!info.event.classNames.includes('blocked-time')) {
+                new bootstrap.Tooltip(info.el, {
                     title: function() {
-                        var content = info.event.title;
-                        if (info.event.extendedProps.hours) {
-                            content += '<br>Gebucht: ' + info.event.extendedProps.hours + ' Std';
-                        }
-                        if (info.event.extendedProps.actual_hours) {
-                            content += '<br>Verwendet: ' + info.event.extendedProps.actual_hours + ' Std';
-                        }
-                        if (info.event.extendedProps.notes) {
-                            content += '<br>Notizen: ' + info.event.extendedProps.notes;
-                        }
+                        let content = info.event.title;
+                        const props = info.event.extendedProps;
+                        if (props?.hours) content += `<br>Gebucht: ${props.hours} Std`;
+                        if (props?.actual_hours) content += `<br>Verwendet: ${props.actual_hours} Std`;
+                        if (props?.notes) content += `<br>Notizen: ${props.notes}`;
                         return content;
                     },
                     html: true,
@@ -117,43 +174,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         },
         eventClick: function(info) {
-            if (info.event.id || '{{ user.role }}' === 'OWNER') {
+            if (!info.event.classNames.includes('blocked-time')) {
                 openBookingModal(info.event.id);
             }
-        },
-        events: function(info, successCallback, failureCallback) {
-            var url = '/api/therapist-calendar/events/?start=' + info.startStr + '&end=' + info.endStr;
-            {% if selected_therapist %}
-            url += '&therapist={{ selected_therapist.id }}';
-            {% endif %}
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    successCallback(data.map(event => ({
-                        id: event.id,
-                        title: event.title,
-                        start: event.start,
-                        end: event.end,
-                        backgroundColor: event.backgroundColor,
-                        borderColor: event.backgroundColor,
-                        className: event.className,
-                        extendedProps: {
-                            therapist: event.extendedProps.therapist,
-                            hours: event.extendedProps.hours,
-                            actual_hours: event.extendedProps.actual_hours,
-                            notes: event.extendedProps.notes
-                        }
-                    })));
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    failureCallback(error);
-                });
         }
     });
+    
     calendar.render();
-    window.calendar = calendar;  // Mache calendar global verfügbar
+    window.calendar = calendar;
 });
 </script>
 {% endblock %} 
