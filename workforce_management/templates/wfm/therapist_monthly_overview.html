@@ -2,331 +2,123 @@
 {% load i18n %}
 {% load static %}
 
-{% block title %}{% trans "Monatsübersicht Therapeut" %} - {{ block.super }}{% endblock %}
+{% block title %}{% trans "Jahresübersicht Therapeut" %} - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="card mb-4">
-    <div class="card-header bg-info text-white">
-        <div class="row align-items-center">
-            <div class="col">
-                <h5 class="mb-0">{% trans "Raumnutzung" %}</h5>
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">{% trans "Jahresübersicht" %} {{ year }}</h2>
+        <div class="d-flex gap-2">
+            <!-- Navigation -->
+            <div class="btn-group" role="group">
+                <a href="?year={{ prev_year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+                <a href="?year={{ next_year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
             </div>
-            {% if request.user.role == 'THERAPIST' %}
-            <div class="col text-end">
-                <span class="badge bg-light text-dark">
-                    {% trans "Stundensatz für Mehrstunden" %}: {{ room_rate|floatformat:2 }} €/h
-                </span>
+
+            {% if user.role == 'OWNER' %}
+            <!-- Therapeuten Filter -->
+            <div class="dropdown">
+                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    {% if selected_therapist %}
+                        {{ selected_therapist.get_full_name|default:selected_therapist.username }}
+                    {% else %}
+                        {% trans "Alle Therapeuten" %}
+                    {% endif %}
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item" href="?year={{ year }}">
+                            {% trans "Alle Therapeuten" %}
+                        </a>
+                    </li>
+                    {% for therapist in therapists %}
+                        <li>
+                            <a class="dropdown-item" href="?year={{ year }}&therapist={{ therapist.id }}">
+                                {{ therapist.get_full_name|default:therapist.username }}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
             </div>
             {% endif %}
         </div>
     </div>
-</div>
-
-<div class="card">
-    <div class="card-header">
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="btn-group">
-                <a href="{% url 'wfm:therapist-monthly-overview' %}" 
-                   class="btn btn-primary active">
-                    <i class="bi bi-list"></i> {% trans "Liste" %}
-                </a>
-                <a href="{% url 'wfm:therapist-calendar' %}" 
-                   class="btn btn-outline-primary">
-                    <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
-                </a>
-            </div>
-            
-            <!-- Jahr-Navigation -->
-            <div class="d-flex align-items-center gap-3">
-                <a href="?year={{ year|add:'-1' }}" class="btn btn-outline-primary">
-                    <i class="bi bi-chevron-left"></i> {{ year|add:'-1' }}
-                </a>
-                <h2 class="mb-0">{{ year }}</h2>
-                <a href="?year={{ year|add:'1' }}" class="btn btn-outline-primary">
-                    {{ year|add:'1' }} <i class="bi bi-chevron-right"></i>
-                </a>
-            </div>
-        </div>
-    </div>
     <div class="card-body">
-        <!-- Nach der Jahr-Navigation -->
-        {% if request.user.role == 'OWNER' %}
-        <div class="mb-3">
-            <form method="get" class="d-flex gap-2 align-items-center">
-                <input type="hidden" name="year" value="{{ year }}">
-                <select name="therapist" class="form-select" onchange="this.form.submit()">
-                    <option value="">{% trans "Alle Therapeuten" %}</option>
-                    {% for therapist in therapists %}
-                        <option value="{{ therapist.id }}" {% if selected_therapist_id == therapist.id|stringformat:"s" %}selected{% endif %}>
-                            {{ therapist.get_full_name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </form>
-        </div>
-        {% endif %}
-        <div class="row row-cols-1 row-cols-md-3 g-4">
-            {% for month_data in months %}
-            <div class="col">
-                <div class="card h-100 {% if month_data.is_current %}border-primary{% endif %}">
-                    <div class="card-header {% if month_data.is_current %}bg-primary text-white{% endif %}">
-                        <h5 class="card-title mb-0">{{ month_data.name }}</h5>
-                    </div>
-                    <div class="card-body">
-                        <table class="table table-sm">
-                            <tr>
-                                <td>{% trans "Reserviert" %}</td>
-                                <td class="text-end">{{ month_data.total_hours|floatformat:2 }} h</td>
-                            </tr>
-                            <tr>
-                                <td>{% trans "Verwendet" %}</td>
-                                <td class="text-end">{{ month_data.used_hours|floatformat:2 }} h</td>
-                            </tr>
-                            <tr>
-                                <td>{% trans "Mehrstunden" %}</td>
-                                <td class="text-end {% if month_data.total_difference > 0 %}text-success{% endif %}">
-                                    {% if month_data.total_difference > 0 %}+{% endif %}
-                                    {{ month_data.total_difference|floatformat:2 }} h
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>{% trans "Zusätzliche Kosten" %}</td>
-                                <td class="text-end">{{ month_data.total_amount|floatformat:2 }} €</td>
-                            </tr>
-                        </table>
-                    </div>
-                    <div class="card-footer">
-                        <a href="{% url 'wfm:therapist-booking-list' %}?year={{ year }}&month={{ month_data.number }}" 
-                           class="btn btn-outline-primary btn-sm w-100">
-                            {% trans "Details anzeigen" %}
-                        </a>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        <!-- Nach den Monatskarten, aber noch in der card-body -->
-        <div class="row mt-4">
-            <div class="col">
-                <div class="card border-primary">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="card-title mb-0">{% trans "Jahressummen" %} {{ year }}</h5>
-                    </div>
-                    <div class="card-body">
-                        <table class="table table-sm">
-                            <tr>
-                                <td>{% trans "Gesamt Reserviert" %}</td>
-                                <td class="text-end">{{ year_totals.total_hours|floatformat:2 }} h</td>
-                            </tr>
-                            <tr>
-                                <td>{% trans "Gesamt Verwendet" %}</td>
-                                <td class="text-end">{{ year_totals.used_hours|floatformat:2 }} h</td>
-                            </tr>
-                            <tr>
-                                <td>{% trans "Gesamt Mehrstunden" %}</td>
-                                <td class="text-end {% if year_totals.total_difference > 0 %}text-success{% endif %}">
-                                    {% if year_totals.total_difference > 0 %}+{% endif %}
-                                    {{ year_totals.total_difference|floatformat:2 }} h
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>{% trans "Gesamt Zusatzkosten" %}</td>
-                                <td class="text-end">{{ year_totals.total_amount|floatformat:2 }} €</td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
+        {% for stats in therapist_stats %}
+        <div class="mb-4">
+            <h3>{{ stats.therapist.get_full_name }}</h3>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Monat" %}</th>
+                            <th>{% trans "Buchungen" %}</th>
+                            <th>{% trans "Gebucht" %}</th>
+                            <th>{% trans "Verwendet" %}</th>
+                            <th>{% trans "Differenz" %}</th>
+                            <th>{% trans "Ausstehend" %}</th>
+                            <th>{% trans "Aktionen" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in stats.months %}
+                        <tr>
+                            <td>{{ month.month_name }}</td>
+                            <td>{{ month.booking_count }}</td>
+                            <td>{{ month.total_hours }}</td>
+                            <td>{{ month.total_actual }}</td>
+                            <td>{{ month.total_difference }}</td>
+                            <td>
+                                {% if month.pending_payment > 0 %}
+                                <span class="badge bg-warning">
+                                    {{ month.pending_payment }}
+                                </span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'wfm:therapist-calendar' %}?year={{ year }}&month={{ month.month }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-calendar"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-light">
+                            <td><strong>{% trans "Gesamt" %}</strong></td>
+                            <td><strong>{{ stats.year_totals.booking_count }}</strong></td>
+                            <td><strong>{{ stats.year_totals.total_hours }}</strong></td>
+                            <td><strong>{{ stats.year_totals.total_actual }}</strong></td>
+                            <td><strong>{{ stats.year_totals.total_difference }}</strong></td>
+                            <td>
+                                {% if stats.year_totals.pending_payment > 0 %}
+                                <span class="badge bg-warning">
+                                    {{ stats.year_totals.pending_payment }}
+                                </span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
             </div>
         </div>
+        {% empty %}
+        <div class="alert alert-info">
+            {% trans "Keine Buchungen gefunden." %}
+        </div>
+        {% endfor %}
     </div>
 </div>
-
-<!-- Modal für verwendete Stunden -->
-<div class="modal fade" id="usedHoursModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title">{% trans "Verwendete Stunden eintragen" %}</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="usedHoursForm" method="post">
-                    {% csrf_token %}
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Datum" %}</h6>
-                        <input type="text" class="form-control" id="usedHoursDate" readonly>
-                    </div>
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchter Zeitraum" %}</h6>
-                        <input type="text" class="form-control" id="bookedTimeRange" readonly>
-                    </div>
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Gebuchte Stunden" %}</h6>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="bookedHours" readonly>
-                            <span class="input-group-text">{% trans "Stunden" %}</span>
-                        </div>
-                    </div>
-                    <div class="mb-4">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Tatsächlich verwendete Stunden" %}</h6>
-                        <div class="row g-2">
-                            <div class="col-6">
-                                <select class="form-select" id="actualHours" name="actual_hours">
-                                    {% for i in "0123456789"|make_list %}
-                                        <option value="{{ i }}">{{ i }}</option>
-                                    {% endfor %}
-                                </select>
-                                <label class="form-text">{% trans "Stunden" %}</label>
-                            </div>
-                            <div class="col-6">
-                                <select class="form-select" id="actualMinutes" name="actual_minutes">
-                                    <option value="0">00</option>
-                                    <option value="15">15</option>
-                                    <option value="30">30</option>
-                                    <option value="45">45</option>
-                                </select>
-                                <label class="form-text">{% trans "Minuten" %}</label>
-                            </div>
-                        </div>
-                        <input type="hidden" name="actual_hours" id="actualHoursTotal">
-                    </div>
-                    <div class="mb-3">
-                        <h6 class="border-bottom pb-2 fw-bold">{% trans "Bemerkungen" %}</h6>
-                        <textarea class="form-control" name="notes" rows="3"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    {% trans "Abbrechen" %}
-                </button>
-                <button type="button" class="btn btn-success" onclick="submitUsedHours()">
-                    {% trans "Speichern" %}
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-function formatHoursToHHMM(decimalHours) {
-    const hours = Math.floor(decimalHours);
-    const minutes = Math.round((decimalHours - hours) * 60);
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-}
-
-function updateActualHours() {
-    const hours = parseInt(document.getElementById('actualHours').value) || 0;
-    const minutes = parseInt(document.getElementById('actualMinutes').value) || 0;
-    const total = hours + (minutes / 60);
-    document.getElementById('actualHoursTotal').value = total.toFixed(2);
-}
-
-function openUsedHoursModal(date, hours, timeRange) {
-    document.getElementById('usedHoursDate').value = date;
-    document.getElementById('bookedHours').value = hours;
-    
-    // Hole die Buchungsdetails vom Server
-    fetch(`/api/therapist-booking/detail/${date}/`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log('Received data:', data); // Debug-Ausgabe
-            
-            // Zeige den Zeitraum
-            if (data.start_time && data.end_time) {
-                document.getElementById('bookedTimeRange').value = `${data.start_time}-${data.end_time}`;
-            }
-            
-            // Verwende actual_hours falls vorhanden, sonst die gebuchten Stunden
-            const actualHours = data.actual_hours !== null ? data.actual_hours : hours;
-            
-            // Setze die Dropdown-Werte basierend auf den tatsächlichen Stunden
-            const hoursValue = Math.floor(actualHours || 0);
-            const minutesValue = Math.round(((actualHours || 0) % 1) * 60);
-            
-            // Runde Minuten auf nächste verfügbare Option (0, 15, 30, 45)
-            const roundedMinutes = Math.round(minutesValue / 15) * 15;
-            
-            document.getElementById('actualHours').value = hoursValue.toString();
-            document.getElementById('actualMinutes').value = roundedMinutes.toString();
-            
-            // Setze Notizen wenn vorhanden
-            if (data.notes) {
-                document.querySelector('[name="notes"]').value = data.notes;
-            }
-            
-            // Event-Listener für die Dropdowns
-            document.getElementById('actualHours').onchange = updateActualHours;
-            document.getElementById('actualMinutes').onchange = updateActualHours;
-            
-            // Initial setzen
-            updateActualHours();
-            
-            // Auch die Buchungs-ID aus dem Button holen
-            const bookingId = document.querySelector(`[data-date="${date}"]`).dataset.bookingId;
-            document.getElementById('usedHoursForm').dataset.bookingId = bookingId;
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            // Fallback auf die übergebenen Werte
-            const hoursValue = Math.floor(hours || 0);
-            const minutesValue = Math.round(((hours || 0) % 1) * 60);
-            document.getElementById('actualHours').value = hoursValue.toString();
-            document.getElementById('actualMinutes').value = Math.round(minutesValue / 15) * 15;
-            updateActualHours();
-        });
-    
-    new bootstrap.Modal(document.getElementById('usedHoursModal')).show();
-}
-
-function submitUsedHours() {
-    const form = document.getElementById('usedHoursForm');
-    const date = document.getElementById('usedHoursDate').value;
-    const bookingId = form.dataset.bookingId;
-    
-    const data = {
-        booking_id: bookingId,
-        date: date,
-        actual_hours: parseFloat(form.querySelector('[name="actual_hours"]').value),
-        notes: form.querySelector('[name="notes"]').value
-    };
-    
-    const csrfToken = document.querySelector('[name="csrfmiddlewaretoken"]').value;
-    
-    fetch('{% url "wfm:api-therapist-booking-used" %}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken,
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify(data),
-        credentials: 'same-origin'
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.error || 'Fehler beim Speichern der verwendeten Stunden');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Ein Fehler ist aufgetreten: ' + error.message);
-    });
-}
-</script>
 {% endblock %} 

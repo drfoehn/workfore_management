@@ -940,115 +940,86 @@ def api_time_compensation_request(request):
 
 class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
     template_name = 'wfm/therapist_monthly_overview.html'
-
+    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        year = int(self.request.GET.get('year', timezone.now().year))
-        current_date = timezone.now().date()
+        # Hole Jahr aus URL oder nutze aktuelles Jahr
+        year = int(self.request.GET.get('year', date.today().year))
         
-        # Für Owner: Hole ausgewählten Therapeuten oder alle
-        selected_therapist_id = self.request.GET.get('therapist')
+        # Hole alle Therapeuten
         if self.request.user.role == 'OWNER':
-            if selected_therapist_id:
-                therapists = CustomUser.objects.filter(id=selected_therapist_id)
-            else:
-                therapists = CustomUser.objects.filter(role='THERAPIST')
-            # Füge Therapeutenliste zum Kontext hinzu
-            context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
-            context['selected_therapist_id'] = selected_therapist_id
+            therapists = CustomUser.objects.filter(role='THERAPIST')
+            selected_therapist = None
+            if therapist_id := self.request.GET.get('therapist'):
+                selected_therapist = therapists.filter(id=therapist_id).first()
+                therapists = [selected_therapist] if selected_therapist else therapists
         else:
             therapists = [self.request.user]
-        
-        months = []
-        for month_num in range(1, 13):
-            start_date = date(year, month_num, 1)
-            if month_num == 12:
-                end_date = date(year + 1, 1, 1) - timedelta(days=1)
-            else:
-                end_date = date(year, month_num + 1, 1) - timedelta(days=1)
-            
-            # Hole die Buchungen für diesen Monat
-            queryset = TherapistBooking.objects.filter(
-                therapist__in=therapists,
-                date__gte=start_date,
-                date__lte=end_date
-            )
-            
-            # Rest der Berechnungen bleibt gleich...
-            queryset = queryset.annotate(
-                booked_hours=ExpressionWrapper(
-                    (ExtractHour('end_time') + ExtractMinute('end_time') / 60.0) -
-                    (ExtractHour('start_time') + ExtractMinute('start_time') / 60.0),
-                    output_field=DecimalField()
+            selected_therapist = self.request.user
+
+        # Erstelle Monatsstatistiken für jeden Therapeuten
+        therapist_stats = []
+        for therapist in therapists:
+            months_data = []
+            for month in range(1, 13):
+                bookings = TherapistBooking.objects.filter(
+                    therapist=therapist,
+                    date__year=year,
+                    date__month=month
                 )
-            )
-            
-            # Berechne die Summen
-            totals = {
-                'total_booked': queryset.aggregate(
-                    sum=Sum('booked_hours')
-                )['sum'] or Decimal('0'),
-                'total_actual': queryset.aggregate(
-                    sum=Sum('actual_hours')
-                )['sum'] or Decimal('0'),
-                'total_extra': queryset.aggregate(
-                    sum=Sum(Case(
-                        When(
-                            actual_hours__gt=F('booked_hours'),
-                            then=F('actual_hours') - F('booked_hours')
-                        ),
-                        default=0,
-                        output_field=DecimalField()
-                    ))
-                )['sum'] or Decimal('0')
+                
+                total_hours = bookings.aggregate(
+                    total=Coalesce(Sum('hours', output_field=DecimalField()), 0, output_field=DecimalField())
+                )['total']
+                
+                total_actual = bookings.aggregate(
+                    total=Coalesce(Sum('actual_hours', output_field=DecimalField()), 0, output_field=DecimalField())
+                )['total']
+                
+                total_difference = bookings.aggregate(
+                    total=Coalesce(Sum('difference_hours', output_field=DecimalField()), 0, output_field=DecimalField())
+                )['total']
+                
+                pending_payment = bookings.filter(
+                    actual_hours__gt=F('hours'),
+                    payment_status='PENDING'
+                ).aggregate(
+                    total=Coalesce(Sum('difference_hours', output_field=DecimalField()), 0, output_field=DecimalField())
+                )['total']
+
+                months_data.append({
+                    'month': month,
+                    'month_name': date(year, month, 1).strftime('%B'),
+                    'total_hours': total_hours,
+                    'total_actual': total_actual,
+                    'total_difference': total_difference,
+                    'pending_payment': pending_payment,
+                    'booking_count': bookings.count()
+                })
+
+            # Berechne Jahressummen
+            year_totals = {
+                'total_hours': sum(m['total_hours'] for m in months_data),
+                'total_actual': sum(m['total_actual'] for m in months_data),
+                'total_difference': sum(m['total_difference'] for m in months_data),
+                'pending_payment': sum(m['pending_payment'] for m in months_data),
+                'booking_count': sum(m['booking_count'] for m in months_data)
             }
-            
-            # Berechne die zusätzlichen Kosten
-            extra_costs = queryset.annotate(
-                extra_hours=Case(
-                    When(
-                        actual_hours__gt=F('booked_hours'),
-                        then=F('actual_hours') - F('booked_hours')
-                    ),
-                    default=0,
-                    output_field=DecimalField()
-                )
-            ).annotate(
-                cost=F('extra_hours') * F('therapist__room_rate')  # Benutze den Stundensatz des jeweiligen Therapeuten
-            ).aggregate(
-                total_cost=Sum('cost')
-            )['total_cost'] or Decimal('0')
-            
-            months.append({
-                'number': month_num,
-                'name': date(year, month_num, 1).strftime('%B'),
-                'is_current': current_date.year == year and current_date.month == month_num,
-                'total_hours': totals['total_booked'],
-                'used_hours': totals['total_actual'],
-                'total_difference': totals['total_extra'],
-                'total_amount': extra_costs
+
+            therapist_stats.append({
+                'therapist': therapist,
+                'months': months_data,
+                'year_totals': year_totals
             })
-        
-        # Berechne die Jahressummen
-        year_totals = {
-            'total_hours': sum(month['total_hours'] for month in months),
-            'used_hours': sum(month['used_hours'] for month in months),
-            'total_difference': sum(month['total_difference'] for month in months),
-            'total_amount': sum(month['total_amount'] for month in months)
-        }
-        
-        # Bestimme den room_rate für die Anzeige
-        # if selected_therapist_id:
-        #     room_rate = therapists.first().room_rate or Decimal('0')
-        # else:
-        room_rate = self.request.user.room_rate or Decimal('0')
-        
+
         context.update({
             'year': year,
-            'months': months,
-            'year_totals': year_totals,
-            'room_rate': room_rate
+            'prev_year': year - 1,
+            'next_year': year + 1,
+            'therapist_stats': therapist_stats,
+            'therapists': CustomUser.objects.filter(role='THERAPIST') if self.request.user.role == 'OWNER' else None,
+            'selected_therapist': selected_therapist
         })
         
         return context
