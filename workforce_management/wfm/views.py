@@ -1986,39 +1986,6 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         return context
 
 @login_required
-def api_therapist_booking_detail(request, pk):
-    """API-Endpunkt zum Abrufen einer Therapeuten-Buchung"""
-    try:
-        # Erlaube Zugriff für Owner und den zugewiesenen Therapeuten
-        booking = TherapistBooking.objects.get(id=pk)
-        if not (request.user.role == 'OWNER' or request.user == booking.therapist):
-            return JsonResponse({'error': 'Permission denied'}, status=403)
-        
-        return JsonResponse({
-            'id': booking.id,
-            'therapist': {
-                'id': booking.therapist.id,
-                'name': booking.therapist.get_full_name()
-            },
-            'date': booking.date.strftime('%Y-%m-%d'),
-            'start_time': booking.start_time.strftime('%H:%M'),
-            'end_time': booking.end_time.strftime('%H:%M'),
-            'hours': booking.hours,
-            'actual_hours': booking.actual_hours,
-            'notes': booking.notes,
-            'status': booking.status
-        })
-        
-    except TherapistBooking.DoesNotExist:
-        return JsonResponse({
-            'error': 'Buchung nicht gefunden'
-        }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'error': str(e)
-        }, status=500)
-
-@login_required
 def api_therapist_booking_update(request):
     """API-Endpunkt zum Aktualisieren einer Therapeuten-Buchung"""
     if request.method != 'POST':
@@ -2035,7 +2002,6 @@ def api_therapist_booking_update(request):
             booking.date = datetime.strptime(data['date'], '%Y-%m-%d').date()
             booking.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
             booking.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-            booking.status = data.get('status', booking.status)
             if 'actual_hours' in data and data['actual_hours']:
                 booking.actual_hours = Decimal(data['actual_hours'])
             if 'notes' in data:
@@ -2049,9 +2015,26 @@ def api_therapist_booking_update(request):
         else:
             return JsonResponse({'error': 'Permission denied'}, status=403)
             
-        booking.save()
+        booking.save()  # Dies berechnet auch die difference_hours automatisch
         
-        return JsonResponse({'success': True})
+        return JsonResponse({
+            'success': True,
+            'booking': {
+                'id': booking.id,
+                'therapist': {
+                    'id': booking.therapist.id,
+                    'name': booking.therapist.get_full_name() or booking.therapist.username
+                },
+                'date': booking.date.strftime('%Y-%m-%d'),
+                'start_time': booking.start_time.strftime('%H:%M'),
+                'end_time': booking.end_time.strftime('%H:%M'),
+                'hours': float(booking.hours) if booking.hours else None,
+                'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
+                'difference_hours': float(booking.difference_hours) if booking.difference_hours else None,
+                'notes': booking.notes,
+                'payment_status': booking.payment_status
+            }
+        })
         
     except TherapistBooking.DoesNotExist:
         return JsonResponse({
@@ -3091,3 +3074,36 @@ def api_get_scheduled_hours(request):
     return JsonResponse({
         'scheduled_hours': scheduled_hours
     })
+
+@login_required
+def api_therapist_booking_get(request, pk):
+    """API-Endpunkt zum Abrufen einer Therapeuten-Buchung"""
+    try:
+        # Erlaube Zugriff für Owner und den zugewiesenen Therapeuten
+        booking = TherapistBooking.objects.get(id=pk)
+        if not (request.user.role == 'OWNER' or request.user == booking.therapist):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        return JsonResponse({
+            'id': booking.id,
+            'therapist': {
+                'id': booking.therapist.id,
+                'name': booking.therapist.get_full_name() or booking.therapist.username
+            },
+            'date': booking.date.strftime('%Y-%m-%d'),
+            'start_time': booking.start_time.strftime('%H:%M'),
+            'end_time': booking.end_time.strftime('%H:%M'),
+            'hours': float(booking.hours) if booking.hours else None,
+            'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
+            'notes': booking.notes or '',
+            'payment_status': booking.payment_status
+        })
+        
+    except TherapistBooking.DoesNotExist:
+        return JsonResponse({
+            'error': 'Buchung nicht gefunden'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
