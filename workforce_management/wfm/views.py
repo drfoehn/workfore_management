@@ -1806,10 +1806,6 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
     context_object_name = 'bookings'
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        print("\n=== Debug TherapistBookingListView.get_queryset ===")
-        print(f"Initial queryset count: {queryset.count()}")
-        
         # Filter by month/year
         month = self.request.GET.get('month')
         year = self.request.GET.get('year')
@@ -1817,18 +1813,19 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             today = timezone.now()
             month = today.month
             year = today.year
-
-        print(f"Filtering for month/year: {month}/{year}")
-        queryset = queryset.filter(date__month=month, date__year=year)
         
-        # Filter by therapist if specified
+        # Basis-Query für den ausgewählten Monat
+        queryset = super().get_queryset().filter(
+            date__year=int(year),
+            date__month=int(month)
+        )
+
+        # Filter by therapist
         therapist_id = self.request.GET.get('therapist')
         if therapist_id:
-            print(f"Filtering for therapist_id: {therapist_id}")
             queryset = queryset.filter(therapist_id=therapist_id)
             self.selected_therapist = CustomUser.objects.get(id=therapist_id)
         elif self.request.user.role == 'THERAPIST':
-            print(f"Filtering for logged-in therapist: {self.request.user.id}")
             queryset = queryset.filter(therapist=self.request.user)
             self.selected_therapist = self.request.user
         else:
@@ -1838,7 +1835,6 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        print("\n=== Debug TherapistBookingListView.get_context_data ===")
         
         # Get current month/year
         month = self.request.GET.get('month')
@@ -1847,46 +1843,48 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             today = timezone.now()
             month = today.month
             year = today.year
-        else:
-            month = int(month)
-            year = int(year)
+        
+        current_date = date(int(year), int(month), 1)
+        context.update({
+            'current_date': current_date,
+            'month_name': current_date.strftime('%B %Y'),
+            'prev_month': (current_date - relativedelta(months=1)),
+            'next_month': (current_date + relativedelta(months=1))
+        })
+
+        # Berechne Summen für die Buchungen
+        bookings = context['bookings']
+        total_actual_hours = Decimal('0.00')  # Verwendete Stunden gesamt
+        total_extra_hours = Decimal('0.00')   # Summe der Mehrstunden
+        total_booked_amount = Decimal('0.00') # Gebuchte Stunden * room_rate
+        extra_costs = Decimal('0.00')         # Mehrstunden * room_rate
+
+        for booking in bookings:
+            # Verwendete Stunden
+            if booking.actual_hours:
+                total_actual_hours += booking.actual_hours
+
+            # Gebuchte Stunden * room_rate
+            if booking.hours and booking.therapist.room_rate:
+                total_booked_amount += booking.hours * booking.therapist.room_rate
             
-        current_date = date(year, month, 1)
-        context['current_date'] = current_date
-        context['month_name'] = current_date.strftime('%B %Y')
-        
-        # Calculate prev/next month
-        context['prev_month'] = (current_date - relativedelta(months=1))
-        context['next_month'] = (current_date + relativedelta(months=1))
-        
+            # Mehrstunden und deren Kosten
+            if booking.difference_hours and booking.therapist.room_rate:
+                total_extra_hours += booking.difference_hours
+                extra_costs += booking.difference_hours * booking.therapist.room_rate
+
+        context['totals'] = {
+            'total_actual_hours': total_actual_hours,
+            'total_extra_hours': total_extra_hours,
+            'total_sum': total_booked_amount,  # Gebuchte Stunden * room_rate
+            'extra_costs': extra_costs         # Mehrstunden * room_rate
+        }
+
+        # Füge Therapeuten für Filter hinzu (nur für Owner)
         if self.request.user.role == 'OWNER':
-            # Get all therapists for filter
-            therapists = CustomUser.objects.filter(role='THERAPIST')
-            context['therapists'] = therapists
-            print(f"Available therapists: {[t.username for t in therapists]}")
-            
-            # Get selected therapist
-            therapist_id = self.request.GET.get('therapist')
-            if therapist_id:
-                context['selected_therapist'] = CustomUser.objects.get(id=therapist_id)
-                print(f"Selected therapist: {context['selected_therapist'].username}")
-            
-            # Calculate totals for the month
-            bookings = context['bookings']
-            print(f"Number of bookings in context: {len(bookings)}")
-            
-            total_hours = sum(b.actual_hours or 0 for b in bookings)
-            pending_bookings = [b for b in bookings if b.payment_status == 'PENDING']
-            pending_hours = sum(b.actual_hours or 0 for b in pending_bookings)
-            pending_amount = sum((b.actual_hours or 0) * b.therapist.room_rate for b in pending_bookings)
-            
-            context.update({
-                'total_hours': total_hours,
-                'pending_hours': pending_hours,
-                'pending_amount': pending_amount
-            })
-            print(f"Totals calculated - Hours: {total_hours}, Pending: {pending_hours}")
-            
+            context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
+            context['selected_therapist'] = getattr(self, 'selected_therapist', None)
+
         return context
 
 @login_required
