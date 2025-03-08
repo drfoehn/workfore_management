@@ -72,14 +72,15 @@
                         <th>{% trans "Gebucht (Std)" %}</th>
                         <th>{% trans "Verwendet (Std)" %}</th>
                         <th>{% trans "Differenz" %}</th>
-                        <th>{% trans "Bemerkungen" %}</th>
+                        <th>{% trans "Status" %}</th>
+                        <th>{% trans "Notizen" %}</th>
                         <th>{% trans "Aktionen" %}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for booking in bookings %}
                         <tr>
-                            <td>{{ booking.date }}</td>
+                            <td>{{ booking.date|date:"d.m.Y" }}</td>
                             <td>
                                 <span class="badge" style="background-color: {{ booking.therapist.color }}">
                                     {{ booking.therapist.get_full_name|default:booking.therapist.username }}
@@ -89,9 +90,10 @@
                             <td>{{ booking.end_time|time:"H:i" }}</td>
                             <td>{{ booking.hours|floatformat:2 }}</td>
                             <td>{{ booking.actual_hours|default_if_none:"-"|floatformat:2 }}</td>
-                            <td class="{% if booking.actual_hours is not None and booking.difference > 0 %}text-danger{% endif %}">
-                                {{ booking.difference|default:"-"|floatformat:2 }}
+                            <td class="{% if booking.difference_hours %}text-danger{% endif %}">
+                                {{ booking.difference_hours|default_if_none:"-"|floatformat:2 }}
                             </td>
+                            <td>{{ booking.get_payment_status_display }}</td>
                             <td>{{ booking.notes|default:"-" }}</td>
                             <td>
                                 <div class="btn-group">

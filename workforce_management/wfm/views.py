@@ -1802,12 +1802,13 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
 
 class TherapistBookingListView(LoginRequiredMixin, ListView):
     model = TherapistBooking
-    context_object_name = 'bookings'
     template_name = 'wfm/therapist_booking_list.html'
-
+    context_object_name = 'bookings'
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        print("\n=== Debug TherapistBookingListView.get_queryset ===")
+        print(f"Initial queryset count: {queryset.count()}")
         
         # Filter by month/year
         month = self.request.GET.get('month')
@@ -1816,20 +1817,28 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             today = timezone.now()
             month = today.month
             year = today.year
-        
+
+        print(f"Filtering for month/year: {month}/{year}")
         queryset = queryset.filter(date__month=month, date__year=year)
         
         # Filter by therapist if specified
         therapist_id = self.request.GET.get('therapist')
         if therapist_id:
+            print(f"Filtering for therapist_id: {therapist_id}")
             queryset = queryset.filter(therapist_id=therapist_id)
+            self.selected_therapist = CustomUser.objects.get(id=therapist_id)
         elif self.request.user.role == 'THERAPIST':
+            print(f"Filtering for logged-in therapist: {self.request.user.id}")
             queryset = queryset.filter(therapist=self.request.user)
-        
+            self.selected_therapist = self.request.user
+        else:
+            self.selected_therapist = None
+
         return queryset.order_by('date', 'start_time')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        print("\n=== Debug TherapistBookingListView.get_context_data ===")
         
         # Get current month/year
         month = self.request.GET.get('month')
@@ -1852,15 +1861,20 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         
         if self.request.user.role == 'OWNER':
             # Get all therapists for filter
-            context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
+            therapists = CustomUser.objects.filter(role='THERAPIST')
+            context['therapists'] = therapists
+            print(f"Available therapists: {[t.username for t in therapists]}")
             
             # Get selected therapist
             therapist_id = self.request.GET.get('therapist')
             if therapist_id:
                 context['selected_therapist'] = CustomUser.objects.get(id=therapist_id)
+                print(f"Selected therapist: {context['selected_therapist'].username}")
             
             # Calculate totals for the month
             bookings = context['bookings']
+            print(f"Number of bookings in context: {len(bookings)}")
+            
             total_hours = sum(b.actual_hours or 0 for b in bookings)
             pending_bookings = [b for b in bookings if b.payment_status == 'PENDING']
             pending_hours = sum(b.actual_hours or 0 for b in pending_bookings)
@@ -1871,6 +1885,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
                 'pending_hours': pending_hours,
                 'pending_amount': pending_amount
             })
+            print(f"Totals calculated - Hours: {total_hours}, Pending: {pending_hours}")
             
         return context
 

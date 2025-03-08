@@ -87,8 +87,8 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(TherapistBooking)
 class TherapistBookingAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'date', 'start_time', 'end_time', 'status', 'payment_status', 'payment_date')
-    list_filter = ('status', 'payment_status', 'date', 'therapist')
+    list_display = ('therapist', 'date', 'start_time', 'end_time', 'payment_status', 'payment_date')
+    list_filter = ('payment_status', 'date', 'therapist')
     search_fields = ('therapist__username', 'notes')
     date_hierarchy = 'date'
     ordering = ('-date', 'start_time')

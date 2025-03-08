@@ -520,11 +520,11 @@ class TimeCompensation(models.Model):
 
 class TherapistBooking(models.Model):
     """Raumbuchungen für Therapeuten"""
-    STATUS_CHOICES = [
-        ('RESERVED', _('Reserviert')),
-        ('USED', _('Verwendet')),
-        ('CANCELLED', _('Storniert')),
-    ]
+    # STATUS_CHOICES = [
+    #     ('RESERVED', _('Reserviert')),
+    #     ('USED', _('Verwendet')),
+    #     ('CANCELLED', _('Storniert')),
+    # ]
 
     PAYMENT_STATUS_CHOICES = [
         ('PENDING', _('Ausstehend')),
@@ -535,9 +535,18 @@ class TherapistBooking(models.Model):
     date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
-    actual_hours = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    hours = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True)
+    actual_hours = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True)
+    difference_hours = models.DecimalField(  # Neues Feld
+        max_digits=4, 
+        decimal_places=2, 
+        blank=True, 
+        null=True,
+        verbose_name=_('Stundendifferenz'),
+        help_text=_('Differenz zwischen geplanten und tatsächlichen Stunden')
+    )
     notes = models.TextField(blank=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='RESERVED')
+    # status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='RESERVED')
     payment_status = models.CharField(
         max_length=10,
         choices=PAYMENT_STATUS_CHOICES,
@@ -551,26 +560,24 @@ class TherapistBooking(models.Model):
     )
 
     def save(self, *args, **kwargs):
-        # Wenn actual_hours nicht gesetzt ist, setze es auf die gebuchten Stunden
-        if self.actual_hours is None:
+        # Berechne hours wenn nicht gesetzt
+        if not self.hours and self.start_time and self.end_time:
+            start = datetime.combine(date.min, self.start_time)
+            end = datetime.combine(date.min, self.end_time)
+            duration = end - start
+            self.hours = Decimal(str(duration.total_seconds() / 3600))
+
+        # Wenn actual_hours nicht gesetzt ist, setze es auf hours
+        if self.actual_hours is None and self.hours:
             self.actual_hours = self.hours
+
+        # Berechne die Differenz (NUR wenn actual_hours > hours)
+        if self.actual_hours and self.hours and self.actual_hours > self.hours:
+            self.difference_hours = self.actual_hours - self.hours
+        else:
+            self.difference_hours = None  # Keine Differenz wenn actual_hours <= hours
+
         super().save(*args, **kwargs)
-
-    @property
-    def hours(self):
-        """Berechnet die gebuchten Stunden"""
-        start = datetime.combine(date.min, self.start_time)
-        end = datetime.combine(date.min, self.end_time)
-        duration = end - start
-        return Decimal(str(duration.total_seconds() / 3600))
-
-    @property
-    def difference(self):
-        """Berechnet die Differenz zwischen gebuchten und tatsächlichen Stunden.
-        Positiv nur wenn mehr Stunden verwendet als gebucht wurden."""
-        if self.actual_hours is None or self.actual_hours <= self.hours:
-            return None
-        return self.actual_hours - self.hours
 
     def clean(self):
         if self.start_time and self.end_time and self.start_time >= self.end_time:
@@ -595,7 +602,8 @@ class TherapistScheduleTemplate(models.Model):
     hours = models.DecimalField(
         max_digits=4,
         decimal_places=2,
-        default=Decimal('0.00')
+        blank=True,
+        null=True
     )
 
     class Meta:
@@ -612,9 +620,46 @@ class TherapistScheduleTemplate(models.Model):
             duration = end - start
             self.hours = Decimal(str(duration.total_seconds() / 3600))
             
+    def create_future_bookings(self):
+        """Erstellt Buchungen für die nächsten 3 Jahre basierend auf diesem Template"""
+        start_date = max(self.valid_from, date.today())
+        end_date = start_date + timedelta(days=3*365)  # 3 Jahre
+        current_date = start_date
+
+        print(f"Creating bookings from {start_date} to {end_date} for {self.therapist.username}")
+        
+        while current_date <= end_date:
+            if current_date.weekday() == self.weekday:
+                # Prüfe ob bereits eine Buchung existiert
+                booking_exists = TherapistBooking.objects.filter(
+                    date=current_date,
+                    therapist=self.therapist
+                ).exists()
+                
+                if not booking_exists:
+                    # Berechne die Stunden
+                    start = datetime.combine(date.min, self.start_time)
+                    end = datetime.combine(date.min, self.end_time)
+                    duration = end - start
+                    hours = Decimal(str(duration.total_seconds() / 3600))
+
+                    TherapistBooking.objects.create(
+                        therapist=self.therapist,
+                        date=current_date,
+                        start_time=self.start_time,
+                        end_time=self.end_time,
+                        hours=hours,
+                        actual_hours=hours,  # Initial gleich den gebuchten Stunden
+                        payment_status='PENDING'
+                    )
+                    print(f"Created booking for {current_date}")
+            
+            current_date += timedelta(days=1)
+
     def save(self, *args, **kwargs):
-        self.clean()
         super().save(*args, **kwargs)
+        # Erstelle Buchungen nach dem Speichern des Templates
+        self.create_future_bookings()
 
     def __str__(self):
         return f"{self.therapist} - {self.get_weekday_display()} ({self.start_time}-{self.end_time})"
