@@ -69,67 +69,11 @@
     </div>
 </div>
 
-<!-- Modal für Buchungen -->
-<div class="modal fade" id="bookingModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">{% trans "Buchung bearbeiten" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="bookingForm">
-                    <input type="hidden" id="bookingId">
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Therapeut" %}</label>
-                        <input type="text" class="form-control" id="therapistName" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Datum" %}</label>
-                        <input type="date" class="form-control" id="bookingDate" {% if not user.role == 'OWNER' %}readonly{% endif %}>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="form-label">{% trans "Von" %}</label>
-                            <input type="time" class="form-control" id="startTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Bis" %}</label>
-                            <input type="time" class="form-control" id="endTime" {% if not user.role == 'OWNER' %}readonly{% endif %}>
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="form-label">{% trans "Gebucht (Std)" %}</label>
-                            <input type="number" class="form-control" id="bookedHours" readonly>
-                        </div>
-                        <div class="col">
-                            <label class="form-label">{% trans "Verwendet (Std)" %}</label>
-                            <input type="number" class="form-control" id="actualHours" step="0.25" min="0">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">{% trans "Notizen" %}</label>
-                        <textarea class="form-control" id="notes" rows="3"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                {% if user.role == 'OWNER' %}
-                    <button type="button" class="btn btn-danger" onclick="deleteBooking()">{% trans "Löschen" %}</button>
-                {% endif %}
-                <button type="button" class="btn btn-primary" onclick="saveBooking()">{% trans "Speichern" %}</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-{# Modal einbinden #}
 {% include "wfm/modals/booking_modal.html" %}
 {% endblock %}
 
 {% block extra_js %}
+{% include "wfm/modals/booking_modal_js.html" %}
 <!-- FullCalendar JS -->
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.js'></script>
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/de.js'></script>
@@ -187,18 +131,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     successCallback(data.map(event => ({
-                        id: event.id ? 'book_' + event.id : null,
+                        id: event.id,
                         title: event.title,
                         start: event.start,
                         end: event.end,
-                        backgroundColor: event.color,
-                        borderColor: event.color,
-                        className: 'status-' + event.status,
-                        editable: event.id !== null,  // Nur eigene Events editierbar
-                        extendedProps: event.id ? {
-                            therapist: event.therapist,
-                            status: event.status
-                        } : {}
+                        backgroundColor: event.backgroundColor,
+                        borderColor: event.backgroundColor,
+                        className: event.className,
+                        extendedProps: {
+                            therapist: event.extendedProps.therapist,
+                            hours: event.extendedProps.hours,
+                            actual_hours: event.extendedProps.actual_hours,
+                            notes: event.extendedProps.notes
+                        }
                     })));
                 })
                 .catch(error => {
@@ -210,102 +155,5 @@ document.addEventListener('DOMContentLoaded', function() {
     calendar.render();
     window.calendar = calendar;  // Mache calendar global verfügbar
 });
-
-// Die gleichen Funktionen wie in therapist_booking_list.html
-function openBookingModal(id) {
-    fetch(`/api/therapist-booking/${id}/`)
-        .then(response => {
-            if (!response.ok) throw new Error('Network response was not ok');
-            return response.json();
-        })
-        .then(data => {
-            document.getElementById('bookingId').value = data.id;
-            document.getElementById('therapistName').value = data.therapist.name;
-            document.getElementById('therapistId').value = data.therapist.id;
-            document.getElementById('bookingDate').value = data.date;
-            document.getElementById('startTime').value = data.start_time;
-            document.getElementById('endTime').value = data.end_time;
-            document.getElementById('bookedHours').value = data.hours;
-            document.getElementById('actualHours').value = data.actual_hours || '';
-            document.getElementById('notes').value = data.notes || '';
-            
-            // Felder basierend auf Rolle aktivieren/deaktivieren
-            const isOwner = '{{ user.role }}' === 'OWNER';
-            const isOwnBooking = data.therapist.id === '{{ user.id }}';
-            
-            document.getElementById('bookingDate').disabled = !isOwner;
-            document.getElementById('startTime').disabled = !isOwner;
-            document.getElementById('endTime').disabled = !isOwner;
-            document.getElementById('actualHours').disabled = !(isOwner || isOwnBooking);
-            
-            new bootstrap.Modal(document.getElementById('bookingModal')).show();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Fehler beim Laden der Daten: ' + error.message);
-        });
-}
-
-function saveBooking() {
-    const id = document.getElementById('bookingId').value;
-    const data = {
-        booking_id: id,
-        actual_hours: document.getElementById('actualHours').value,
-        notes: document.getElementById('notes').value
-    };
-    
-    if ('{{ user.role }}' === 'OWNER') {
-        data.date = document.getElementById('bookingDate').value;
-        data.start_time = document.getElementById('startTime').value;
-        data.end_time = document.getElementById('endTime').value;
-    }
-    
-    fetch('/api/therapist-booking/update/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.error || 'Fehler beim Speichern');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Fehler beim Speichern');
-    });
-}
-
-function deleteBooking() {
-    const id = document.getElementById('bookingId').value;
-    if (!id) return;
-    
-    if (confirm('{% trans "Buchung wirklich löschen?" %}')) {
-        fetch(`/api/therapist-booking/${id}/delete/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert(data.error || '{% trans "Fehler beim Löschen" %}');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Fehler beim Löschen');
-        });
-    }
-}
 </script>
 {% endblock %} 

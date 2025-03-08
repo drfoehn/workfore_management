@@ -1,0 +1,111 @@
+{% load i18n %}
+
+<script>
+function openBookingModal(id) {
+    fetch(`/api/therapist-booking/${id}/`)
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            document.getElementById('bookingId').value = data.id;
+            document.getElementById('therapistName').value = data.therapist.name;
+            document.getElementById('therapistId').value = data.therapist.id;
+            document.getElementById('bookingDate').value = data.date;
+            document.getElementById('startTime').value = data.start_time;
+            document.getElementById('endTime').value = data.end_time;
+            document.getElementById('bookedHours').value = data.hours;
+            document.getElementById('actualHours').value = data.actual_hours || '';
+            document.getElementById('notes').value = data.notes || '';
+            
+            // Felder basierend auf Rolle aktivieren/deaktivieren
+            const isOwner = '{{ user.role }}' === 'OWNER';
+            const isOwnBooking = data.therapist.id.toString() === '{{ user.id }}';  // String-Vergleich
+            
+            // Therapeut kann eigene actual_hours und notes ändern
+            document.getElementById('bookingDate').disabled = !isOwner;
+            document.getElementById('startTime').disabled = !isOwner;
+            document.getElementById('endTime').disabled = !isOwner;
+            document.getElementById('actualHours').disabled = !(isOwner || isOwnBooking);  // Eigene Buchungen editierbar
+            document.getElementById('notes').disabled = !(isOwner || isOwnBooking);  // Eigene Notizen editierbar
+            
+            new bootstrap.Modal(document.getElementById('bookingModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Laden der Daten: ' + error.message);
+        });
+}
+
+function saveBooking() {
+    const id = document.getElementById('bookingId').value;
+    const isOwner = '{{ user.role }}' === 'OWNER';
+    const therapistId = document.getElementById('therapistId').value;
+    const isOwnBooking = therapistId.toString() === '{{ user.id }}';
+
+    // Nur erlaubte Felder senden
+    const data = {
+        id: id
+    };
+
+    // Therapeut kann actual_hours und notes seiner eigenen Buchungen ändern
+    if (isOwner || isOwnBooking) {
+        data.actual_hours = document.getElementById('actualHours').value;
+        data.notes = document.getElementById('notes').value;
+    }
+    
+    // Nur Owner kann diese Felder ändern
+    if (isOwner) {
+        data.date = document.getElementById('bookingDate').value;
+        data.start_time = document.getElementById('startTime').value;
+        data.end_time = document.getElementById('endTime').value;
+    }
+    
+    fetch('/api/therapist-booking/update/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fehler beim Speichern');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Fehler beim Speichern');
+    });
+}
+
+function deleteBooking() {
+    const id = document.getElementById('bookingId').value;
+    if (!id) return;
+    
+    if (confirm('{% trans "Buchung wirklich löschen?" %}')) {
+        fetch(`/api/therapist-booking/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || '{% trans "Fehler beim Löschen" %}');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fehler beim Löschen');
+        });
+    }
+}
+</script> 

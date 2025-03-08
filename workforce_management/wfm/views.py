@@ -1569,18 +1569,19 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
             # Eigene Buchungen mit vollen Details
             own_bookings = [
                 {
-                    'id': booking.id,
+                    'id': str(booking.id),  # Nur die ID als String
                     'title': f"{booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')}",
                     'start': f"{booking.date}T{booking.start_time}",
                     'end': f"{booking.date}T{booking.end_time}",
                     'backgroundColor': booking.therapist.color,
                     'extendedProps': {
+                        'therapist': {
+                            'id': booking.therapist.id,
+                            'name': booking.therapist.get_full_name()
+                        },
                         'hours': booking.hours,
                         'actual_hours': booking.actual_hours,
-                        'difference_hours': booking.difference_hours,
-                        'notes': booking.notes,
-                        'therapist_name': booking.therapist.get_full_name(),
-                        'payment_status': booking.payment_status
+                        'notes': booking.notes
                     }
                 }
                 for booking in bookings.filter(therapist=self.request.user)
@@ -1603,18 +1604,19 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
         else:  # OWNER sieht alle Details
             calendar_events = [
                 {
-                    'id': booking.id,
+                    'id': str(booking.id),  # Nur die ID als String
                     'title': f"{booking.therapist.get_full_name()} ({booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')})",
                     'start': f"{booking.date}T{booking.start_time}",
                     'end': f"{booking.date}T{booking.end_time}",
                     'backgroundColor': booking.therapist.color,
                     'extendedProps': {
+                        'therapist': {
+                            'id': booking.therapist.id,
+                            'name': booking.therapist.get_full_name()
+                        },
                         'hours': booking.hours,
                         'actual_hours': booking.actual_hours,
-                        'difference_hours': booking.difference_hours,
-                        'notes': booking.notes,
-                        'therapist_name': booking.therapist.get_full_name(),
-                        'payment_status': booking.payment_status
+                        'notes': booking.notes
                     }
                 }
                 for booking in bookings
@@ -1659,55 +1661,79 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
 @login_required
 @ensure_csrf_cookie
 def api_therapist_calendar_events(request):
+    """API-Endpunkt für Kalender-Events"""
+    print("\n=== Debug api_therapist_calendar_events ===")
+    
     start = request.GET.get('start')
     end = request.GET.get('end')
-    therapist_id = request.GET.get('therapist')
-    
-    bookings = TherapistBooking.objects.select_related('therapist')
-    
-    # Filter nach Therapeut
-    if request.user.role != 'OWNER':
-        # Für normale Therapeuten: Zeige eigene Buchungen mit Details, andere nur als "Belegt"
-        bookings = bookings.all()  # Alle Buchungen laden für die "Belegt"-Anzeige
-    elif therapist_id:
-        # Für Owner mit ausgewähltem Therapeuten
-        bookings = bookings.filter(therapist_id=therapist_id)
-    
-    # Filter nach Datum
-    if start:
-        bookings = bookings.filter(date__gte=start[:10])
-    if end:
-        bookings = bookings.filter(date__lte=end[:10])
-        
-    events = []
-    for booking in bookings:
-        # Für Owner oder eigene Buchungen: volle Details
-        if request.user.role == 'OWNER' or booking.therapist == request.user:
-            events.append({
-                'id': booking.id,
-                'title': f"{booking.therapist.get_full_name()} ({booking.hours}h)",
+    print(f"Requested date range: {start} to {end}")
+
+    bookings = TherapistBooking.objects.filter(
+        date__range=[start.split('T')[0], end.split('T')[0]]
+    ).select_related('therapist')
+    print(f"Found {bookings.count()} bookings")
+
+    if request.user.role == 'THERAPIST':
+        own_bookings = [
+            {
+                'id': str(booking.id),  # Debug: Print ID format
+                'title': f"{booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')}",
                 'start': f"{booking.date}T{booking.start_time}",
                 'end': f"{booking.date}T{booking.end_time}",
-                'color': booking.therapist.color,
-                'therapist': {
-                    'id': booking.therapist.id,
-                    'name': booking.therapist.get_full_name()
-                },
-                
-            })
-        else:
-            # Für fremde Buchungen: nur Zeit anzeigen
-            events.append({
-                'id': None,  # Keine ID für fremde Buchungen
-                'title': f"{booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}",
+                'backgroundColor': booking.therapist.color,
+                'extendedProps': {
+                    'therapist': {
+                        'id': booking.therapist.id,
+                        'name': booking.therapist.get_full_name()
+                    },
+                    'hours': booking.hours,
+                    'actual_hours': booking.actual_hours,
+                    'notes': booking.notes
+                }
+            }
+            for booking in bookings.filter(therapist=request.user)
+        ]
+        print(f"Own bookings: {len(own_bookings)}")
+        print(f"Sample booking ID: {own_bookings[0]['id'] if own_bookings else 'none'}")
+
+        other_bookings = [
+            {
+                'title': 'Belegt',
                 'start': f"{booking.date}T{booking.start_time}",
                 'end': f"{booking.date}T{booking.end_time}",
-                'color': '#808080',  # Grau für fremde Buchungen
-                'editable': False,
-                'status': 'BLOCKED'  # Spezialstatus für blockierte Zeiten
-            })
+                'backgroundColor': '#808080',
+                'className': 'blocked-time'
+            }
+            for booking in bookings.exclude(therapist=request.user)
+        ]
+        print(f"Other bookings: {len(other_bookings)}")
         
-    return JsonResponse(events, safe=False)
+        calendar_events = own_bookings + other_bookings
+
+    else:  # OWNER
+        calendar_events = [
+            {
+                'id': str(booking.id),  # Debug: Print ID format
+                'title': f"{booking.therapist.get_full_name()} ({booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')})",
+                'start': f"{booking.date}T{booking.start_time}",
+                'end': f"{booking.date}T{booking.end_time}",
+                'backgroundColor': booking.therapist.color,
+                'extendedProps': {
+                    'therapist': {
+                        'id': booking.therapist.id,
+                        'name': booking.therapist.get_full_name()
+                    },
+                    'hours': booking.hours,
+                    'actual_hours': booking.actual_hours,
+                    'notes': booking.notes
+                }
+            }
+            for booking in bookings
+        ]
+        print(f"All bookings for owner: {len(calendar_events)}")
+        print(f"Sample booking ID: {calendar_events[0]['id'] if calendar_events else 'none'}")
+
+    return JsonResponse(calendar_events, safe=False)
 
 @method_decorator(login_required, name='dispatch')
 class AssistantCalendarEventsView(View):
@@ -3078,13 +3104,20 @@ def api_get_scheduled_hours(request):
 @login_required
 def api_therapist_booking_get(request, pk):
     """API-Endpunkt zum Abrufen einer Therapeuten-Buchung"""
+    print("\n=== Debug api_therapist_booking_get ===")
+    print(f"Requested booking ID: {pk}")
+    
     try:
         # Erlaube Zugriff für Owner und den zugewiesenen Therapeuten
         booking = TherapistBooking.objects.get(id=pk)
+        print(f"Found booking: {booking}")
+        print(f"Therapist: {booking.therapist.username}")
+        
         if not (request.user.role == 'OWNER' or request.user == booking.therapist):
+            print("Permission denied")
             return JsonResponse({'error': 'Permission denied'}, status=403)
         
-        return JsonResponse({
+        response_data = {
             'id': booking.id,
             'therapist': {
                 'id': booking.therapist.id,
@@ -3097,13 +3130,17 @@ def api_therapist_booking_get(request, pk):
             'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
             'notes': booking.notes or '',
             'payment_status': booking.payment_status
-        })
+        }
+        print(f"Response data: {response_data}")
+        return JsonResponse(response_data)
         
     except TherapistBooking.DoesNotExist:
+        print(f"Booking not found: {pk}")
         return JsonResponse({
             'error': 'Buchung nicht gefunden'
         }, status=404)
     except Exception as e:
+        print(f"Error: {str(e)}")
         return JsonResponse({
             'error': str(e)
         }, status=500)
