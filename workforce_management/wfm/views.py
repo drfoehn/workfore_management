@@ -1548,18 +1548,116 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Hole den ausgewählten Therapeuten
-        selected_therapist_id = self.request.GET.get('therapist')
-        if selected_therapist_id:
-            context['selected_therapist'] = get_object_or_404(CustomUser, id=selected_therapist_id)
+        # Get current month/year
+        month = self.request.GET.get('month')
+        year = self.request.GET.get('year')
+        if not month or not year:
+            today = timezone.now()
+            month = today.month
+            year = today.year
         
-        # Therapeutenliste für Owner
-        if self.request.user.role == 'OWNER':
-            context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
+        current_date = date(int(year), int(month), 1)
         
+        # Hole alle Buchungen für den Monat
+        bookings = TherapistBooking.objects.filter(
+            date__year=int(year),
+            date__month=int(month)
+        ).select_related('therapist')
+
+        # Wenn Therapeut eingeloggt, zeige nur eigene Details
+        if self.request.user.role == 'THERAPIST':
+            # Eigene Buchungen mit vollen Details
+            own_bookings = [
+                {
+                    'id': booking.id,
+                    'title': f"{booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')}",
+                    'start': f"{booking.date}T{booking.start_time}",
+                    'end': f"{booking.date}T{booking.end_time}",
+                    'backgroundColor': booking.therapist.color,
+                    'extendedProps': {
+                        'hours': booking.hours,
+                        'actual_hours': booking.actual_hours,
+                        'difference_hours': booking.difference_hours,
+                        'notes': booking.notes,
+                        'therapist_name': booking.therapist.get_full_name(),
+                        'payment_status': booking.payment_status
+                    }
+                }
+                for booking in bookings.filter(therapist=self.request.user)
+            ]
+            
+            # Andere Buchungen nur als blockierte Zeit
+            other_bookings = [
+                {
+                    'title': 'Belegt',
+                    'start': f"{booking.date}T{booking.start_time}",
+                    'end': f"{booking.date}T{booking.end_time}",
+                    'backgroundColor': '#808080',  # Grau
+                    'className': 'blocked-time'
+                }
+                for booking in bookings.exclude(therapist=self.request.user)
+            ]
+            
+            calendar_events = own_bookings + other_bookings
+
+        else:  # OWNER sieht alle Details
+            calendar_events = [
+                {
+                    'id': booking.id,
+                    'title': f"{booking.therapist.get_full_name()} ({booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')})",
+                    'start': f"{booking.date}T{booking.start_time}",
+                    'end': f"{booking.date}T{booking.end_time}",
+                    'backgroundColor': booking.therapist.color,
+                    'extendedProps': {
+                        'hours': booking.hours,
+                        'actual_hours': booking.actual_hours,
+                        'difference_hours': booking.difference_hours,
+                        'notes': booking.notes,
+                        'therapist_name': booking.therapist.get_full_name(),
+                        'payment_status': booking.payment_status
+                    }
+                }
+                for booking in bookings
+            ]
+
+        # Berechne Summen für den Monat
+        total_actual_hours = Decimal('0.00')
+        total_extra_hours = Decimal('0.00')
+        total_booked_amount = Decimal('0.00')
+        extra_costs = Decimal('0.00')
+
+        for booking in bookings:
+            if self.request.user.role == 'THERAPIST' and booking.therapist != self.request.user:
+                continue  # Überspringe andere Therapeuten für die Summen
+                
+            if booking.actual_hours:
+                total_actual_hours += booking.actual_hours
+
+            if booking.hours and booking.therapist.room_rate:
+                total_booked_amount += booking.hours * booking.therapist.room_rate
+            
+            if booking.difference_hours and booking.therapist.room_rate:
+                total_extra_hours += booking.difference_hours
+                extra_costs += booking.difference_hours * booking.therapist.room_rate
+
+        context.update({
+            'calendar_events': calendar_events,
+            'current_date': current_date,
+            'month_name': current_date.strftime('%B %Y'),
+            'prev_month': (current_date - relativedelta(months=1)),
+            'next_month': (current_date + relativedelta(months=1)),
+            'totals': {
+                'total_actual_hours': total_actual_hours,
+                'total_extra_hours': total_extra_hours,
+                'total_sum': total_booked_amount,
+                'extra_costs': extra_costs
+            }
+        })
+
         return context
 
 @login_required
+@ensure_csrf_cookie
 def api_therapist_calendar_events(request):
     start = request.GET.get('start')
     end = request.GET.get('end')
@@ -1595,7 +1693,7 @@ def api_therapist_calendar_events(request):
                     'id': booking.therapist.id,
                     'name': booking.therapist.get_full_name()
                 },
-                'status': booking.status
+                
             })
         else:
             # Für fremde Buchungen: nur Zeit anzeigen
