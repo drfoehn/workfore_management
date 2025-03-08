@@ -230,7 +230,11 @@
                                     {% if not date_entry.closure and not date_entry.is_weekend %}
                                         {% if date_entry.employee.role != 'THERAPIST' %}
                                         <span class="badge" style="background-color: {{ date_entry.employee.color|default:'#6c757d' }}">
-                                            {{ date_entry.employee.get_full_name|default:date_entry.employee.username|default:'' }}
+                                            {% if date_entry.employee %}
+                                                {{ date_entry.employee.get_full_name|default:date_entry.employee.username|default:_("Kein Mitarbeiter") }}
+                                            {% else %}
+                                                {% trans "Kein Mitarbeiter" %}
+                                            {% endif %}
                                         </span>
                                         {% endif %}
                                     {% endif %}
