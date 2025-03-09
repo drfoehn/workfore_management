@@ -1,0 +1,22 @@
+{% load i18n %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteModal = document.getElementById('deleteDocumentModal');
+    if (deleteModal) {
+        deleteModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const documentId = button.getAttribute('data-document-id');
+            const documentName = button.getAttribute('data-document-name');
+            
+            // Update modal content
+            const documentNameElement = deleteModal.querySelector('#documentNameToDelete');
+            documentNameElement.textContent = documentName;
+            
+            // Update form action
+            const form = deleteModal.querySelector('#deleteDocumentForm');
+            form.action = `{% url 'wfm:delete-document' 0 %}`.replace('0', documentId);
+        });
+    }
+});
+</script> 

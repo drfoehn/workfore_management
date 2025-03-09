@@ -1,0 +1,25 @@
+{% load i18n %}
+
+<!-- Delete Document Confirmation Modal -->
+<div class="modal fade" id="deleteDocumentModal" tabindex="-1" aria-labelledby="deleteDocumentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteDocumentModalLabel">{% trans "Dokument löschen" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>{% trans "Möchten Sie das folgende Dokument wirklich löschen?" %}</p>
+                <p class="fw-bold" id="documentNameToDelete"></p>
+                <p class="text-danger">{% trans "Diese Aktion kann nicht rückgängig gemacht werden." %}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <form id="deleteDocumentForm" method="post" action="">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">{% trans "Löschen" %}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div> 

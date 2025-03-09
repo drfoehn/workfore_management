@@ -68,6 +68,8 @@ urlpatterns = [
 
     # Dokumente
     path('documents/', views.UserDocumentListView.as_view(), name='user-documents'),
+    path('documents/upload/', views.upload_document, name='upload-document'),
+    path('documents/<int:pk>/delete/', views.delete_document, name='delete-document'),
 
     # Mitarbeiter
     path('employees/', views.EmployeeListView.as_view(), name='employee-list'),

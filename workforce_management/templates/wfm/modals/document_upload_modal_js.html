@@ -1,0 +1,28 @@
+{% load i18n %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('file');
+    const displayNameInput = document.getElementById('display_name');
+    
+    // Automatisch den Dateinamen als Anzeigenamen setzen
+    fileInput.addEventListener('change', function() {
+        if (!displayNameInput.value && this.files.length > 0) {
+            // Entferne die Dateiendung für den Anzeigenamen
+            let fileName = this.files[0].name;
+            displayNameInput.value = fileName.replace(/\.[^/.]+$/, "");
+        }
+    });
+
+    // Form Submit Handler
+    const form = document.getElementById('documentUploadForm');
+    form.addEventListener('submit', function(e) {
+        const fileInput = document.getElementById('file');
+        if (!fileInput.files.length) {
+            e.preventDefault();
+            alert('{% trans "Bitte wähle eine Datei aus." %}');
+            return;
+        }
+    });
+});
+</script> 

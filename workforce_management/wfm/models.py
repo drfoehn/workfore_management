@@ -665,9 +665,12 @@ class TherapistScheduleTemplate(models.Model):
         return f"{self.therapist} - {self.get_weekday_display()} ({self.start_time}-{self.end_time})"
 
 class UserDocument(models.Model):
-    """Dokumente für Benutzer (Verträge etc.)"""
+    def get_upload_path(self, filename):
+        # Generiert: user_documents/user_id/username/filename
+        return f'user_documents/{self.user.id}/{self.user.username}/{filename}'
+
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='documents')
-    file = models.FileField(upload_to='user_documents/%Y/%m/%d/')
+    file = models.FileField(upload_to=get_upload_path)
     display_name = models.CharField(max_length=255, verbose_name=_("Anzeigename"), default="")
     uploaded_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True, verbose_name=_("Notizen"), default="")

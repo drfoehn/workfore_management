@@ -1,5 +1,5 @@
 from django import forms
-from .models import WorkingHours, Vacation, ScheduleTemplate, TimeCompensation
+from .models import WorkingHours, Vacation, ScheduleTemplate, TimeCompensation, UserDocument
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 
@@ -92,4 +92,12 @@ class TimeCompensationForm(forms.ModelForm):
         fields = ['date', 'hours', 'notes']
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date', 'readonly': 'readonly'}),
+        }
+
+class UserDocumentForm(forms.ModelForm):
+    class Meta:
+        model = UserDocument
+        fields = ['user', 'file', 'display_name', 'notes']
+        widgets = {
+            'user': forms.Select(attrs={'class': 'form-select'})
         } 

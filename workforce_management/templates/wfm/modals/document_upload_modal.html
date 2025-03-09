@@ -1,0 +1,44 @@
+{% load i18n %}
+
+<!-- Document Upload Modal -->
+<div class="modal fade" id="documentUploadModal" tabindex="-1" aria-labelledby="documentUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentUploadModalLabel">{% trans "Dokument hochladen" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'wfm:upload-document' %}" enctype="multipart/form-data" id="documentUploadForm">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="user" class="form-label">{% trans "Mitarbeiter" %}</label>
+                        <select class="form-select" id="user" name="user" required>
+                            <option value="">{% trans "Bitte wählen..." %}</option>
+                            {% for user in users %}
+                                <option value="{{ user.id }}">{{ user.get_full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="file" class="form-label">{% trans "Datei auswählen" %}</label>
+                        <input type="file" class="form-control" id="file" name="file" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="display_name" class="form-label">{% trans "Anzeigename" %}</label>
+                        <input type="text" class="form-control" id="display_name" name="display_name">
+                        <div class="form-text">{% trans "Optional. Wird automatisch aus dem Dateinamen generiert wenn leer." %}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                    <button type="submit" class="btn btn-primary">{% trans "Hochladen" %}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div> 

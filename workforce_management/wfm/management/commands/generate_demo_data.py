@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from wfm.models import (
     WorkingHours, Vacation, VacationEntitlement, 
     TimeCompensation, TherapistBooking, ScheduleTemplate,
-    TherapistScheduleTemplate, SickLeave
+    TherapistScheduleTemplate, SickLeave, OvertimeAccount  
 )
 from datetime import date, time, timedelta
 from decimal import Decimal
@@ -28,22 +28,24 @@ class Command(BaseCommand):
         ScheduleTemplate.objects.all().delete()
         TherapistScheduleTemplate.objects.all().delete()
         SickLeave.objects.all().delete()
+        OvertimeAccount.objects.all().delete()
+
         
         today = date.today()
         
         # Erstelle Owner mit Details
-        owner = User.objects.create_user(
-            username='owner',
-            password='owner123',
-            role='OWNER',
-            first_name='Otto',
-            last_name='Owner',
-            email='otto@example.com',
-            phone='0123456789',
-            date_of_birth=date(1980, 5, 15),
-            employed_since=date(2010, 1, 1),
-            color='#FF0000'
-        )
+        # owner = User.objects.create_user(
+        #     username='owner',
+        #     password='owner123',
+        #     role='OWNER',
+        #     first_name='Otto',
+        #     last_name='Owner',
+        #     email='otto@example.com',
+        #     phone='0123456789',
+        #     date_of_birth=date(1980, 5, 15),
+        #     employed_since=date(2010, 1, 1),
+        #     color='#FF0000'
+        # )
         
         # Erstelle Assistenzen mit Details
         assistants = []
@@ -59,7 +61,7 @@ class Command(BaseCommand):
                 date_of_birth=date(1990 + i, 6, 15),
                 employed_since=date(2020 + i, 1, 1),
                 hourly_rate=Decimal('15.00'),
-                color=f'#3498DB'
+                color=f'#{i}498DB'
             )
             assistants.append(assistant)
             
@@ -118,7 +120,7 @@ class Command(BaseCommand):
                 date_of_birth=date(1985 + i, 8, 20),
                 employed_since=date(2021 + i, 3, 1),
                 hourly_rate=Decimal('12.00'),
-                color=f'#2ECC71'
+                color=f'#{i}ECC71'
             )
             cleaners.append(cleaner)
             
@@ -155,7 +157,7 @@ class Command(BaseCommand):
                 employed_since=date(2019 + i, 6, 1),
                 hourly_rate=Decimal('50.00'),
                 room_rate=Decimal('15.00'),
-                color=f'#E67E22'
+                color=f'#E{i}7E22'
             )
             therapists.append(therapist)
             
@@ -324,7 +326,7 @@ class Command(BaseCommand):
                             date=booking_date,
                             start_time=schedule.start_time,
                             end_time=schedule.end_time,
-                            status='COMPLETED' if booking_date < today else 'RESERVED',
+                            # status='COMPLETED' if booking_date < today else 'RESERVED',
                             payment_status='PAID' if booking_date < today - timedelta(days=7) else 'PENDING'
                         )
 

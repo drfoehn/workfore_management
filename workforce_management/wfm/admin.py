@@ -153,7 +153,7 @@ class SickLeaveAdmin(admin.ModelAdmin):
 
 @admin.register(ScheduleTemplate)
 class ScheduleTemplateAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'get_weekday_display', 'start_time', 'end_time')
+    list_display = ('employee', 'get_weekday_display', 'start_time', 'end_time', 'valid_from')
     list_filter = ('weekday', 'employee')
     search_fields = ('employee__username',)
 

@@ -18,7 +18,7 @@ from .models import (
     ClosureDay,
     UserDocument
 )
-from .forms import WorkingHoursForm, VacationRequestForm, TimeCompensationForm
+from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value
 from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute, Coalesce
 from datetime import date, datetime, timedelta, time
@@ -2514,48 +2514,39 @@ class SickLeaveManagementView(OwnerRequiredMixin, ListView):
 # TODO: BEi ABlehnung Begründung einfügen
 # TODO: Check og abgelehnte Abwesenheiten eh nicht bei den Tagen weggezählt werden
 
-class UserDocumentListView(LoginRequiredMixin, ListView):
+@login_required
+def upload_document(request):
+    if request.user.role != 'OWNER':
+        raise PermissionDenied
+        
+    if request.method == 'POST':
+        form = UserDocumentForm(request.POST, request.FILES)
+        if form.is_valid():
+            document = form.save()
+            messages.success(request, _('Dokument erfolgreich hochgeladen.'))
+            return redirect('wfm:user-documents')
+    return redirect('wfm:user-documents')
+
+class UserDocumentListView(OwnerRequiredMixin, ListView):
     model = UserDocument
     template_name = 'wfm/user_documents.html'
     context_object_name = 'documents'
 
-    def get_queryset(self):
-        if self.request.user.role == 'OWNER':
-            # Owner sieht alle Dokumente mit Benutzerfilter-Option
-            user_id = self.request.GET.get('user')
-            if user_id:
-                return UserDocument.objects.filter(user_id=user_id)
-            return UserDocument.objects.all()
-        else:
-            # Andere sehen nur ihre eigenen Dokumente
-            return UserDocument.objects.filter(user=self.request.user)
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if self.request.user.role == 'OWNER':
-            context['users'] = CustomUser.objects.all()
-            context['selected_user'] = self.request.GET.get('user')
+        context['users'] = CustomUser.objects.all().order_by('first_name', 'last_name')
         return context
-
-# @login_required
-# def upload_document(request):
-#     if request.method == 'POST':
-#         form = UserDocumentForm(request.POST, request.FILES)
-#         if form.is_valid():
-#             document = form.save(commit=False)
-#             document.user = request.user
-#             document.original_filename = request.FILES['file'].name
-#             document.save()
-#             messages.success(request, _('Dokument erfolgreich hochgeladen.'))
-#             return redirect('wfm:user-documents')
-#     return redirect('wfm:user-documents')
 
 @login_required
 def delete_document(request, pk):
-    document = get_object_or_404(UserDocument, pk=pk)
-    if request.user.role == 'OWNER' or document.user == request.user:
+    if request.user.role != 'OWNER':
+        raise PermissionDenied
+        
+    if request.method == 'POST':
+        document = get_object_or_404(UserDocument, pk=pk)
         document.delete()
-        messages.success(request, _('Dokument erfolgreich gelöscht.'))
+        messages.success(request, _('Dokument wurde erfolgreich gelöscht.'))
+        
     return redirect('wfm:user-documents')
 
 class EmployeeDetailView(LoginRequiredMixin, DetailView):
