@@ -1388,7 +1388,7 @@ def api_working_hours_detail(request, id=None):
                 'date': working_hours.date.strftime('%Y-%m-%d'),
                 'start_time': working_hours.start_time.strftime('%H:%M') if working_hours.start_time else '',
                 'end_time': working_hours.end_time.strftime('%H:%M') if working_hours.end_time else '',
-                'break_duration': working_hours.break_duration.seconds // 60 if working_hours.break_duration else 30,
+                'break_duration': working_hours.break_duration.seconds // 60 if working_hours.break_duration else 0,
                 'notes': working_hours.notes or ''
             })
     
@@ -2514,6 +2514,18 @@ class SickLeaveManagementView(OwnerRequiredMixin, ListView):
 # TODO: BEi ABlehnung Begründung einfügen
 # TODO: Check og abgelehnte Abwesenheiten eh nicht bei den Tagen weggezählt werden
 
+
+
+class UserDocumentListView(OwnerRequiredMixin, ListView):
+    model = UserDocument
+    template_name = 'wfm/user_documents.html'
+    context_object_name = 'documents'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['users'] = CustomUser.objects.all().order_by('first_name', 'last_name')
+        return context
+
 @login_required
 def upload_document(request):
     if request.user.role != 'OWNER':
@@ -2526,16 +2538,6 @@ def upload_document(request):
             messages.success(request, _('Dokument erfolgreich hochgeladen.'))
             return redirect('wfm:user-documents')
     return redirect('wfm:user-documents')
-
-class UserDocumentListView(OwnerRequiredMixin, ListView):
-    model = UserDocument
-    template_name = 'wfm/user_documents.html'
-    context_object_name = 'documents'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['users'] = CustomUser.objects.all().order_by('first_name', 'last_name')
-        return context
 
 @login_required
 def delete_document(request, pk):

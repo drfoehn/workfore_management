@@ -167,7 +167,8 @@ class ScheduleTemplate(models.Model):
                         'start_time': self.start_time,
                         'end_time': self.end_time,
                         'soll_hours': self.hours,
-                        'ist_hours': self.hours
+                        'ist_hours': self.hours,
+                        'break_duration': timedelta(minutes=0),
                     }
                 )
             current_date += timedelta(days=1)
@@ -666,8 +667,8 @@ class TherapistScheduleTemplate(models.Model):
 
 class UserDocument(models.Model):
     def get_upload_path(self, filename):
-        # Generiert: user_documents/user_id/username/filename
-        return f'user_documents/{self.user.id}/{self.user.username}/{filename}'
+        # Generiert: user_documents/username/filename
+        return f'user_documents/{self.user.username}/{filename}'
 
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='documents')
     file = models.FileField(upload_to=get_upload_path)

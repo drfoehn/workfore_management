@@ -30,19 +30,20 @@
                 {% if user.role == 'OWNER' %}
                     <!-- Rollenfilter -->
                     <div class="btn-group me-2">
-                        <a href="{{ all_url }}" 
+                        <a href="?role=all" 
                            class="btn btn-outline-primary {% if not selected_role %}active{% endif %}">
                             {% trans "Alle" %}
                         </a>
-                        <a href="{{ assistant_url }}" 
+                        <a href="?role=ASSISTANT" 
                            class="btn btn-outline-primary {% if selected_role == 'ASSISTANT' %}active{% endif %}">
                             {% trans "Assistenz" %}
                         </a>
-                        <a href="{{ cleaning_url }}" 
+                        <a href="?role=CLEANING" 
                            class="btn btn-outline-primary {% if selected_role == 'CLEANING' %}active{% endif %}">
                             {% trans "Reinigung" %}
                         </a>
                     </div>
+                    
                     
                     <!-- Mitarbeiterfilter -->
                     <div class="dropdown">
@@ -89,7 +90,8 @@
                     </div>
                 {% endif %}
                 
-                <!-- Aktionen-Dropdown für alle Rollen -->
+                <!-- Aktionen-Dropdown -->
+                 {% if user.role == 'ASSISTANT' or user.role == 'CLEANING' %} 
                 <div class="dropdown">
                     <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                         <i class="bi bi-gear"></i> {% trans "Aktionen" %}
@@ -129,6 +131,7 @@
                         </li>
                     </ul>
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>
