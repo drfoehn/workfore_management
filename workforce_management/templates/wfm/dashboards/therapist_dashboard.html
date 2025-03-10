@@ -2,88 +2,48 @@
 {% load i18n %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>{% trans "Meine Übersicht" %}</h1>
-        <div class="btn-group">
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#absenceModal">
-                {% trans "Abwesenheit melden" %}
-            </button>
+<div class="container mt-4">
+    <h1>{% trans "Meine Übersicht" %}</h1>
+    
+    <div class="row g-4">
+        <!-- Buchungen -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Buchungen" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:therapist-calendar' %}" class="list-group-item list-group-item-action">
+                            {% trans "Mein Kalender" %}
+                        </a>
+                        <a href="{% url 'wfm:therapist-booking-list' %}" class="list-group-item list-group-item-action">
+                            {% trans "Meine Buchungen" %}
+                        </a>
+                        <a href="{% url 'wfm:therapist-monthly-overview' %}" class="list-group-item list-group-item-action">
+                            {% trans "Monatsübersicht" %}
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <!-- Wochenübersicht -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0">{% trans "Diese Woche" %}</h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>{% trans "Datum" %}</th>
-                            <th>{% trans "Gebuchte Zeit" %}</th>
-                            <th>{% trans "Tatsächliche Zeit" %}</th>
-                            <th>{% trans "Raum" %}</th>
-                            <th>{% trans "Status" %}</th>
-                            <th>{% trans "Aktionen" %}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for date in week_dates %}
-                        <tr>
-                            <td>{{ date|date:"D, d.m.Y" }}</td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        {{ booking.start_time|time:"H:i" }} - {{ booking.end_time|time:"H:i" }}
-                                        ({{ booking.hours }}h)
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date and booking.actual_hours %}
-                                        {{ booking.actual_hours }}h
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        {{ booking.room }}
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        <span class="badge bg-{{ booking.status|lower }}">
-                                            {{ booking.get_status_display }}
-                                        </span>
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        <button class="btn btn-sm btn-outline-primary"
-                                                onclick="editActualHours('{{ booking.id }}')">
-                                            {% trans "Zeit eintragen" %}
-                                        </button>
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <!-- Abwesenheiten -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Abwesenheiten" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:absence-list' %}" class="list-group-item list-group-item-action">
+                            {% trans "Meine Abwesenheiten" %}
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-{% include "wfm/modals/actual_hours_modal.html" %}
-{% include "wfm/modals/absence_modal.html" %}
 {% endblock %} 

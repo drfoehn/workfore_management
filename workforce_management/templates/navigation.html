@@ -18,31 +18,7 @@
                     </li>
                     {% endif %}
 
-                    {% if user.role == 'OWNER' %}
-                        <!-- Owner-spezifische Navigation -->
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-gear"></i> {% trans "Verwaltung" %}
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:working-hours-list' %}">
-                                        <i class="bi bi-clock"></i> {% trans "Arbeitszeiten" %}
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:vacation-list' %}">
-                                        <i class="bi bi-calendar-check"></i> {% trans "Urlaub" %}
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="{% url 'wfm:time-compensation-list' %}">
-                                        <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich" %}
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                    {% endif %}
+                    
 
                     
 

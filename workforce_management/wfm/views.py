@@ -1319,34 +1319,46 @@ def generate_color_for_user(user_id):
     return colors[user_id % len(colors)]
 
 class DashboardView(LoginRequiredMixin, TemplateView):
-    template_name = 'wfm/dashboard.html'
-
-    def get(self, request, *args, **kwargs):
-        # Für Assistenz und Cleaner direkt zur Arbeitszeiten-Liste weiterleiten
-        if request.user.role in ['ASSISTANT', 'CLEANING']:
-            return redirect('wfm:working-hours-list')
-        return super().get(request, *args, **kwargs)
+    def get_template_names(self):
+        # Wähle Template basierend auf Benutzerrolle
+        templates = {
+            'OWNER': 'wfm/dashboards/owner_dashboard.html',
+            'ASSISTANT': 'wfm/dashboards/assistant_dashboard.html',
+            'CLEANING': 'wfm/dashboards/cleaning_dashboard.html',
+            'THERAPIST': 'wfm/dashboards/therapist_dashboard.html'
+        }
+        return [templates.get(self.request.user.role, 'wfm/dashboards/assistant_dashboard.html')]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        if self.request.user.role == 'OWNER':
-            # Owner-spezifische Daten...
-            context['pending_vacations'] = Vacation.objects.filter(status='REQUESTED').count()
-            context['pending_time_comps'] = TimeCompensation.objects.filter(status='REQUESTED').count()
+        user = self.request.user
 
-        elif self.request.user.role == 'THERAPIST':
-            # Therapeuten-spezifische Daten
+        if user.role == 'OWNER':
+            # Statistiken für Owner Dashboard
+            context['pending_vacations'] = Vacation.objects.filter(status='PENDING').count()
+            context['pending_time_compensations'] = TimeCompensation.objects.filter(status='PENDING').count()
+            context['pending_sick_leaves'] = SickLeave.objects.filter(status='PENDING').count()
+            context['pending_therapist_bookings'] = TherapistBooking.objects.filter(payment_status='PENDING').count()
+
+        if user.role == 'ASSISTANT' or user.role == 'CLEANING':
+            # Kontext für Assistenz/Reinigung
             today = timezone.now().date()
             week_start = today - timedelta(days=today.weekday())
-            week_end = week_start + timedelta(days=6)
-            
+            context['working_hours'] = WorkingHours.objects.filter(
+                employee=user,
+                date__gte=week_start,
+                date__lte=week_start + timedelta(days=6)
+            )
+
+        if user.role == 'THERAPIST':
+            # Kontext für Therapeuten
+            today = timezone.now().date()
+            week_start = today - timedelta(days=today.weekday())
             context['bookings'] = TherapistBooking.objects.filter(
-                therapist=self.request.user,
-                date__range=[week_start, week_end]
+                therapist=user,
+                date__gte=week_start,
+                date__lte=week_start + timedelta(days=6)
             ).order_by('date', 'start_time')
-            
-            context['week_dates'] = [week_start + timedelta(days=i) for i in range(7)]
 
         return context
 
