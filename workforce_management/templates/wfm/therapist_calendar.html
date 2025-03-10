@@ -48,13 +48,14 @@
                 </button>
                 <ul class="dropdown-menu">
                     <li>
-                        <a class="dropdown-item" href="{% url 'wfm:therapist-calendar' %}">
-                            {% trans "Alle Therapeuten" %}
+                        <a class="dropdown-item" href="?">
+                            {% trans "Alle anzeigen" %}
                         </a>
                     </li>
+                    <li><h6 class="dropdown-header">{% trans "Therapeuten" %}</h6></li>
                     {% for therapist in therapists %}
                         <li>
-                            <a class="dropdown-item" href="{% url 'wfm:therapist-calendar' %}?therapist={{ therapist.id }}">
+                            <a class="dropdown-item" href="?therapist={{ therapist.id }}">
                                 {{ therapist.get_full_name|default:therapist.username }}
                             </a>
                         </li>

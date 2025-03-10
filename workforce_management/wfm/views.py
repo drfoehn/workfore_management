@@ -1572,7 +1572,7 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
             
             calendar_events = own_bookings + other_bookings
 
-        else:  # OWNER sieht alle Details
+        else:  # OWNER und ASSISTANT sieht alle Details
             calendar_events = [
                 {
                     'id': str(booking.id),  # Nur die ID als String
@@ -1626,6 +1626,15 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
                 'extra_costs': extra_costs
             }
         })
+
+        # Füge Therapeuten-Filter hinzu für Owner
+        if self.request.user.role == 'OWNER':
+            context['therapists'] = CustomUser.objects.filter(role='THERAPIST').order_by('first_name', 'last_name')
+            
+        # Hole den ausgewählten Therapeuten
+        therapist_id = self.request.GET.get('therapist')
+        if therapist_id:
+            context['selected_therapist'] = CustomUser.objects.filter(id=therapist_id).first()
 
         return context
 
