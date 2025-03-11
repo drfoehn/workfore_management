@@ -40,6 +40,34 @@
                 </div>
             </div>
         </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{% trans "Dokumente" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% if documents %}
+                <div class="list-group list-group-flush">
+                    {% for doc in documents %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-0">{{ doc.display_name }}</h6>
+                            <small class="text-muted">{{ doc.uploaded_at|date:"d.m.Y" }}</small>
+                        </div>
+                        <a href="{{ doc.file.url }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">{% trans "Keine Dokumente vorhanden" %}</p>
+                {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

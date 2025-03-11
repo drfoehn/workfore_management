@@ -9,47 +9,20 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             {% if user.is_authenticated %}
                 <ul class="navbar-nav me-auto">
-                    {% if user.role == 'OWNER' or user.role == 'ASSISTANT' %}
+                    
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" 
+                        <a class="nav-link" 
                            href="{% url 'wfm:dashboard' %}">
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
-                    {% endif %}
+                
 
                     
 
                     
 
-                    {% if user.role == 'THERAPIST' %}
-                        <!-- Therapeuten-spezifische Navigation -->
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-calendar3"></i> {% trans "Raumnutzung" %}
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li>
-                                    <a class="dropdown-item {% if request.resolver_match.url_name == 'therapist-calendar' %}active{% endif %}" 
-                                       href="{% url 'wfm:therapist-calendar' %}">
-                                        <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item {% if request.resolver_match.url_name == 'therapist-booking-list' %}active{% endif %}" 
-                                       href="{% url 'wfm:therapist-booking-list' %}">
-                                        <i class="bi bi-list"></i> {% trans "Liste" %}
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item {% if request.resolver_match.url_name == 'therapist-monthly-overview' %}active{% endif %}" 
-                                       href="{% url 'wfm:therapist-monthly-overview' %}">
-                                        <i class="bi bi-bar-chart"></i> {% trans "Jahresübersicht" %}
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                    {% endif %}
+                    
                 </ul>
 
                 <!-- Benutzer-Menü (rechts) -->

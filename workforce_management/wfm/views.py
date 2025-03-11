@@ -1333,6 +1333,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
+        context['documents'] = UserDocument.objects.filter(user=user)
+
         if user.role == 'OWNER':
             # Statistiken für Owner Dashboard
             context['pending_vacations'] = Vacation.objects.filter(status='PENDING').count()
