@@ -95,6 +95,7 @@ class ScheduleTemplate(models.Model):
     weekday = models.IntegerField(choices=WEEKDAY_CHOICES, verbose_name=_("Wochentag"))
     start_time = models.TimeField(verbose_name=_("Beginn"))
     end_time = models.TimeField(verbose_name=_("Ende"))
+    break_duration = models.DurationField(null=True, blank=True, verbose_name=_("Pause"), default=timedelta(minutes=0))
     valid_from = models.DateField(verbose_name=_("Gültig ab"), default=date.today)
     
     class Meta:
@@ -104,11 +105,20 @@ class ScheduleTemplate(models.Model):
 
     @property
     def hours(self):
-        """Berechnet die Stunden zwischen Start- und Endzeit"""
+        """Berechnet die Stunden zwischen Start- und Endzeit, abzüglich Pause"""
+        if not self.start_time or not self.end_time:
+            return Decimal('0.00')
+            
         start = datetime.combine(date.min, self.start_time)
         end = datetime.combine(date.min, self.end_time)
         duration = end - start
-        return Decimal(str(duration.total_seconds() / 3600))
+        
+        # Ziehe die Pause ab, falls vorhanden
+        if self.break_duration:
+            duration = duration - self.break_duration
+            
+        # Konvertiere zu Dezimalstunden mit 2 Nachkommastellen
+        return Decimal(str(duration.total_seconds() / 3600)).quantize(Decimal('0.01'))
 
     def __str__(self):
         return f"{self.employee.username} - {self.get_weekday_display()} (ab {self.valid_from})"
