@@ -1351,6 +1351,19 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 date__gte=week_start,
                 date__lte=week_start + timedelta(days=6)
             )
+            
+            # Hole zukünftige Urlaube mit Berechnungen
+            future_vacations = Vacation.objects.filter(
+                employee=user,
+                start_date__gte=today
+            ).order_by('start_date')
+            
+            # Berechne die Stunden/Tage für jeden Urlaub
+            for vacation in future_vacations:
+                vacation.total_hours = vacation.calculate_vacation_hours()
+                vacation.total_days = vacation.calculate_vacation_days()
+            
+            context['future_vacations'] = future_vacations
 
         if user.role == 'THERAPIST':
             # Kontext für Therapeuten
@@ -2701,10 +2714,17 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
         context['total_weekly_hours'] = total_weekly_hours
 
         # Hole nur zukünftige Urlaube
-        context['future_vacations'] = Vacation.objects.filter(
+        future_vacations = Vacation.objects.filter(
             employee=employee,
             start_date__gte=today
         ).order_by('start_date')
+
+        # Berechne die Stunden/Tage für jeden Urlaub
+        for vacation in future_vacations:
+            vacation.total_hours = vacation.calculate_vacation_hours()
+            vacation.total_days = vacation.total_hours / 8
+            
+            context['future_vacations'] = future_vacations
 
         # Hole zukünftige Zeitausgleiche
         future_timecomps = TimeCompensation.objects.filter(
@@ -2721,6 +2741,7 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
         # Füge die Status-Display-Methode hinzu
         for timecomp in future_timecomps:
             timecomp.get_status_display = dict(TimeCompensation.STATUS_CHOICES)[timecomp.status]
+            timecomp.total_hours = timecomp.hours
 
         # Hole alle Arbeitszeitpläne (nicht nur den aktuellsten)
         weekdays = range(0, 7)

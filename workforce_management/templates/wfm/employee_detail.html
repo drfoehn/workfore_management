@@ -196,7 +196,7 @@
                                 <th>{% trans "Von" %}</th>
                                 <th>{% trans "Bis" %}</th>
                                 <th>{% trans "Status" %}</th>
-                                <th>{% trans "Tage" %}</th>
+                                <th>{% trans "Stunden" %}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -212,7 +212,7 @@
                                         {{ vacation.get_status_display }}
                                     </span>
                                 </td>
-                                <td>{{ vacation.days }} {% trans "Tage" %}</td>
+                                <td>{{ vacation.total_hours }} {% trans "Stunden" %}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -234,8 +234,7 @@
                 <h6>{% trans "Verfügbarer Zeitausgleich" %}</h6>
                 {% if available_timecomp_hours > 0 %}
                     <p class="mb-4">
-                        {{ available_timecomp_days|floatformat:1 }} {% trans "Tage" %}
-                        <small class="text-muted">({{ available_timecomp_hours|floatformat:1 }} {% trans "Stunden" %})</small>
+                        {{ available_timecomp_hours|floatformat:1 }} {% trans "Stunden" %}
                     </p>
                 {% else %}
                     <p class="mb-4 text-muted">{% trans "Kein Zeitausgleich verfügbar" %}</p>
@@ -249,6 +248,7 @@
                             <thead>
                                 <tr>
                                     <th>{% trans "Datum" %}</th>
+                                    <th>{% trans "Stunden" %}</th>
                                     <th>{% trans "Status" %}</th>
                                     <th>{% trans "Notizen" %}</th>
                                 </tr>
@@ -257,6 +257,7 @@
                                 {% for timecomp in future_timecomps %}
                                 <tr>
                                     <td>{{ timecomp.date|date:"d.m.Y" }}</td>
+                                    <td>{{ timecomp.total_hours|floatformat:1 }} {% trans "Stunden" %}</td>
                                     <td>
                                         <span class="badge {% if timecomp.status == 'REQUESTED' %}bg-warning
                                                           {% elif timecomp.status == 'APPROVED' %}bg-success

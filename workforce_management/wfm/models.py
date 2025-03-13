@@ -470,10 +470,46 @@ class TimeCompensation(models.Model):
         decimal_places=2,
         default=8,
         verbose_name=_('Stunden'),
-        help_text=_('Standardmäßig 8 Stunden für einen vollen Arbeitstag')
+        help_text=_('Wird automatisch aus dem Arbeitsplan berechnet')
     )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='REQUESTED', verbose_name=_('Status'))
     notes = models.TextField(blank=True, verbose_name=_('Anmerkungen'))
+
+    def calculate_scheduled_hours(self):
+        """Berechnet die geplanten Arbeitsstunden für den Tag"""
+        schedule = ScheduleTemplate.objects.filter(
+            employee=self.employee,
+            weekday=self.date.weekday(),
+            valid_from__lte=self.date
+        ).order_by('-valid_from').first()
+
+        if schedule:
+            if schedule.start_time and schedule.end_time:
+                # Berechne die Stunden aus Start- und Endzeit
+                start = datetime.combine(self.date, schedule.start_time)
+                end = datetime.combine(self.date, schedule.end_time)
+                duration = end - start
+                return Decimal(duration.total_seconds() / 3600)
+            return schedule.hours
+        return Decimal('0')
+
+    def save(self, *args, **kwargs):
+        # Setze die Stunden basierend auf dem Arbeitsplan, wenn es ein neuer Eintrag ist
+        if not self.pk:
+            self.hours = self.calculate_scheduled_hours()
+            
+        # Prüfe ob es eine Statusänderung von REQUESTED/PENDING zu APPROVED gibt
+        if self.pk:
+            old_instance = TimeCompensation.objects.get(pk=self.pk)
+            if (old_instance.status in ['REQUESTED', 'PENDING'] and 
+                self.status == 'APPROVED'):
+                # Lösche WorkingHours für den Tag des Zeitausgleichs
+                WorkingHours.objects.filter(
+                    employee=self.employee,
+                    date=self.date
+                ).delete()
+        
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ['-date']
@@ -504,20 +540,6 @@ class TimeCompensation(models.Model):
         remaining_hours = total_available - used_hours
         
         return self.hours <= remaining_hours
-
-    def save(self, *args, **kwargs):
-        # Prüfe ob es eine Statusänderung von REQUESTED/PENDING zu APPROVED gibt
-        if self.pk:  # Wenn es ein existierender Eintrag ist
-            old_instance = TimeCompensation.objects.get(pk=self.pk)
-            if (old_instance.status in ['REQUESTED', 'PENDING'] and 
-                self.status == 'APPROVED'):
-                # Lösche WorkingHours für den Tag des Zeitausgleichs
-                WorkingHours.objects.filter(
-                    employee=self.employee,
-                    date=self.date
-                ).delete()
-        
-        super().save(*args, **kwargs)
 
 class TherapistBooking(models.Model):
     """Raumbuchungen für Therapeuten"""
