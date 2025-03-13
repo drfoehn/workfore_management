@@ -159,7 +159,7 @@ class ScheduleTemplateAdmin(admin.ModelAdmin):
 
 @admin.register(TherapistScheduleTemplate)
 class TherapistScheduleTemplateAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'get_weekday_display', 'start_time', 'end_time')
+    list_display = ('therapist', 'get_weekday_display', 'start_time', 'end_time', 'valid_from')
     list_filter = ('weekday', 'therapist')
     search_fields = ('therapist__username',)
 

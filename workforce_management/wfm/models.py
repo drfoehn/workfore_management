@@ -124,15 +124,12 @@ class ScheduleTemplate(models.Model):
         return f"{self.employee.username} - {self.get_weekday_display()} (ab {self.valid_from})"
 
     def save(self, *args, **kwargs):
-        # Debug: Zeige das aktuelle Template
-        print(f"\nSaving template for {self.employee}, weekday={self.weekday}, valid_from={self.valid_from}")
         
         # Speichere zuerst das aktuelle Template
         super().save(*args, **kwargs)
         
         # Hole das aktuelle Datum
         today = timezone.now().date()
-        print(f"Today's date: {today}")
         
         # Hole alle Templates für diesen Mitarbeiter und Wochentag
         all_templates = ScheduleTemplate.objects.filter(
@@ -145,24 +142,22 @@ class ScheduleTemplate(models.Model):
         for template in all_templates:
             # Vergleiche die Datumsobjekte direkt
             if template.valid_from >= self.valid_from:
-                print(f"Will update template: ID={template.pk}, valid_from={template.valid_from}")
                 future_templates.append(template)
         
         # Aktualisiere jedes Template einzeln
         for template in future_templates:
-            print(f"Updating template {template.pk} from {template.valid_from}")
             template.start_time = self.start_time
             template.end_time = self.end_time
             template.save(update_fields=['start_time', 'end_time'])
         
-        # Debug: Zeige alle Templates nach dem Update
-        print("\nAll templates after update:")
-        for template in ScheduleTemplate.objects.filter(
-            employee=self.employee,
-            weekday=self.weekday
-        ).order_by('valid_from'):
-            print(f"- ID: {template.pk}, valid_from: {template.valid_from}, "
-                  f"time: {template.start_time}-{template.end_time}")
+        # # Debug: Zeige alle Templates nach dem Update
+        # print("\nAll templates after update:")
+        # for template in ScheduleTemplate.objects.filter(
+        #     employee=self.employee,
+        #     weekday=self.weekday
+        # ).order_by('valid_from'):
+        #     print(f"- ID: {template.pk}, valid_from: {template.valid_from}, "
+        #           f"time: {template.start_time}-{template.end_time}")
         
         # Aktualisiere WorkingHours nur für zukünftige Tage
         current_date = max(self.valid_from, today)  # Starte ab heute oder valid_from
@@ -178,10 +173,14 @@ class ScheduleTemplate(models.Model):
                         'end_time': self.end_time,
                         'soll_hours': self.hours,
                         'ist_hours': self.hours,
-                        'break_duration': timedelta(minutes=0),
+                        'break_duration': self.break_duration
                     }
                 )
             current_date += timedelta(days=1)
+
+    def clean(self):
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            raise ValidationError('Endzeit muss nach Startzeit liegen')
 
 class GermanDateField(models.DateField):
     def __init__(self, *args, **kwargs):
@@ -586,14 +585,6 @@ class TherapistBooking(models.Model):
         verbose_name=_('Bezahlt am')
     )
     notes = models.TextField(blank=True)
-    # status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='RESERVED')
-    payment_status = models.CharField(
-        max_length=10,
-        choices=PAYMENT_STATUS_CHOICES,
-        default='PENDING',
-        verbose_name=_('Zahlungsstatus')
-    )
-
 
     def save(self, *args, **kwargs):
         # Berechne hours wenn nicht gesetzt
@@ -629,7 +620,8 @@ class TherapistScheduleTemplate(models.Model):
     therapist = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        limit_choices_to={'role': 'THERAPIST'}
+        limit_choices_to={'role': 'THERAPIST'},
+        verbose_name=_('Therapeut')
     )
     weekday = models.IntegerField(choices=WEEKDAY_CHOICES)
     start_time = models.TimeField()
@@ -661,8 +653,6 @@ class TherapistScheduleTemplate(models.Model):
         start_date = max(self.valid_from, date.today())
         end_date = start_date + timedelta(days=3*365)  # 3 Jahre
         current_date = start_date
-
-        print(f"Creating bookings from {start_date} to {end_date} for {self.therapist.username}")
         
         while current_date <= end_date:
             if current_date.weekday() == self.weekday:
@@ -673,11 +663,12 @@ class TherapistScheduleTemplate(models.Model):
                 ).exists()
                 
                 if not booking_exists:
-                    # Berechne die Stunden
+                    # Berechne die Stunden mit Minuten
                     start = datetime.combine(date.min, self.start_time)
                     end = datetime.combine(date.min, self.end_time)
                     duration = end - start
-                    hours = Decimal(str(duration.total_seconds() / 3600))
+                    # Konvertiere zu Dezimalstunden mit 2 Nachkommastellen
+                    hours = Decimal(str(duration.total_seconds() / 3600)).quantize(Decimal('0.01'))
 
                     TherapistBooking.objects.create(
                         therapist=self.therapist,
@@ -686,9 +677,9 @@ class TherapistScheduleTemplate(models.Model):
                         end_time=self.end_time,
                         hours=hours,
                         actual_hours=hours,  # Initial gleich den gebuchten Stunden
-                        payment_status='PENDING'
+                        difference_hours=0,
+                        extra_hours_payment_status='PENDING'
                     )
-                    print(f"Created booking for {current_date}")
             
             current_date += timedelta(days=1)
 

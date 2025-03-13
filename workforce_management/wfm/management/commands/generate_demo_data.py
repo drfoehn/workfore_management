@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from wfm.models import (
     WorkingHours, Vacation, VacationEntitlement, 
     TimeCompensation, TherapistBooking, ScheduleTemplate,
@@ -9,13 +10,14 @@ from datetime import date, time, timedelta
 from decimal import Decimal
 import random
 from dateutil.relativedelta import relativedelta
+from django.db.utils import IntegrityError
 
 User = get_user_model()
 
 class Command(BaseCommand):
     help = 'Generiert Demo-Daten für die Zeiterfassung'
 
-    def handle(self, *args, **kwargs):
+    def handle(self, *args, **options):
         self.stdout.write('Generiere Demo-Daten...')
         
         # Lösche bestehende Daten
@@ -144,49 +146,25 @@ class Command(BaseCommand):
             
         # Erstelle Therapeuten mit Details
         therapists = []
-        for i in range(3):
-            therapist = User.objects.create_user(
-                username=f'therapist{i+1}',
-                password='therapist123',
-                role='THERAPIST',
-                first_name=f'Theo{i+1}',
-                last_name='Therapist',
-                email=f'theo{i+1}@example.com',
-                phone=f'0456789{i+1}',
-                date_of_birth=date(1975 + i, 3, 10),
-                employed_since=date(2019 + i, 6, 1),
-                hourly_rate=Decimal('50.00'),
-                room_rate=Decimal('15.00'),
-                color=f'#E{i}7E22'
-            )
-            therapists.append(therapist)
-            
-            # Verschiedene Buchungszeiten für Therapeuten
-            # 1. Vorlage (ursprünglich)
-            valid_from = therapist.employed_since
-            morning_slots = [(time(9, 0), time(12, 0))]
-            afternoon_slots = [(time(14, 0), time(17, 0))]
-            
-            # 2. Vorlage (aktuell) - mehr Slots
-            valid_from = date(2023, 1, 1)
-            morning_slots = [
-                (time(8, 0), time(10, 0)),
-                (time(10, 30), time(12, 30))
-            ]
-            afternoon_slots = [
-                (time(14, 0), time(16, 0)),
-                (time(16, 30), time(18, 30))
-            ]
-            
-            for weekday in range(5):
-                for start, end in morning_slots + afternoon_slots:
-                    TherapistScheduleTemplate.objects.create(
-                        therapist=therapist,
-                        weekday=weekday,
-                        start_time=start,
-                        end_time=end,
-                        valid_from=valid_from
-                    )
+        for i in range(1, 4):
+            username = f'therapist{i}'
+            if not User.objects.filter(username=username).exists():
+                therapist = User.objects.create_user(
+                    username=username,
+                    password='test1234',
+                    first_name=f'Therapeut{i}',
+                    last_name=f'Test{i}',
+                    email=f'therapist{i}@example.com',
+                    role='THERAPIST',
+                    room_rate=Decimal('15.00')
+                )
+                therapists.append(therapist)
+            else:
+                therapists.append(User.objects.get(username=username))
+
+        # Erstelle Schedules für jeden Therapeuten
+        for therapist in therapists:
+            self.create_therapist_schedule(therapist)
 
         # Urlaubsanspruch für alle Mitarbeiter
         for employee in assistants + cleaners:
@@ -284,50 +262,21 @@ class Command(BaseCommand):
                 notes='Erkältung, Attest folgt'
             )
 
-        # Arbeitszeiten der letzten 30 Tage für alle Mitarbeiter
-        for employee in assistants + cleaners:
-            for i in range(30):
-                work_date = today - timedelta(days=i)
-                if work_date.weekday() < 5:  # Nur Werktage
-                    # Hole den gültigen Schedule für diesen Tag
-                    schedule = ScheduleTemplate.objects.filter(
-                        employee=employee,
-                        weekday=work_date.weekday(),
-                        valid_from__lte=work_date
-                    ).order_by('-valid_from').first()
+    def create_therapist_schedule(self, therapist):
+        """Erstellt einen Wochenplan für einen Therapeuten"""
+        # Zufällige Arbeitszeiten für jeden Wochentag (Mo-Fr)
+        for weekday in range(0, 5):  # 0 = Montag, 4 = Freitag
+            # Zufällige Start- und Endzeit
+            start_hour = random.choice([8, 9, 10])
+            duration = random.choice([4, 6, 8])
+            end_hour = start_hour + duration
 
-                    if schedule:
-                        # Normale Arbeitszeit
-                        WorkingHours.objects.create(
-                            employee=employee,
-                            date=work_date,
-                            start_time=schedule.start_time,
-                            end_time=schedule.end_time,
-                            break_duration=timedelta(minutes=30),
-                            soll_hours=schedule.hours,
-                            ist_hours=schedule.hours + (Decimal('0.5') if random.random() > 0.8 else Decimal('0.0'))  # 20% Chance auf Überstunden
-                        )
+            TherapistScheduleTemplate.objects.create(
+                therapist=therapist,
+                weekday=weekday,
+                start_time=time(start_hour, 0),  # Volle Stunden
+                end_time=time(end_hour, 0),
+                valid_from=timezone.now().date()
+            )
 
-        # Therapeuten-Buchungen der letzten 30 Tage
-        for therapist in therapists:
-            for i in range(30):
-                booking_date = today - timedelta(days=i)
-                if booking_date.weekday() < 5:  # Nur Werktage
-                    # Hole alle gültigen Slots für diesen Tag
-                    schedules = TherapistScheduleTemplate.objects.filter(
-                        therapist=therapist,
-                        weekday=booking_date.weekday(),
-                        valid_from__lte=booking_date
-                    ).order_by('-valid_from')
-
-                    for schedule in schedules:
-                        TherapistBooking.objects.create(
-                            therapist=therapist,
-                            date=booking_date,
-                            start_time=schedule.start_time,
-                            end_time=schedule.end_time,
-                            # status='COMPLETED' if booking_date < today else 'RESERVED',
-                            payment_status='PAID' if booking_date < today - timedelta(days=7) else 'PENDING'
-                        )
-
-        self.stdout.write(self.style.SUCCESS('Demo-Daten erfolgreich generiert!'))
+            self.stdout.write(self.style.SUCCESS('Demo-Daten erfolgreich generiert!'))

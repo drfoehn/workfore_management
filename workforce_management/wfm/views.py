@@ -19,8 +19,8 @@ from .models import (
     UserDocument
 )
 from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm, TimeCompensationForm
-from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value
-from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute, Coalesce
+from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
+from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute, Coalesce, Concat
 from datetime import date, datetime, timedelta, time
 import calendar
 from django.db import models
@@ -983,7 +983,7 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
                 
                 pending_payment = bookings.filter(
                     actual_hours__gt=F('hours'),
-                    payment_status='PENDING'
+                    extra_hours_payment_status='PENDING'
                 ).aggregate(
                     total=Coalesce(Sum('difference_hours', output_field=DecimalField()), 0, output_field=DecimalField())
                 )['total']
@@ -1340,7 +1340,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             context['pending_vacations'] = Vacation.objects.filter(status='PENDING').count()
             context['pending_time_compensations'] = TimeCompensation.objects.filter(status='PENDING').count()
             context['pending_sick_leaves'] = SickLeave.objects.filter(status='PENDING').count()
-            context['pending_therapist_bookings'] = TherapistBooking.objects.filter(payment_status='PENDING').count()
+            context['pending_therapist_bookings'] = TherapistBooking.objects.filter(extra_hours_payment_status='PENDING').count()
 
         if user.role == 'ASSISTANT' or user.role == 'CLEANING':
             # Kontext für Assistenz/Reinigung
@@ -2007,6 +2007,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         total_booked_amount = Decimal('0.00') # Gebuchte Stunden * room_rate
         extra_costs = Decimal('0.00')         # Mehrstunden * room_rate
         total_sum = Decimal('0.00')           # Gesamtkosten
+        extra_hours_payment_status = 'PENDING'    # Default Status
 
         for booking in bookings:
             # Verwendete Stunden
@@ -2021,11 +2022,12 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             if booking.difference_hours and booking.therapist.room_rate:
                 total_extra_hours += booking.difference_hours
                 extra_costs += booking.difference_hours * booking.therapist.room_rate
+                # Wenn es Mehrstunden gibt und sie PENDING sind, setze Status auf PENDING
+                if booking.extra_hours_payment_status == 'PAID':
+                    extra_hours_payment_status = 'PAID'
 
             # Gesamtkosten
             total_sum = total_booked_amount + extra_costs
-
-           
 
         context['totals'] = {
             'total_actual_hours': total_actual_hours,
@@ -2033,7 +2035,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             'total_booked_amount': total_booked_amount,
             'extra_costs': extra_costs,
             'total_sum': total_sum,
-            'payment_status': booking.payment_status  # Sende den Status-Code statt des Display-Texts
+            'extra_hours_payment_status': extra_hours_payment_status
         }
 
         # Füge Therapeuten für Filter hinzu (nur für Owner)
@@ -2095,7 +2097,7 @@ def api_therapist_booking_update(request):
                 'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
                 'difference_hours': float(booking.difference_hours) if booking.difference_hours else None,
                 'notes': booking.notes,
-                'payment_status': booking.payment_status
+                'extra_hours_payment_status': booking.extra_hours_payment_status
             }
         })
         
@@ -2818,7 +2820,7 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
                     total=Sum('actual_hours')
                 )['total'] or 0
                 
-                pending_bookings = bookings.filter(payment_status='PENDING')
+                pending_bookings = bookings.filter(extra_hours_payment_status='PENDING')
                 pending_hours = pending_bookings.aggregate(
                     total=Sum('actual_hours')
                 )['total'] or 0
@@ -2870,8 +2872,8 @@ def api_therapist_booking_mark_as_paid(request):
         booking_ids = data.get('booking_ids', [])
         
         TherapistBooking.objects.filter(id__in=booking_ids).update(
-            payment_status='PAID',
-            payment_date=timezone.now().date()
+            extra_hours_payment_status='PAID',
+            extra_hours_payment_date=timezone.now().date()
         )
         
         return JsonResponse({'success': True})
@@ -2900,44 +2902,76 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
         # Create current_date for navigation
         current_date = date(year, month, 1)
 
-        print(f"\nDebug: Berechne für {month}/{year}")
-            
+        print(f"\nDEBUG: Berechne für {month}/{year}")
+
         # 1. Einnahmen von Therapeuten
         therapist_income = TherapistBooking.objects.filter(
             date__year=year,
             date__month=month
-        ).select_related('therapist').values(
-            'therapist__id',
+        ).values(
+            'therapist_id',
             'therapist__first_name',
             'therapist__last_name',
             'therapist__room_rate',
-            'payment_status'  # Payment Status hinzufügen für die Gruppierung
+            'extra_hours_payment_status'
         ).annotate(
-            hours=Coalesce(Sum('actual_hours'), Value(0, output_field=DecimalField())),
-            amount=ExpressionWrapper(
-                Sum(F('actual_hours') * F('therapist__room_rate')),
+            scheduled_hours=Coalesce(Sum('hours'), Value(0, output_field=DecimalField())),
+            actual_hours=Coalesce(Sum('actual_hours'), Value(0, output_field=DecimalField())),
+            difference_hours=Coalesce(Sum('difference_hours'), Value(0, output_field=DecimalField())),
+            room_cost=ExpressionWrapper(
+                F('scheduled_hours') * F('therapist__room_rate'),
                 output_field=DecimalField(max_digits=10, decimal_places=2)
+            ),
+            extra_cost=ExpressionWrapper(
+                F('difference_hours') * F('therapist__room_rate'),
+                output_field=DecimalField(max_digits=10, decimal_places=2)
+            ),
+            therapist_name=Concat(
+                'therapist__first_name', 
+                Value(' '), 
+                'therapist__last_name',
+                output_field=CharField()
             )
-        ).order_by('therapist__first_name', 'therapist__last_name', '-payment_status')  # PENDING kommt vor PAID
+        ).order_by('therapist__first_name', 'therapist__last_name')
+
+        print("\nDEBUG: Therapist Income Query:")
+        for booking in therapist_income:
+            print(f"Therapeut: {booking['therapist_name']}")
+            print(f"Scheduled: {booking['scheduled_hours']}")
+            print(f"Actual: {booking['actual_hours']}")
+            print(f"Difference: {booking['difference_hours']}")
+            print(f"Room Cost: {booking['room_cost']}")
+            print(f"Extra Cost: {booking['extra_cost']}")
+            print(f"Payment Status: {booking['extra_hours_payment_status']}")
+            print("---")
 
         # Gruppiere die Ergebnisse nach Therapeut
         grouped_income = {}
-        for entry in therapist_income:
-            therapist_id = entry['therapist__id']
+        for booking in therapist_income:
+            therapist_id = booking['therapist_id']
             if therapist_id not in grouped_income:
                 grouped_income[therapist_id] = {
-                    'name': f"{entry['therapist__first_name']} {entry['therapist__last_name']}",
-                    'therapist_id': therapist_id,
-                    'regular': {'hours': 0, 'amount': 0},
-                    'extra': {'hours': 0, 'amount': 0}
+                    'therapist_name': booking['therapist_name'],
+                    'scheduled_hours': booking['scheduled_hours'],
+                    'actual_hours': booking['actual_hours'],
+                    'difference_hours': booking['difference_hours'],
+                    'room_cost': booking['room_cost'],
+                    'extra_cost': booking['extra_cost'],
+                    'extra_hours_payment_status': booking['extra_hours_payment_status'],
+                    'total': booking['room_cost'] + booking['extra_cost']
                 }
-            
-            if entry['payment_status'] == 'PENDING':
-                grouped_income[therapist_id]['extra']['hours'] = entry['hours']
-                grouped_income[therapist_id]['extra']['amount'] = entry['amount']
-            else:
-                grouped_income[therapist_id]['regular']['hours'] = entry['hours']
-                grouped_income[therapist_id]['regular']['amount'] = entry['amount']
+
+        print("\nDEBUG: Grouped Income:")
+        for therapist_id, data in grouped_income.items():
+            print(f"Therapeut ID: {therapist_id}")
+            print(f"Name: {data['therapist_name']}")
+            print(f"Scheduled: {data['scheduled_hours']}")
+            print(f"Difference: {data['difference_hours']}")
+            print(f"Room Cost: {data['room_cost']}")
+            print(f"Extra Cost: {data['extra_cost']}")
+            print(f"Payment Status: {data['extra_hours_payment_status']}")
+            print(f"Total: {data['total']}")
+            print("---")
 
         context['grouped_income'] = grouped_income.values()
 
@@ -3006,24 +3040,22 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
 
         # Berechne Summen
         total_income = sum(
-            income['regular']['amount'] + income['extra']['amount'] 
+            income['total']
             for income in grouped_income.values()
         )
-        total_expenses = (
-            sum(a['amount'] for a in assistant_expenses) +
-            sum(c['amount'] for c in cleaning_expenses) +
-            sum(o['amount'] for o in overtime_expenses)  # Überstunden zu Gesamtausgaben hinzufügen
-        )
 
-        print(f"\nSummen:")
-        print(f"Total Income: {total_income}€")
-        print(f"Total Expenses: {total_expenses}€")
+        # Berechne die Gesamtausgaben
+        total_expenses = (
+            sum(a['amount'] for a in assistant_expenses) +  # Summe aller Assistenten
+            sum(c['amount'] for c in cleaning_expenses) +   # Summe aller Reinigungskräfte
+            sum(o['amount'] for o in overtime_expenses)     # Summe aller Überstunden
+        )
 
         context.update({
             'grouped_income': grouped_income.values(),
             'assistant_expenses': assistant_expenses,
             'cleaning_expenses': cleaning_expenses,
-            'overtime_expenses': overtime_expenses,  # Überstunden zum Kontext hinzufügen
+            'overtime_expenses': overtime_expenses,
             'total_income': total_income,
             'total_expenses': total_expenses,
             'current_date': current_date,
@@ -3054,9 +3086,9 @@ def api_mark_extra_hours_as_paid(request):
             date__year=year,
             date__month=month,
             actual_hours__gt=F('booked_hours'),
-            payment_status='PENDING'
+            extra_hours_payment_status='PENDING'
         ).update(
-            payment_status='PAID',
+            extra_hours_payment_status='PAID',
             payment_date=timezone.now().date()
         )
         
@@ -3167,7 +3199,7 @@ def api_therapist_booking_get(request, pk):
             'hours': float(booking.hours) if booking.hours else None,
             'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
             'notes': booking.notes or '',
-            'payment_status': booking.payment_status
+            'extra_hours_payment_status': booking.extra_hours_payment_status
         }
         print(f"Response data: {response_data}")
         return JsonResponse(response_data)

@@ -47,48 +47,54 @@
         <!-- Einnahmen -->
         <div class="col-md-6">
             <div class="card mb-4">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">{% trans "Einnahmen" %}</h5>
+                <div class="card-header">
+                    <h5 class="mb-0">{% trans "Therapeuten-Einnahmen" %}</h5>
                 </div>
                 <div class="card-body">
-                    <h6>{% trans "Therapeuten-Buchungen" %}</h6>
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table">
                             <thead>
                                 <tr>
                                     <th>{% trans "Therapeut" %}</th>
-                                    <th>{% trans "Art" %}</th>
-                                    <th class="text-end">{% trans "Stunden" %}</th>
-                                    <th class="text-end">{% trans "Betrag" %}</th>
-                                    <th class="text-center">{% trans "Aktion" %}</th>
+                                    <th>{% trans "Gebuchte Stunden" %}</th>
+                                    <th>{% trans "Raummiete" %}</th>
+                                    <th>{% trans "Mehrstunden" %}</th>
+                                    <th>{% trans "Zusätzliche Kosten" %}</th>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Gesamt" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for income in grouped_income %}
-                                    <!-- Reguläre Buchungen -->
-                                    <tr>
-                                        <td rowspan="2">{{ income.name }}</td>
-                                        <td>{% trans "Standard" %}</td>
-                                        <td class="text-end">{{ income.regular.hours|floatformat:1 }}h</td>
-                                        <td class="text-end">{{ income.regular.amount|floatformat:2 }}€</td>
-                                        <td></td>
-                                    </tr>
-                                    <!-- Mehrstunden -->
-                                    <tr {% if income.extra.hours > 0 %}class="table-warning"{% endif %}>
-                                        <td>{% trans "Mehrstunden" %}</td>
-                                        <td class="text-end">{{ income.extra.hours|floatformat:1 }}h</td>
-                                        <td class="text-end">{{ income.extra.amount|floatformat:2 }}€</td>
-                                        <td class="text-center">
-                                            {% if income.extra.hours > 0 %}
-                                            <button class="btn btn-sm btn-success mark-as-paid" 
+                                <tr>
+                                    <td>{{ income.therapist_name }}</td>
+                                    <td>{{ income.scheduled_hours|floatformat:2 }}</td>
+                                    <td>{{ income.room_cost|floatformat:2 }} €</td>
+                                    <td>{{ income.difference_hours|floatformat:2 }}</td>
+                                    <td>{{ income.extra_cost|floatformat:2 }} €</td>
+                                    <td>
+                                        {% if income.difference_hours > 0 %}
+                                            {% if income.extra_hours_payment_status == 'PENDING' %}
+                                                <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                            {% else %}
+                                                <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if income.difference_hours > 0 and income.extra_hours_payment_status == 'PENDING' %}
+                                            <button class="btn btn-sm btn-success mark-paid-btn" 
                                                     data-therapist-id="{{ income.therapist_id }}"
-                                                    data-month="{{ current_date|date:'m' }}"
-                                                    data-year="{{ current_date|date:'Y' }}">
+                                                    data-month="{{ current_date.month }}"
+                                                    data-year="{{ current_date.year }}">
                                                 {% trans "Als bezahlt markieren" %}
                                             </button>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ income.total|floatformat:2 }} €</td>
+                                </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -184,7 +190,7 @@
 {% block extra_js %}
 <script>
 $(document).ready(function() {
-    $('.mark-as-paid').click(function() {
+    $('.mark-paid-btn').click(function() {
         const therapistId = $(this).data('therapist-id');
         const month = $(this).data('month');
         const year = $(this).data('year');

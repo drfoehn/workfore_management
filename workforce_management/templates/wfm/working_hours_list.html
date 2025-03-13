@@ -205,19 +205,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Debug-Info -->
-                        {% if debug %}
-                        <tr>
-                            <td colspan="9" class="text-muted">
-                                <small>
-                                    Debug: {{ dates|length }} Einträge gefunden<br>
-                                    {% for date_entry in dates|slice:":3" %}
-                                        {{ date_entry.date|date:"d.m.Y" }}<br>
-                                    {% endfor %}
-                                </small>
-                            </td>
-                        </tr>
-                        {% endif %}
+                       
                         
                         {% for date_entry in dates %}
                         <tr {% if date_entry.closure or date_entry.is_weekend %}class="table-light"{% endif %}>
@@ -243,7 +231,9 @@
                             <td class="d-none d-md-table-cell text-nowrap">
                                 {% if date_entry.schedule %}
                                     {{ date_entry.schedule.start_time|time:"H:i" }} - {{ date_entry.schedule.end_time|time:"H:i" }}
-                                    ({{ date_entry.soll_hours|floatformat:1 }}h)
+                                    {% if date_entry.schedule.break_duration %}
+                                        ({{ date_entry.schedule.break_duration }})
+                                    {% endif %}
                                 {% elif date_entry.closure %}
                                     <em class="text-muted">{% trans "Geschlossen" %}</em>
                                 {% elif date_entry.is_weekend %}
