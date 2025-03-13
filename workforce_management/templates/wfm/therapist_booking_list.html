@@ -72,7 +72,7 @@
                         <th>{% trans "Gebucht (Std)" %}</th>
                         <th>{% trans "Verwendet (Std)" %}</th>
                         <th>{% trans "Differenz" %}</th>
-                        <th>{% trans "Status" %}</th>
+                        <th>{% trans "Mehrstunden Zahlung" %}</th>
                         <th>{% trans "Notizen" %}</th>
                         <th>{% trans "Aktionen" %}</th>
                     </tr>
@@ -93,7 +93,17 @@
                             <td class="{% if booking.difference_hours %}text-danger{% endif %}">
                                 {{ booking.difference_hours|default_if_none:"-"|floatformat:2 }}
                             </td>
-                            <td>{{ booking.get_payment_status_display }}</td>
+                            <td>
+                                {% if booking.difference_hours %}
+                                    {% if booking.extra_hours_payment_status == 'PENDING' %}
+                                        <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                    {% else %}
+                                        <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                             <td>{{ booking.notes|default:"-" }}</td>
                             <td>
                                 <div class="btn-group">
@@ -134,15 +144,29 @@
         <table class="table">
             <tr>
                 <th>{% trans "Verwendete Stunden" %}</th>
+                <th>{% trans "Kosten" %}</th>
                 <th>{% trans "Mehrstunden" %}</th>
-                <th>{% trans "Gesamtkosten" %}</th>
                 <th>{% trans "Zusätzliche Kosten" %}</th>
+                <th>{% trans "Zahlung" %}</th>
+                <th>{% trans "Gesamtkosten" %}</th>
             </tr>
             <tr>
                 <td>{{ totals.total_actual_hours|floatformat:2 }}</td>
-                <td>{{ totals.total_extra_hours|floatformat:2 }}</td>
-                <td>{{ totals.total_sum|floatformat:2 }} €</td>
+                <td>{{ totals.total_booked_amount|floatformat:2 }} €</td>
+                <td>{{ totals.total_extra_hours|floatformat:2 }}</td>  
+                
                 <td>{{ totals.extra_costs|floatformat:2 }} €</td>
+                <td>{% if totals.payment_status == 'PENDING' %}
+                    <span class="badge bg-warning">
+                        {% trans "Ausstehend" %}
+                    </span>
+                    {% else %}
+                    <span class="badge bg-success">
+                        {% trans "Bezahlt" %}
+                    </span>
+                    {% endif %}</td>
+       
+                <td>{{ totals.total_sum|floatformat:2 }} €</td>
             </tr>
         </table>
     </div>

@@ -43,6 +43,19 @@
                         <label class="form-label">{% trans "Notizen" %}</label>
                         <textarea class="form-control" id="notes"></textarea>
                     </div>
+                    {% if user.role == 'OWNER' and booking.difference_hours %}
+                    <div class="mb-3">
+                        <label for="extra_hours_payment_status" class="form-label">{% trans "Zahlungsstatus Mehrstunden" %}</label>
+                        <select class="form-select" id="extra_hours_payment_status" name="extra_hours_payment_status">
+                            <option value="PENDING" {% if booking.extra_hours_payment_status == 'PENDING' %}selected{% endif %}>
+                                {% trans "Ausstehend" %}
+                            </option>
+                            <option value="PAID" {% if booking.extra_hours_payment_status == 'PAID' %}selected{% endif %}>
+                                {% trans "Bezahlt" %}
+                            </option>
+                        </select>
+                    </div>
+                    {% endif %}
                 </form>
             </div>
             <div class="modal-footer">

@@ -59,6 +59,12 @@ function saveBooking() {
         data.date = document.getElementById('bookingDate').value;
         data.start_time = document.getElementById('startTime').value;
         data.end_time = document.getElementById('endTime').value;
+        
+        // Füge extra_hours_payment_status hinzu wenn vorhanden
+        const extraHoursStatus = document.getElementById('extra_hours_payment_status');
+        if (extraHoursStatus) {
+            data.extra_hours_payment_status = extraHoursStatus.value;
+        }
     }
     
     fetch('/api/therapist-booking/update/', {

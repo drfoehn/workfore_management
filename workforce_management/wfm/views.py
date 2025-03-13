@@ -2006,6 +2006,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         total_extra_hours = Decimal('0.00')   # Summe der Mehrstunden
         total_booked_amount = Decimal('0.00') # Gebuchte Stunden * room_rate
         extra_costs = Decimal('0.00')         # Mehrstunden * room_rate
+        total_sum = Decimal('0.00')           # Gesamtkosten
 
         for booking in bookings:
             # Verwendete Stunden
@@ -2021,11 +2022,18 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
                 total_extra_hours += booking.difference_hours
                 extra_costs += booking.difference_hours * booking.therapist.room_rate
 
+            # Gesamtkosten
+            total_sum = total_booked_amount + extra_costs
+
+           
+
         context['totals'] = {
             'total_actual_hours': total_actual_hours,
             'total_extra_hours': total_extra_hours,
-            'total_sum': total_booked_amount,  # Gebuchte Stunden * room_rate
-            'extra_costs': extra_costs         # Mehrstunden * room_rate
+            'total_booked_amount': total_booked_amount,
+            'extra_costs': extra_costs,
+            'total_sum': total_sum,
+            'payment_status': booking.payment_status  # Sende den Status-Code statt des Display-Texts
         }
 
         # Füge Therapeuten für Filter hinzu (nur für Owner)
@@ -2056,6 +2064,11 @@ def api_therapist_booking_update(request):
                 booking.actual_hours = Decimal(data['actual_hours'])
             if 'notes' in data:
                 booking.notes = data['notes']
+            # Füge extra_hours_payment_status Update für OWNER hinzu
+            if 'extra_hours_payment_status' in data and booking.difference_hours:
+                booking.extra_hours_payment_status = data['extra_hours_payment_status']
+                if data['extra_hours_payment_status'] == 'PAID':
+                    booking.extra_hours_payment_date = timezone.now().date()
         elif request.user == booking.therapist:
             # Therapeut darf nur actual_hours und notes ändern
             if 'actual_hours' in data and data['actual_hours']:

@@ -494,6 +494,7 @@ class TimeCompensation(models.Model):
         return Decimal('0')
 
     def save(self, *args, **kwargs):
+        #FIXME: Eintrag wird doppelt gespeichert
         # Setze die Stunden basierend auf dem Arbeitsplan, wenn es ein neuer Eintrag ist
         if not self.pk:
             self.hours = self.calculate_scheduled_hours()
@@ -543,15 +544,9 @@ class TimeCompensation(models.Model):
 
 class TherapistBooking(models.Model):
     """Raumbuchungen für Therapeuten"""
-    # STATUS_CHOICES = [
-    #     ('RESERVED', _('Reserviert')),
-    #     ('USED', _('Verwendet')),
-    #     ('CANCELLED', _('Storniert')),
-    # ]
-
     PAYMENT_STATUS_CHOICES = [
-        ('PENDING', _('Ausstehend')),
-        ('PAID', _('Bezahlt')),
+        ('PENDING', 'Ausstehend'),
+        ('PAID', 'Bezahlt'),
     ]
     
     therapist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -568,6 +563,18 @@ class TherapistBooking(models.Model):
         verbose_name=_('Stundendifferenz'),
         help_text=_('Differenz zwischen geplanten und tatsächlichen Stunden')
     )
+    extra_hours_payment_status = models.CharField(  # Neues Feld nur für Mehrstunden
+        max_length=10,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='PENDING',
+        verbose_name=_('Zahlungsstatus Mehrstunden'),
+        help_text=_('Zahlungsstatus nur für die Mehrstunden')
+    )
+    extra_hours_payment_date = models.DateField(
+        null=True, 
+        blank=True,
+        verbose_name=_('Bezahlt am')
+    )
     notes = models.TextField(blank=True)
     # status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='RESERVED')
     payment_status = models.CharField(
@@ -576,11 +583,7 @@ class TherapistBooking(models.Model):
         default='PENDING',
         verbose_name=_('Zahlungsstatus')
     )
-    payment_date = models.DateField(
-        null=True, 
-        blank=True,
-        verbose_name=_('Bezahlt am')
-    )
+
 
     def save(self, *args, **kwargs):
         # Berechne hours wenn nicht gesetzt

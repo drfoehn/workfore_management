@@ -87,17 +87,17 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(TherapistBooking)
 class TherapistBookingAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'date', 'start_time', 'end_time', 'payment_status', 'payment_date')
-    list_filter = ('payment_status', 'date', 'therapist')
+    list_display = ('therapist', 'date', 'start_time', 'end_time', 'extra_hours_payment_status', 'extra_hours_payment_date')
+    list_filter = ('extra_hours_payment_status', 'date', 'therapist')
     search_fields = ('therapist__username', 'notes')
     date_hierarchy = 'date'
     ordering = ('-date', 'start_time')
     actions = ['mark_as_paid']
 
-    def mark_as_paid(self, request, queryset):
+    def mark_as_paid(self, request, queryset):  
         updated = queryset.update(
-            payment_status='PAID',
-            payment_date=timezone.now().date()
+            extra_hours_payment_status='PAID',
+            extra_hours_payment_date=timezone.now().date()
         )
         self.message_user(
             request,
