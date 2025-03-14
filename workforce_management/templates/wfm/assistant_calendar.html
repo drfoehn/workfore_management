@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load wfm_extras %}
 
 {% block title %}{% trans "Kalender" %} - {{ block.super }}{% endblock %}
 
@@ -10,6 +11,24 @@
         cursor: pointer;
         border-radius: 3px;
         padding: 2px;
+    }
+    
+    .vacation-event {
+        background-color: #d1e7dd !important;
+        border-color: #badbcc !important;
+        color: #0f5132 !important;
+    }
+    
+    .time-comp-event {
+        background-color: #fff3cd !important;
+        border-color: #ffecb5 !important;
+        color: #664d03 !important;
+    }
+    
+    .sick-leave-event {
+        background-color: #f8d7da !important;
+        border-color: #f5c2c7 !important;
+        color: #842029 !important;
     }
 </style>
 {% endblock %}
@@ -28,22 +47,42 @@
             <h2 class="mb-0">{% trans "Kalender" %}</h2>
             <div class="d-flex gap-2">
                 {% if user.role == 'OWNER' %}
-                    <!-- Rollenfilter -->
-                    <div class="btn-group me-2">
-                        <a href="?role=all" 
-                           class="btn btn-outline-primary {% if not selected_role %}active{% endif %}">
-                            {% trans "Alle" %}
-                        </a>
-                        <a href="?role=ASSISTANT" 
-                           class="btn btn-outline-primary {% if selected_role == 'ASSISTANT' %}active{% endif %}">
-                            {% trans "Assistenz" %}
-                        </a>
-                        <a href="?role=CLEANING" 
-                           class="btn btn-outline-primary {% if selected_role == 'CLEANING' %}active{% endif %}">
-                            {% trans "Reinigung" %}
-                        </a>
+                    <!-- Filter-Buttons -->
+                    <div class="btn-group">
+                        {% with request.GET.copy as params %}
+                            {% pop_param params 'role' %}
+                            {% with params.urlencode as base_params %}
+                                <a href="{% if base_params %}?{{ base_params }}{% else %}.{% endif %}" 
+                                   class="btn btn-outline-primary {% if not selected_role %}active{% endif %}">
+                                    {% trans "Alle" %}
+                                </a>
+                                <a href="?{% if base_params %}{{ base_params }}&{% endif %}role=ASSISTANT" 
+                                   class="btn btn-outline-primary {% if selected_role == 'ASSISTANT' %}active{% endif %}">
+                                    {% trans "Assistenzen" %}
+                                </a>
+                                <a href="?{% if base_params %}{{ base_params }}&{% endif %}role=CLEANING" 
+                                   class="btn btn-outline-primary {% if selected_role == 'CLEANING' %}active{% endif %}">
+                                    {% trans "Reinigung" %}
+                                </a>
+                            {% endwith %}
+                        {% endwith %}
                     </div>
                     
+                    <!-- Abwesenheiten Filter -->
+                    <div class="btn-group">
+                        {% with request.GET.copy as params %}
+                            {% pop_param params 'absences' %}
+                            {% with params.urlencode as base_params %}
+                                <a href="?{% if base_params %}{{ base_params }}&{% endif %}absences={% if not show_absences_only %}1{% endif %}" 
+                                   class="btn btn-outline-secondary {% if show_absences_only %}active{% endif %}"
+                                   title="{% trans 'Nur Abwesenheiten anzeigen' %}">
+                                    <i class="bi bi-calendar-x"></i>
+                                    {% trans "Abwesenheiten" %}
+                                </a>
+                            {% endwith %}
+                        {% endwith %}
+                    </div>
+
                     
                     <!-- Mitarbeiterfilter -->
                     <div class="dropdown">
@@ -162,15 +201,20 @@ document.addEventListener('DOMContentLoaded', function() {
         slotMaxTime: '20:00:00',
         locale: 'de',
         events: function(info, successCallback, failureCallback) {
-            // Get current URL parameters
+            // Hole die Filter-Parameter
             const urlParams = new URLSearchParams(window.location.search);
+            const employee = urlParams.get('employee');
+            const role = urlParams.get('role');
+            const absences = urlParams.get('absences');
             
-            // Add calendar date range
-            urlParams.set('start', info.startStr);
-            urlParams.set('end', info.endStr);
+            // Baue die API-URL
+            let url = `{% url 'wfm:api-assistant-calendar-events' %}?start=${info.start.toISOString()}&end=${info.end.toISOString()}`;
+            if (employee) url += `&employee=${employee}`;
+            if (role) url += `&role=${role}`;
+            if (absences) url += `&absences=${absences}`;
             
             // Fetch events with current filters
-            fetch(`{% url "wfm:api-assistant-calendar-events" %}?${urlParams.toString()}`)
+            fetch(url)
                 .then(response => response.json())
                 .then(events => successCallback(events))
                 .catch(error => {
@@ -182,6 +226,18 @@ document.addEventListener('DOMContentLoaded', function() {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
+        },
+        // Event-Styling
+        eventClassNames: function(arg) {
+            const classes = [];
+            if (arg.event.extendedProps.type === 'vacation') {
+                classes.push('vacation-event');
+            } else if (arg.event.extendedProps.type === 'time_comp') {
+                classes.push('time-comp-event');
+            } else if (arg.event.extendedProps.type === 'sick_leave') {
+                classes.push('sick-leave-event');
+            }
+            return classes;
         },
         eventClick: function(info) {
             // Wenn es ein Arbeitszeiteneintrag ist (id beginnt mit 'work_')

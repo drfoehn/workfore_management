@@ -377,6 +377,11 @@ class Vacation(models.Model):
                     current_date += timedelta(days=1)
         
         super().save(*args, **kwargs)
+    
+    class Meta:
+        ordering = ['-start_date']
+        verbose_name = _('Urlaub')
+        verbose_name_plural = _('Urlaube')
 
 class VacationEntitlement(models.Model):
     """Jahresurlaub"""
@@ -386,6 +391,9 @@ class VacationEntitlement(models.Model):
     
     class Meta:
         unique_together = ('employee', 'year')
+        ordering = ['-year']
+        verbose_name = _('Urlaubsanspruch')
+        verbose_name_plural = _('Urlaubsansprüche')
 
     def get_remaining_hours(self):
         used_hours = Decimal('0')
@@ -399,6 +407,7 @@ class VacationEntitlement(models.Model):
             used_hours += vacation.calculate_vacation_hours()
             
         return self.total_hours - used_hours
+
 
 class SickLeave(models.Model):
     STATUS_CHOICES = [
@@ -440,6 +449,11 @@ class SickLeave(models.Model):
                     current_date += timedelta(days=1)
         
         super().save(*args, **kwargs)
+
+    class Meta:
+        ordering = ['-start_date']
+        verbose_name = _('Krankenstand')
+        verbose_name_plural = _('Krankenstände')
 
 class MonthlyReport(models.Model):
     """Monatlicher Abrechnungsbericht"""
@@ -613,6 +627,13 @@ class TherapistBooking(models.Model):
     def __str__(self):
         return f"{self.therapist.username} - {self.date} ({self.start_time}-{self.end_time})"
 
+
+    class Meta:
+        ordering = ['-date']
+        verbose_name = _('Therapeutenbuchung')
+        verbose_name_plural = _('Therapeutenbuchungen')
+
+
 class TherapistScheduleTemplate(models.Model):
     """Vorlage für die Standard-Raumbuchungen"""
     WEEKDAY_CHOICES = ScheduleTemplate.WEEKDAY_CHOICES
@@ -636,6 +657,8 @@ class TherapistScheduleTemplate(models.Model):
 
     class Meta:
         ordering = ['-valid_from', 'weekday', 'start_time']
+        verbose_name = _('Therapeuten-Stundenvorlage')
+        verbose_name_plural = _('Therapeuten-Stundenvorlagen')
         
     def clean(self):
         if self.start_time and self.end_time and self.start_time >= self.end_time:
@@ -740,6 +763,8 @@ class OvertimeAccount(models.Model):
     class Meta:
         unique_together = ['employee', 'year', 'month']
         ordering = ['-year', '-month']
+        verbose_name = _('Überstundenkonto')
+        verbose_name_plural = _('Überstundenkonten')
 
     def finalize(self, hours_for_payment):
         """Finalisiert die Überstunden für den Monat"""
@@ -809,4 +834,11 @@ class ClosureDay(models.Model):
             date__month=check_date.month,
             date__day=check_date.day
         ).exists()
+
+    class Meta:
+        ordering = ['date']
+        verbose_name = _('Schließtag')
+        verbose_name_plural = _('Schließtage')
+        unique_together = ['date', 'type']  # Verhindert doppelte Einträge
+
 
