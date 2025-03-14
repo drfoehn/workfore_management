@@ -68,6 +68,18 @@
                                     </a>
                                     {% if request.user.role == 'OWNER' %}
                                     <button type="button" 
+                                            class="btn btn-sm btn-outline-warning" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#documentEditModal" 
+                                            data-document-id="{{ doc.id }}"
+                                            data-document-name="{{ doc.display_name }}"
+                                            data-document-notes="{{ doc.notes|default:'' }}"
+                                            data-document-original-name="{{ doc.original_filename }}"
+                                            data-document-user="{{ doc.user.get_full_name }}"
+                                            data-document-upload-date="{{ doc.uploaded_at|date:'d.m.Y H:i' }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button" 
                                             class="btn btn-sm btn-outline-danger" 
                                             data-bs-toggle="modal" 
                                             data-bs-target="#deleteDocumentModal" 
@@ -95,6 +107,7 @@
 
 {% include 'wfm/modals/document_upload_modal.html' %}
 {% include 'wfm/modals/delete_document_modal.html' %}
+{% include "wfm/modals/document_edit_modal.html" %}
 {% else %}
 <div class="container mt-4">
     <div class="alert alert-danger">
@@ -108,5 +121,52 @@
 {% if request.user.role == 'OWNER' %}
 {% include 'wfm/modals/document_upload_modal_js.html' %}
 {% include 'wfm/modals/delete_document_modal_js.html' %}
+{% include 'wfm/modals/document_edit_modal_js.html' %}
 {% endif %}
+
+<script>
+$(document).ready(function() {
+    // Edit Button Handler
+    $('.edit-document-btn').click(function() {
+        const id = $(this).data('id');
+        const title = $(this).data('title');
+        const description = $(this).data('description');
+        
+        $('#documentId').val(id);
+        $('#documentTitle').val(title);
+        $('#documentDescription').val(description);
+        
+        new bootstrap.Modal('#documentEditModal').show();
+    });
+});
+
+function saveDocument() {
+    const id = $('#documentId').val();
+    const data = {
+        title: $('#documentTitle').val(),
+        description: $('#documentDescription').val()
+    };
+    
+    fetch(`/documents/${id}/update/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('{% trans "Ein Fehler ist aufgetreten" %}');
+    });
+}
+</script>
 {% endblock %} 

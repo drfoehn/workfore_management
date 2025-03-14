@@ -722,21 +722,28 @@ class UserDocument(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='documents')
     file = models.FileField(upload_to=get_upload_path)
     display_name = models.CharField(max_length=255, verbose_name=_("Anzeigename"), default="")
+    original_filename = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Originaldatei"))
     uploaded_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True, verbose_name=_("Notizen"), default="")
 
+    def save(self, *args, **kwargs):
+        # Wenn das Dokument neu ist (keine ID) und kein display_name gesetzt ist
+        if not self.id and not self.display_name:
+            self.display_name = self.file.name
+        
+        # Speichere den Original-Dateinamen beim ersten Speichern
+        if not self.id and not self.original_filename:
+            self.original_filename = self.file.name
+            
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.display_name} ({self.user.get_full_name()})"
+    
     class Meta:
         verbose_name = _("Dokument")
         verbose_name_plural = _("Dokumente")
         ordering = ['-uploaded_at']
-
-    def __str__(self):
-        return f"{self.display_name} ({self.file.name})"
-
-    def save(self, *args, **kwargs):
-        if not self.display_name:
-            self.display_name = self.file.name
-        super().save(*args, **kwargs)
 
 class OvertimeAccount(models.Model):
     """Überstundenkonto für Zeitausgleich"""

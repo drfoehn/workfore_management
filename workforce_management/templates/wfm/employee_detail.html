@@ -84,27 +84,70 @@
 
         <!-- Dokumente -->
         <div class="card mb-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">{% trans "Dokumente" %}</h5>
+                {% if request.user.role == 'OWNER' %}
+                <button type="button" 
+                        class="btn btn-sm btn-primary" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#documentUploadModal">
+                    <i class="bi bi-upload"></i> {% trans "Dokument hochladen" %}
+                </button>
+                {% endif %}
             </div>
             <div class="card-body">
-                {% if documents %}
-                <div class="list-group list-group-flush">
-                    {% for doc in documents %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="mb-0">{{ doc.display_name }}</h6>
-                            <small class="text-muted">{{ doc.uploaded_at|date:"d.m.Y" }}</small>
-                        </div>
-                        <a href="{{ doc.file.url }}" class="btn btn-sm btn-outline-primary" target="_blank">
-                            <i class="bi bi-download"></i>
-                        </a>
-                    </div>
-                    {% endfor %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Name" %}</th>
+                                <th>{% trans "Aktionen" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in employee.documents.all %}
+                            <tr>
+                                <td>{{ doc.display_name }}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <a href="{{ doc.file.url }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                            <i class="bi bi-download"></i>
+                                        </a>
+                                        {% if request.user.role == 'OWNER' %}
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-warning" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#documentEditModal" 
+                                                data-document-id="{{ doc.id }}"
+                                                data-document-name="{{ doc.display_name }}"
+                                                data-document-notes="{{ doc.notes|default:'' }}"
+                                                data-document-original-name="{{ doc.original_filename }}"
+                                                data-document-user="{{ doc.user.get_full_name }}"
+                                                data-document-upload-date="{{ doc.uploaded_at|date:'d.m.Y H:i' }}">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteDocumentModal" 
+                                                data-document-id="{{ doc.id }}"
+                                                data-document-name="{{ doc.display_name }}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center">
+                                    {% trans "Keine Dokumente vorhanden." %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-                {% else %}
-                <p class="text-muted mb-0">{% trans "Keine Dokumente vorhanden" %}</p>
-                {% endif %}
             </div>
         </div>
 
@@ -212,7 +255,7 @@
                                         {{ vacation.get_status_display }}
                                     </span>
                                 </td>
-                                <td>{{ vacation.total_hours }} {% trans "Stunden" %}</td>
+                                <td>{{ vacation.total_hours|floatformat:1 }} {% trans "Stunden" %}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -420,4 +463,18 @@
         
     </div>
 </div>
+
+{% if request.user.role == 'OWNER' %}
+{% include 'wfm/modals/document_upload_modal.html' %}
+{% include 'wfm/modals/document_edit_modal.html' %}
+{% include 'wfm/modals/delete_document_modal.html' %}
+{% endif %}
+
+{% block extra_js %}
+{% if request.user.role == 'OWNER' %}
+{% include 'wfm/modals/document_upload_modal_js.html' %}
+{% include 'wfm/modals/document_edit_modal_js.html' %}
+{% include 'wfm/modals/delete_document_modal_js.html' %}
+{% endif %}
+{% endblock %}
 {% endblock %} 

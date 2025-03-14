@@ -2696,6 +2696,38 @@ def upload_document(request):
     return redirect('wfm:user-documents')
 
 @login_required
+def api_document_update(request, pk):
+    """API zum Aktualisieren eines Dokuments"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        
+    document = get_object_or_404(UserDocument, pk=pk)
+    
+    # Prüfe Berechtigungen
+    if request.user.role != 'OWNER' and document.user != request.user:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        document.display_name = data.get('display_name', document.display_name)
+        document.notes = data.get('notes', document.notes)
+        document.save()
+        
+        return JsonResponse({
+            'success': True,
+            'document': {
+                'id': document.id,
+                'display_name': document.display_name,
+                'notes': document.notes,
+                'file_url': document.file.url if document.file else None,
+                'uploaded_at': document.uploaded_at.strftime('%d.%m.%Y %H:%M')
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
 def delete_document(request, pk):
     if request.user.role != 'OWNER':
         raise PermissionDenied
@@ -3420,3 +3452,5 @@ def api_mark_overtime_as_paid(request):
         print(f"Fehler aufgetreten: {str(e)}")
         print(traceback.format_exc())
         return JsonResponse({'success': False, 'error': str(e)})
+
+

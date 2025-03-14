@@ -1,0 +1,52 @@
+{% load i18n %}
+
+<div class="modal fade" id="documentEditModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{% trans "Dokument bearbeiten" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="documentEditForm">
+                    <input type="hidden" id="documentId" name="document_id">
+                    
+                    <div class="mb-3">
+                        <label for="documentName" class="form-label">{% trans "Anzeigename" %}</label>
+                        <input type="text" class="form-control" id="documentName" name="display_name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="documentOriginalName" class="form-label">{% trans "Originaldatei" %}</label>
+                        <input type="text" class="form-control" id="documentOriginalName" name="original_filename" readonly>
+                        <small class="form-text text-muted">{% trans "Der ursprüngliche Dateiname kann nicht geändert werden" %}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="documentUser" class="form-label">{% trans "Mitarbeiter" %}</label>
+                        <input type="text" class="form-control" id="documentUser" name="user" readonly>
+                        <small class="form-text text-muted">{% trans "Der zugewiesene Mitarbeiter kann nicht geändert werden" %}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="documentUploadDate" class="form-label">{% trans "Hochgeladen am" %}</label>
+                        <input type="text" class="form-control" id="documentUploadDate" name="uploaded_at" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="documentNotes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="documentNotes" name="notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    {% trans "Abbrechen" %}
+                </button>
+                <button type="button" class="btn btn-primary" id="saveDocumentBtn">
+                    {% trans "Speichern" %}
+                </button>
+            </div>
+        </div>
+    </div>
+</div> 

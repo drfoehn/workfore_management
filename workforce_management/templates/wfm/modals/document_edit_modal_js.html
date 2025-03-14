@@ -1,0 +1,54 @@
+{% load i18n %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const editModal = document.getElementById('documentEditModal');
+    if (editModal) {
+        editModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const documentId = button.getAttribute('data-document-id');
+            const documentName = button.getAttribute('data-document-name');
+            const documentNotes = button.getAttribute('data-document-notes');
+            const documentOriginalName = button.getAttribute('data-document-original-name');
+            const documentUser = button.getAttribute('data-document-user');
+            const documentUploadDate = button.getAttribute('data-document-upload-date');
+            
+            document.getElementById('documentId').value = documentId;
+            document.getElementById('documentName').value = documentName;
+            document.getElementById('documentNotes').value = documentNotes;
+            document.getElementById('documentOriginalName').value = documentOriginalName;
+            document.getElementById('documentUser').value = documentUser;
+            document.getElementById('documentUploadDate').value = documentUploadDate;
+        });
+
+        document.getElementById('saveDocumentBtn').addEventListener('click', function() {
+            const documentId = document.getElementById('documentId').value;
+            const data = {
+                display_name: document.getElementById('documentName').value,
+                notes: document.getElementById('documentNotes').value
+            };
+
+            fetch(`/documents/${documentId}/update/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('{% trans "Ein Fehler ist aufgetreten" %}');
+            });
+        });
+    }
+});
+</script> 
