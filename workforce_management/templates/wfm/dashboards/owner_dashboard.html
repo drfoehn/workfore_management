@@ -11,7 +11,9 @@
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">{% trans "Mitarbeiter-Verwaltung" %}</h5>
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-people-fill"></i> {% trans "Mitarbeiter-Verwaltung" %}
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div class="card-body">
@@ -21,10 +23,10 @@
                     </div>
                     <div class="list-group">
                         <a href="{% url 'wfm:working-hours-list' %}" class="list-group-item list-group-item-action">
-                            {% trans "Assistenzen-Liste" %}
+                            <i class="bi bi-list-ul"></i> {% trans "Assistenzen-Liste" %}
                         </a>
                         <a href="{% url 'wfm:assistant-calendar' %}" class="list-group-item list-group-item-action">
-                            {% trans "Assistenzen-Kalender" %}
+                            <i class="bi bi-calendar-week"></i> {% trans "Assistenzen-Kalender" %}
                         </a>
                     </div>
                 </div>
@@ -35,22 +37,27 @@
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">{% trans "Anträge & Genehmigungen" %}</h5>
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-check2-square"></i> {% trans "Anträge & Genehmigungen" %}
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div class="list-group">
                         <a href="{% url 'wfm:absence-management' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            {% trans "Urlaubs- & Zeitausgleichs-Anträge" %}
+                            <span><i class="bi bi-calendar-check"></i> {% trans "Urlaubs- & Zeitausgleichs-Anträge" %}</span>
                             {% if pending_vacations %}
-                            <span class="badge bg-primary rounded-pill">{{ pending_vacations }}</span>
+                                <span class="badge bg-primary rounded-pill">{{ pending_vacations }}</span>
                             {% endif %}
                         </a>
                         
                         <a href="{% url 'wfm:sick-leave-management' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            {% trans "Krankenstandsverwaltung" %}
-                            
+                            <span><i class="bi bi-bandaid"></i> {% trans "Krankenstandsverwaltung" %}</span>
                             <span class="badge bg-primary rounded-pill">{{ pending_sick_leaves }}</span>
-                            
+                        </a>
+                        
+                        <a href="{% url 'wfm:assistant-calendar' %}?absences=1&view=dayGridMonth" 
+                           class="list-group-item list-group-item-action">
+                            <i class="bi bi-calendar-x"></i> {% trans "Abwesenheitskalender" %}
                         </a>
                     </div>
                 </div>
@@ -61,20 +68,22 @@
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">{% trans "Administration" %}</h5>
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-gear-fill"></i> {% trans "Administration" %}
+                    </h5>
                 </div>
                 
                 <div class="card-body">
                     <div class="list-group">
-                        <a href="{% url 'wfm:finance-overview' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            {% trans "Finanzen" %}
+                        <a href="{% url 'wfm:finance-overview' %}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-cash-coin"></i> {% trans "Finanzen" %}
                         </a>
-                        <a href="{% url 'wfm:user-documents' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            {% trans "Dokumente" %}
+                        <a href="{% url 'wfm:user-documents' %}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-file-earmark-text"></i> {% trans "Dokumente" %}
                         </a>
-                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                        <a href="#" class="list-group-item list-group-item-action"
                            data-bs-toggle="modal" data-bs-target="#adminConfirmModal">
-                            {% trans "Admin-Bereich" %}
+                            <i class="bi bi-shield-lock"></i> {% trans "Admin-Bereich" %}
                         </a>
                     </div>
                 </div>
@@ -85,18 +94,20 @@
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">{% trans "Therapeuten" %}</h5>
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-heart-pulse"></i> {% trans "Therapeuten" %}
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div class="list-group">
                         <a href="{% url 'wfm:therapist-booking-list' %}" class="list-group-item list-group-item-action">
-                            {% trans "Therapeuten-Buchungen" %}
+                            <i class="bi bi-journal-check"></i> {% trans "Therapeuten-Buchungen" %}
                         </a>
                         <a href="{% url 'wfm:therapist-calendar' %}" class="list-group-item list-group-item-action">
-                            {% trans "Therapeuten-Kalender" %}
+                            <i class="bi bi-calendar-week"></i> {% trans "Therapeuten-Kalender" %}
                         </a>
                         <a href="{% url 'wfm:therapist-monthly-overview' %}" class="list-group-item list-group-item-action">
-                            {% trans "Therapeuten-Jahresüberblick" %}
+                            <i class="bi bi-calendar-range"></i> {% trans "Therapeuten-Jahresüberblick" %}
                         </a>
                     </div>
                 </div>
