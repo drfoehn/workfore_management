@@ -56,6 +56,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         
         # 1. Hole Jahr und Monat aus URL oder nutze aktuelles Datum
+        today = timezone.now().date()
         year = int(self.request.GET.get('year', date.today().year))
         month = int(self.request.GET.get('month', date.today().month))
         
@@ -116,14 +117,15 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             employee__in=employees
         ).select_related('employee')
 
-        # Hier ist die Änderung: Hole nur die aktuellsten Templates pro Wochentag
+        # Hier ist die Änderung: Hole nur die aktuellsten Templates pro Tag
         schedules = []
         for employee in employees:
-            for weekday in range(7):
+            for day in workdays:
+                # Finde das neueste Template für diesen Wochentag, das vor oder am aktuellen Tag gültig ist
                 template = ScheduleTemplate.objects.filter(
                     employee=employee,
-                    weekday=weekday,
-                    valid_from__lte=current_date  # Nur Templates die zum aktuellen Monat gültig sind
+                    weekday=day.weekday(),
+                    valid_from__lte=day  # Wichtig: Prüfe valid_from gegen den aktuellen Tag
                 ).order_by('-valid_from').first()
                 if template:
                     schedules.append(template)
@@ -239,9 +241,18 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
 
                         # Berechne Stunden nur für normale Tage
                         if has_schedule:
+                            entry['schedule'] = has_schedule
                             start = datetime.combine(date.min, has_schedule.start_time)
                             end = datetime.combine(date.min, has_schedule.end_time)
-                            entry['soll_hours'] = (end - start).total_seconds() / 3600
+                            # Füge break_minutes zum entry hinzu
+                            if has_schedule.break_duration:
+                                entry['break_minutes'] = int(has_schedule.break_duration.total_seconds() / 60)
+                            else:
+                                entry['break_minutes'] = None
+                            duration = end - start
+                            if has_schedule.break_duration:
+                                duration = duration - has_schedule.break_duration
+                            entry['soll_hours'] = (duration).total_seconds() / 3600
                             total_soll += entry['soll_hours']
 
                         if has_working_hours:
@@ -2426,9 +2437,7 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
         time_comps = TimeCompensation.objects.filter(
             status='REQUESTED'
         ).select_related('employee').order_by('date')
-        
-        print(f"Debug - Offene Urlaube: {vacations.count()}")  # Debug
-        print(f"Debug - Offene ZA: {time_comps.count()}")  # Debug
+    
         
         # Kombiniere die Anträge in eine Liste
         absences = []

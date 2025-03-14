@@ -231,8 +231,8 @@
                             <td class="d-none d-md-table-cell text-nowrap">
                                 {% if date_entry.schedule %}
                                     {{ date_entry.schedule.start_time|time:"H:i" }} - {{ date_entry.schedule.end_time|time:"H:i" }}
-                                    {% if date_entry.schedule.break_duration %}
-                                        ({{ date_entry.schedule.break_duration }})
+                                    {% if date_entry.break_minutes %}
+                                         (<i class="bi bi-cup-hot" title="{% trans 'Pause' %}"></i> {{ date_entry.break_minutes }}min)
                                     {% endif %}
                                 {% elif date_entry.closure %}
                                     <em class="text-muted">{% trans "Geschlossen" %}</em>
@@ -248,7 +248,7 @@
                             </td>
                             <td>
                                 {% if date_entry.vacation %}
-                                    <i class="bi bi-umbrella text-primary" title="{% trans 'Urlaub' %}"></i>
+                                    <i class="bi bi-brightness-high text-primary text-warning" title="{% trans 'Urlaub' %}"></i>
                                 {% endif %}
                                 {% if date_entry.time_comp %}
                                     <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
