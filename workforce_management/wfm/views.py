@@ -1374,7 +1374,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             # Berechne die Stunden/Tage für jeden Urlaub
             for vacation in future_vacations:
                 vacation.total_hours = vacation.calculate_vacation_hours()
-                vacation.total_days = vacation.calculate_vacation_days()
+                # vacation.total_days = vacation.calculate_vacation_days()
             
             context['future_vacations'] = future_vacations
 

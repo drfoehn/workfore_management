@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 date: date,
                 start_time: '',
                 end_time: '',
-                break_duration: '30',
+                break_duration: '',
                 notes: ''
             });
         }
@@ -95,7 +95,7 @@ window.fillWorkingHoursModal = function(data) {
     document.getElementById('workDate').value = data.date;
     document.getElementById('startTime').value = data.start_time || '';
     document.getElementById('endTime').value = data.end_time || '';
-    document.getElementById('breakDuration').value = data.break_duration || '30';
+    document.getElementById('breakDuration').value = data.id ? (data.break_duration || '') : '';
     document.getElementById('notes').value = data.notes || '';
 }
 

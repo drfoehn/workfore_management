@@ -748,6 +748,8 @@ class OvertimeAccount(models.Model):
     hours_for_timecomp = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     overtime_paid    = models.BooleanField(default=False)
     overtime_paid_date = models.DateTimeField(null=True, blank=True)
+    is_finalized = models.BooleanField(default=False)
+    finalized_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         # Berechne hours_for_payment
