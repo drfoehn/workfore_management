@@ -5,120 +5,126 @@
 {% block title %}{% trans "Jahresübersicht Therapeut" %} - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h2 class="mb-0">{% trans "Jahresübersicht" %} {{ year }}</h2>
-        <div class="d-flex gap-2">
-            <!-- Navigation -->
-            <div class="btn-group" role="group">
-                <a href="?year={{ prev_year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
-                   class="btn btn-outline-primary">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-                <a href="?year={{ next_year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
-                   class="btn btn-outline-primary">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
-            </div>
+<div class="container-fluid mt-4">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">{% trans "Jahresübersicht" %} {{ year }}</h2>
+            <div class="d-flex gap-2">
+                <!-- Navigation -->
+                <div class="btn-group" role="group">
+                    <a href="?year={{ prev_year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <a href="?year={{ next_year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
 
-            {% if user.role == 'OWNER' %}
-            <!-- Therapeuten Filter -->
-            <div class="dropdown">
-                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    {% if selected_therapist %}
-                        {{ selected_therapist.get_full_name|default:selected_therapist.username }}
-                    {% else %}
-                        {% trans "Alle Therapeuten" %}
-                    {% endif %}
-                </button>
-                <ul class="dropdown-menu">
-                    <li>
-                        <a class="dropdown-item" href="?year={{ year }}">
+                {% if user.role == 'OWNER' %}
+                <!-- Therapeuten Filter -->
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        {% if selected_therapist %}
+                            {{ selected_therapist.get_full_name|default:selected_therapist.username }}
+                        {% else %}
                             {% trans "Alle Therapeuten" %}
-                        </a>
-                    </li>
-                    {% for therapist in therapists %}
+                        {% endif %}
+                    </button>
+                    <ul class="dropdown-menu">
                         <li>
-                            <a class="dropdown-item" href="?year={{ year }}&therapist={{ therapist.id }}">
-                                {{ therapist.get_full_name|default:therapist.username }}
+                            <a class="dropdown-item" href="?year={{ year }}">
+                                {% trans "Alle Therapeuten" %}
                             </a>
                         </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-    <div class="card-body">
-        {% for stats in therapist_stats %}
-        <div class="mb-4">
-            <h3>{{ stats.therapist.get_full_name }}</h3>
-            <div class="table-responsive">
-                <table class="table table-sm">
-                    <thead>
-                        <tr>
-                            <th>{% trans "Monat" %}</th>
-                            <th>{% trans "Buchungen (#)" %}</th>
-                            <th>{% trans "Gebucht (h)" %}</th>
-                            <th>{% trans "Verwendet (h)" %}</th>
-                            <th>{% trans "Mehrstunden (h)" %}</th>
-                            <th>{% trans "Ausstehend (€)" %}</th>
-                            <th>{% trans "Aktionen" %}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for month in stats.months %}
-                        <tr>
-                            <td>{{ month.month_name }}</td>
-                            <td>{{ month.booking_count }}</td>
-                            <td>{{ month.total_hours }}</td>
-                            <td>{{ month.total_actual }}</td>
-                            <td>{{ month.total_difference }}</td>
-                            <td>
-                                {% if month.pending_payment > 0 %}
-                                <span class="badge bg-warning">
-                                    {{ month.pending_payment }}
-                                </span>
-                                {% else %}
-                                -
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="{% url 'wfm:therapist-calendar' %}?year={{ year }}&month={{ month.month }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
-                                   class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-calendar"></i>
+                        {% for therapist in therapists %}
+                            <li>
+                                <a class="dropdown-item" href="?year={{ year }}&therapist={{ therapist.id }}">
+                                    {{ therapist.get_full_name|default:therapist.username }}
                                 </a>
-                            </td>
-                        </tr>
+                            </li>
                         {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        <tr class="table-light">
-                            <td><strong>{% trans "Gesamt" %}</strong></td>
-                            <td><strong>{{ stats.year_totals.booking_count }}</strong></td>
-                            <td><strong>{{ stats.year_totals.total_hours }}</strong></td>
-                            <td><strong>{{ stats.year_totals.total_actual }}</strong></td>
-                            <td><strong>{{ stats.year_totals.total_difference }}</strong></td>
-                            <td>
-                                {% if stats.year_totals.pending_payment > 0 %}
-                                <span class="badge bg-warning">
-                                    {{ stats.year_totals.pending_payment }}
-                                </span>
-                                {% else %}
-                                -
-                                {% endif %}
-                            </td>
-                            <td></td>
-                        </tr>
-                    </tfoot>
-                </table>
+                    </ul>
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% empty %}
-        <div class="alert alert-info">
-            {% trans "Keine Buchungen gefunden." %}
+        <div class="card-body">
+            {% for stats in therapist_stats %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">{{ stats.therapist.get_full_name }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Monat" %}</th>
+                                    <th>{% trans "Buchungen (#)" %}</th>
+                                    <th>{% trans "Gebucht (h)" %}</th>
+                                    <th>{% trans "Verwendet (h)" %}</th>
+                                    <th>{% trans "Mehrstunden (h)" %}</th>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Aktionen" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for month in stats.months %}
+                                <tr>
+                                    <td>{{ month.month_name }}</td>
+                                    <td>{{ month.booking_count }}</td>
+                                    <td>{{ month.total_hours|floatformat:1 }}</td>
+                                    <td>{{ month.total_actual|floatformat:1 }}</td>
+                                    <td>{{ month.total_difference|floatformat:1 }}</td>
+                                    <td>
+                                        {% if month.total_difference > 0 %}
+                                            {% if month.pending_payment > 0 %}
+                                                <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                            {% else %}
+                                                <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'wfm:therapist-calendar' %}?year={{ year }}&month={{ month.month }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-calendar-week"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-secondary">
+                                    <td><strong>{% trans "Gesamt" %}</strong></td>
+                                    <td><strong>{{ stats.year_totals.booking_count }}</strong></td>
+                                    <td><strong>{{ stats.year_totals.total_hours|floatformat:1 }}</strong></td>
+                                    <td><strong>{{ stats.year_totals.total_actual|floatformat:1 }}</strong></td>
+                                    <td><strong>{{ stats.year_totals.total_difference|floatformat:1 }}</strong></td>
+                                    <td>
+                                        {% if stats.year_totals.total_difference > 0 %}
+                                            {% if stats.year_totals.pending_payment > 0 %}
+                                                <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                            {% else %}
+                                                <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="alert alert-info">
+                {% trans "Keine Buchungen gefunden." %}
+            </div>
+            {% endfor %}
         </div>
-        {% endfor %}
     </div>
 </div>
 {% endblock %} 

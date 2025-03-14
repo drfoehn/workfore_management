@@ -982,6 +982,7 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
                     date__month=month
                 )
                 
+                # Berechne die Summen
                 total_hours = bookings.aggregate(
                     total=Coalesce(Sum('hours', output_field=DecimalField()), 0, output_field=DecimalField())
                 )['total']
@@ -994,21 +995,22 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
                     total=Coalesce(Sum('difference_hours', output_field=DecimalField()), 0, output_field=DecimalField())
                 )['total']
                 
+                # Berechne ausstehende Zahlungen
                 pending_payment = bookings.filter(
                     actual_hours__gt=F('hours'),
                     therapist_extra_hours_payment_status='PENDING'
                 ).aggregate(
                     total=Coalesce(Sum('difference_hours', output_field=DecimalField()), 0, output_field=DecimalField())
-                )['total']
+                )['total'] * (therapist.room_rate or 0)  # Multipliziere mit dem Stundensatz
 
                 months_data.append({
                     'month': month,
                     'month_name': date(year, month, 1).strftime('%B'),
+                    'booking_count': bookings.count(),
                     'total_hours': total_hours,
                     'total_actual': total_actual,
                     'total_difference': total_difference,
-                    'pending_payment': pending_payment,
-                    'booking_count': bookings.count()
+                    'pending_payment': pending_payment
                 })
 
             # Berechne Jahressummen
