@@ -586,14 +586,14 @@ class TherapistBooking(models.Model):
         verbose_name=_('Stundendifferenz'),
         help_text=_('Differenz zwischen geplanten und tatsächlichen Stunden')
     )
-    extra_hours_payment_status = models.CharField(  # Neues Feld nur für Mehrstunden
+    therapist_extra_hours_payment_status = models.CharField(  # Neues Feld nur für Mehrstunden
         max_length=10,
         choices=PAYMENT_STATUS_CHOICES,
         default='PENDING',
         verbose_name=_('Zahlungsstatus Mehrstunden'),
         help_text=_('Zahlungsstatus nur für die Mehrstunden')
     )
-    extra_hours_payment_date = models.DateField(
+    therapist_extra_hours_payment_date = models.DateField(
         null=True, 
         blank=True,
         verbose_name=_('Bezahlt am')
@@ -746,8 +746,8 @@ class OvertimeAccount(models.Model):
     total_overtime = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     hours_for_payment = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     hours_for_timecomp = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    is_finalized = models.BooleanField(default=False)
-    finalized_at = models.DateTimeField(null=True, blank=True)
+    overtime_paid    = models.BooleanField(default=False)
+    overtime_paid_date = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         # Berechne hours_for_payment

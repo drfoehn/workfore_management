@@ -87,8 +87,8 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(TherapistBooking)
 class TherapistBookingAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'date', 'start_time', 'end_time', 'extra_hours_payment_status', 'extra_hours_payment_date')
-    list_filter = ('extra_hours_payment_status', 'date', 'therapist')
+    list_display = ('therapist', 'date', 'start_time', 'end_time', 'therapist_extra_hours_payment_status', 'therapist_extra_hours_payment_date')
+    list_filter = ('therapist_extra_hours_payment_status', 'date', 'therapist')
     search_fields = ('therapist__username', 'notes')
     date_hierarchy = 'date'
     ordering = ('-date', 'start_time')
@@ -96,8 +96,8 @@ class TherapistBookingAdmin(admin.ModelAdmin):
 
     def mark_as_paid(self, request, queryset):  
         updated = queryset.update(
-            extra_hours_payment_status='PAID',
-            extra_hours_payment_date=timezone.now().date()
+            therapist_extra_hours_payment_status='PAID',
+            therapist_extra_hours_payment_date=timezone.now().date()
         )
         self.message_user(
             request,
@@ -173,10 +173,9 @@ class MonthlyReportAdmin(admin.ModelAdmin):
 @admin.register(OvertimeAccount)
 class OvertimeAccountAdmin(admin.ModelAdmin):
     list_display = ['employee', 'year', 'month', 'total_overtime', 'hours_for_payment', 
-                   'hours_for_timecomp', 'is_finalized', 'finalized_at']
-    list_filter = ['employee', 'year', 'month', 'is_finalized']
+                   'hours_for_timecomp', 'overtime_paid', 'overtime_paid_date']
+    list_filter = ['employee', 'year', 'month', 'overtime_paid']
     search_fields = ['employee__username', 'employee__first_name', 'employee__last_name']
-    readonly_fields = ['finalized_at']
     ordering = ['-year', '-month', 'employee']
 
 @admin.register(UserDocument)

@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta, time
 import calendar
 from django.db import models
 from decimal import Decimal  
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 import json
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
@@ -36,6 +36,8 @@ from django.utils.decorators import method_decorator
 from django.contrib.auth import logout
 from dateutil.relativedelta import relativedelta
 from django.contrib import messages
+import traceback
+from django.views.decorators.http import require_http_methods
 
 logger = logging.getLogger(__name__)
 
@@ -994,7 +996,7 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
                 
                 pending_payment = bookings.filter(
                     actual_hours__gt=F('hours'),
-                    extra_hours_payment_status='PENDING'
+                    therapist_extra_hours_payment_status='PENDING'
                 ).aggregate(
                     total=Coalesce(Sum('difference_hours', output_field=DecimalField()), 0, output_field=DecimalField())
                 )['total']
@@ -1351,7 +1353,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             context['pending_vacations'] = Vacation.objects.filter(status='PENDING').count()
             context['pending_time_compensations'] = TimeCompensation.objects.filter(status='PENDING').count()
             context['pending_sick_leaves'] = SickLeave.objects.filter(status='PENDING').count()
-            context['pending_therapist_bookings'] = TherapistBooking.objects.filter(extra_hours_payment_status='PENDING').count()
+            context['pending_therapist_bookings'] = TherapistBooking.objects.filter(therapist_extra_hours_payment_status='PENDING').count()
 
         if user.role == 'ASSISTANT' or user.role == 'CLEANING':
             # Kontext für Assistenz/Reinigung
@@ -2112,7 +2114,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         total_booked_amount = Decimal('0.00') # Gebuchte Stunden * room_rate
         extra_costs = Decimal('0.00')         # Mehrstunden * room_rate
         total_sum = Decimal('0.00')           # Gesamtkosten
-        extra_hours_payment_status = 'PENDING'    # Default Status
+        therapist_extra_hours_payment_status = 'PENDING'    # Default Status bleibt PENDING
 
         for booking in bookings:
             # Verwendete Stunden
@@ -2127,9 +2129,9 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             if booking.difference_hours and booking.therapist.room_rate:
                 total_extra_hours += booking.difference_hours
                 extra_costs += booking.difference_hours * booking.therapist.room_rate
-                # Wenn es Mehrstunden gibt und sie PENDING sind, setze Status auf PENDING
-                if booking.extra_hours_payment_status == 'PAID':
-                    extra_hours_payment_status = 'PAID'
+                # Wenn alle Buchungen mit Mehrstunden PAID sind, setze Status auf PAID
+                if booking.therapist_extra_hours_payment_status == 'PAID':
+                    therapist_extra_hours_payment_status = 'PAID'
 
             # Gesamtkosten
             total_sum = total_booked_amount + extra_costs
@@ -2140,7 +2142,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             'total_booked_amount': total_booked_amount,
             'extra_costs': extra_costs,
             'total_sum': total_sum,
-            'extra_hours_payment_status': extra_hours_payment_status
+            'payment_status': therapist_extra_hours_payment_status  # Schlüssel geändert
         }
 
         # Füge Therapeuten für Filter hinzu (nur für Owner)
@@ -2172,10 +2174,10 @@ def api_therapist_booking_update(request):
             if 'notes' in data:
                 booking.notes = data['notes']
             # Füge extra_hours_payment_status Update für OWNER hinzu
-            if 'extra_hours_payment_status' in data and booking.difference_hours:
-                booking.extra_hours_payment_status = data['extra_hours_payment_status']
-                if data['extra_hours_payment_status'] == 'PAID':
-                    booking.extra_hours_payment_date = timezone.now().date()
+            if 'therapist_extra_hours_payment_status' in data and booking.difference_hours:
+                booking.therapist_extra_hours_payment_status = data['therapist_extra_hours_payment_status']
+                if data['therapist_extra_hours_payment_status'] == 'PAID':
+                    booking.therapist_extra_hours_payment_date = timezone.now().date()
         elif request.user == booking.therapist:
             # Therapeut darf nur actual_hours und notes ändern
             if 'actual_hours' in data and data['actual_hours']:
@@ -2202,7 +2204,7 @@ def api_therapist_booking_update(request):
                 'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
                 'difference_hours': float(booking.difference_hours) if booking.difference_hours else None,
                 'notes': booking.notes,
-                'extra_hours_payment_status': booking.extra_hours_payment_status
+                'therapist_extra_hours_payment_status': booking.therapist_extra_hours_payment_status
             }
         })
         
@@ -2923,7 +2925,7 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
                     total=Sum('actual_hours')
                 )['total'] or 0
                 
-                pending_bookings = bookings.filter(extra_hours_payment_status='PENDING')
+                pending_bookings = bookings.filter(therapist_extra_hours_payment_status='PENDING')
                 pending_hours = pending_bookings.aggregate(
                     total=Sum('actual_hours')
                 )['total'] or 0
@@ -2975,21 +2977,18 @@ def api_therapist_booking_mark_as_paid(request):
         booking_ids = data.get('booking_ids', [])
         
         TherapistBooking.objects.filter(id__in=booking_ids).update(
-            extra_hours_payment_status='PAID',
-            extra_hours_payment_date=timezone.now().date()
+            therapist_extra_hours_payment_status='PAID',
+            therapist_extra_hours_payment_date=timezone.now().date()
         )
         
         return JsonResponse({'success': True})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
-class FinanceOverviewView(LoginRequiredMixin, TemplateView):
+class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
     template_name = 'wfm/finance_overview.html'
 
     def get_context_data(self, **kwargs):
-        if self.request.user.role != 'OWNER':
-            raise PermissionDenied
-            
         context = super().get_context_data(**kwargs)
         
         month = self.request.GET.get('month')
@@ -3016,7 +3015,8 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
             'therapist__first_name',
             'therapist__last_name',
             'therapist__room_rate',
-            'extra_hours_payment_status'
+            'therapist_extra_hours_payment_status',
+            'therapist_extra_hours_payment_date'  # Hinzugefügt für Datumsanzeige
         ).annotate(
             scheduled_hours=Coalesce(Sum('hours'), Value(0, output_field=DecimalField())),
             actual_hours=Coalesce(Sum('actual_hours'), Value(0, output_field=DecimalField())),
@@ -3037,16 +3037,15 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
             )
         ).order_by('therapist__first_name', 'therapist__last_name')
 
+        # Debug-Ausgaben für Therapeuten-Daten
         print("\nDEBUG: Therapist Income Query:")
         for booking in therapist_income:
-            print(f"Therapeut: {booking['therapist_name']}")
-            print(f"Scheduled: {booking['scheduled_hours']}")
-            print(f"Actual: {booking['actual_hours']}")
-            print(f"Difference: {booking['difference_hours']}")
-            print(f"Room Cost: {booking['room_cost']}")
-            print(f"Extra Cost: {booking['extra_cost']}")
-            print(f"Payment Status: {booking['extra_hours_payment_status']}")
-            print("---")
+            print(f"""
+            Therapeut: {booking['therapist_name']}
+            ID: {booking['therapist_id']}
+            Status: {booking['therapist_extra_hours_payment_status']}
+            Datum: {booking['therapist_extra_hours_payment_date']}
+            ---""")
 
         # Gruppiere die Ergebnisse nach Therapeut
         grouped_income = {}
@@ -3054,13 +3053,15 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
             therapist_id = booking['therapist_id']
             if therapist_id not in grouped_income:
                 grouped_income[therapist_id] = {
+                    'therapist_id': therapist_id,  # Wichtig: ID für den Button
                     'therapist_name': booking['therapist_name'],
                     'scheduled_hours': booking['scheduled_hours'],
                     'actual_hours': booking['actual_hours'],
                     'difference_hours': booking['difference_hours'],
                     'room_cost': booking['room_cost'],
                     'extra_cost': booking['extra_cost'],
-                    'extra_hours_payment_status': booking['extra_hours_payment_status'],
+                    'therapist_extra_hours_payment_status': booking['therapist_extra_hours_payment_status'],
+                    'therapist_extra_hours_payment_date': booking['therapist_extra_hours_payment_date'],
                     'total': booking['room_cost'] + booking['extra_cost']
                 }
 
@@ -3072,7 +3073,7 @@ class FinanceOverviewView(LoginRequiredMixin, TemplateView):
             print(f"Difference: {data['difference_hours']}")
             print(f"Room Cost: {data['room_cost']}")
             print(f"Extra Cost: {data['extra_cost']}")
-            print(f"Payment Status: {data['extra_hours_payment_status']}")
+            print(f"Payment Status: {data['therapist_extra_hours_payment_status']}")
             print(f"Total: {data['total']}")
             print("---")
 
@@ -3189,10 +3190,10 @@ def api_mark_extra_hours_as_paid(request):
             date__year=year,
             date__month=month,
             actual_hours__gt=F('booked_hours'),
-            extra_hours_payment_status='PENDING'
+            therapist_extra_hours_payment_status='PENDING'
         ).update(
-            extra_hours_payment_status='PAID',
-            payment_date=timezone.now().date()
+            therapist_extra_hours_payment_status='PAID',
+            therapist_extra_hours_payment_date=timezone.now().date()
         )
         
         return JsonResponse({'success': True})
@@ -3302,7 +3303,7 @@ def api_therapist_booking_get(request, pk):
             'hours': float(booking.hours) if booking.hours else None,
             'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
             'notes': booking.notes or '',
-            'extra_hours_payment_status': booking.extra_hours_payment_status
+            'therapist_extra_hours_payment_status': booking.therapist_extra_hours_payment_status
         }
         print(f"Response data: {response_data}")
         return JsonResponse(response_data)
@@ -3317,3 +3318,105 @@ def api_therapist_booking_get(request, pk):
         return JsonResponse({
             'error': str(e)
         }, status=500)
+
+@login_required
+@ensure_csrf_cookie
+@require_http_methods(["POST"])
+def api_mark_therapist_extra_hours_as_paid(request):
+    """API-Endpoint zum Markieren von Therapeuten-Mehrstunden als bezahlt"""
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+        
+    if request.user.role != 'OWNER':
+        return HttpResponse(status=403)
+    
+    try:
+        data = json.loads(request.body)
+        therapist_id = data.get('therapist_id')
+        if not therapist_id:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Therapeut ID fehlt'
+            }, status=400)
+            
+        month = int(data.get('month'))
+        year = int(data.get('year'))
+        set_paid = data.get('set_paid', True)
+        
+        # Hole alle Buchungen für diesen Monat
+        bookings = TherapistBooking.objects.filter(
+            therapist_id=therapist_id,
+            date__year=year,
+            date__month=month,
+            actual_hours__gt=F('hours'),
+            therapist_extra_hours_payment_status='PENDING' if set_paid else 'PAID'
+        )
+        
+        # Markiere alle als bezahlt/unbezahlt
+        new_status = 'PAID' if set_paid else 'PENDING'
+        new_date = timezone.now().date() if set_paid else None
+        
+        updated_count = bookings.update(
+            therapist_extra_hours_payment_status=new_status,
+            therapist_extra_hours_payment_date=new_date
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'updated': updated_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_mark_therapist_extra_hours_as_paid: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@login_required
+def api_mark_overtime_as_paid(request):
+    """API-Endpoint zum Markieren von Überstunden als bezahlt"""
+    print("=== Überstunden API aufgerufen ===")
+    if request.user.role != 'OWNER':
+        print(f"Keine Berechtigung für User {request.user}")
+        return JsonResponse({'success': False, 'error': _('Keine Berechtigung')})
+    
+    if request.method != 'POST':
+        print(f"Falsche HTTP Methode: {request.method}")
+        return JsonResponse({'success': False, 'error': _('Ungültige Anfrage')})
+    
+    try:
+        data = json.loads(request.body)
+        print(f"Empfangene Daten: {data}")
+        
+        employee_id = data.get('employee_id')
+        month = data.get('month')
+        year = data.get('year')
+        set_paid = data.get('set_paid', True)
+        
+        print(f"Verarbeite: Mitarbeiter {employee_id}, Monat {month}, Jahr {year}, Setze bezahlt: {set_paid}")
+        
+        # Hole Überstunden für diesen Monat
+        overtime = OvertimeAccount.objects.filter(
+            employee_id=employee_id,
+            date__year=year,
+            date__month=month,
+            overtime_paid=not set_paid  # Nur die mit gegenteiligem Status
+        )
+        
+        print(f"Gefundene Überstunden-Einträge: {overtime.count()}")
+        
+        # Markiere als bezahlt/unbezahlt
+        updated_count = overtime.update(
+            overtime_paid=set_paid,
+            overtime_paid_date=timezone.now() if set_paid else None
+        )
+        
+        print(f"Aktualisierte Einträge: {updated_count}")
+        print(f"Neuer Status: {set_paid}, Neues Datum: {timezone.now() if set_paid else None}")
+        
+        return JsonResponse({'success': True, 'updated': updated_count})
+    except Exception as e:
+        print(f"Fehler aufgetreten: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': str(e)})

@@ -37,6 +37,8 @@ urlpatterns = [
     path('api/scheduled-hours/', views.api_scheduled_hours, name='api-scheduled-hours'),
     path('api/vacation/calculate/', views.api_calculate_vacation_hours, name='api-vacation-calculate'),
     path('api/get-scheduled-hours/', views.api_get_scheduled_hours, name='api-get-scheduled-hours'),
+    path('api/mark-therapist-extra-hours-as-paid/', views.api_mark_therapist_extra_hours_as_paid, name='api-mark-therapist-extra-hours-as-paid'),
+    path('api/mark-overtime-as-paid/',  views.api_mark_overtime_as_paid,  name='api-mark-overtime-as-paid'),
     
     # Calendars
     path('assistant-calendar/', views.AssistantCalendarView.as_view(), name='assistant-calendar'),
@@ -78,9 +80,10 @@ urlpatterns = [
     # Finance Overview
     path('finance-overview/', views.FinanceOverviewView.as_view(), name='finance-overview'),
 
-    # New API endpoint
-    path('api/mark-extra-hours-as-paid/', views.api_mark_extra_hours_as_paid, name='api-mark-extra-hours-as-paid'),
+ 
+    # API Endpoints für Bezahlungen
 
-] 
+]
+
 
 

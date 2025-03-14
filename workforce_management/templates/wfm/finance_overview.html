@@ -3,6 +3,11 @@
 
 {% block title %}{% trans "Finanzübersicht" %} - {{ block.super }}{% endblock %}
 
+{% block extra_css %}
+<!-- Bootstrap Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
     <!-- Navigation -->
@@ -45,9 +50,9 @@
 
     <div class="row">
         <!-- Einnahmen -->
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
+        <div class="col-md-12">
+            <div class="card mb-6">
+                <div class="card-header bg-success text-white">
                     <h5 class="mb-0">{% trans "Therapeuten-Einnahmen" %}</h5>
                 </div>
                 <div class="card-body">
@@ -60,12 +65,26 @@
                                     <th>{% trans "Raummiete" %}</th>
                                     <th>{% trans "Mehrstunden" %}</th>
                                     <th>{% trans "Zusätzliche Kosten" %}</th>
-                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Mehrstunden Status" %}</th>
+                                    <th>{% trans "Bezahlt am" %}</th>
+                                    <th>{% trans "Aktionen" %}</th>
                                     <th>{% trans "Gesamt" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for income in grouped_income %}
+                                <!-- Debug Info -->
+                                <tr class="d-none">
+                                    <td colspan="9">
+                                        <pre>
+                                        DEBUG:
+                                        therapist_id: {{ income.therapist_id }}
+                                        name: {{ income.therapist_name }}
+                                        status: {{ income.therapist_extra_hours_payment_status }}
+                                        </pre>
+                                    </td>
+                                </tr>
+                                <!-- Normaler Tabellen-Inhalt -->
                                 <tr>
                                     <td>{{ income.therapist_name }}</td>
                                     <td>{{ income.scheduled_hours|floatformat:2 }}</td>
@@ -74,7 +93,7 @@
                                     <td>{{ income.extra_cost|floatformat:2 }} €</td>
                                     <td>
                                         {% if income.difference_hours > 0 %}
-                                            {% if income.extra_hours_payment_status == 'PENDING' %}
+                                            {% if income.therapist_extra_hours_payment_status == 'PENDING' %}
                                                 <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
                                             {% else %}
                                                 <span class="badge bg-success">{% trans "Bezahlt" %}</span>
@@ -84,12 +103,24 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if income.difference_hours > 0 and income.extra_hours_payment_status == 'PENDING' %}
-                                            <button class="btn btn-sm btn-success mark-paid-btn" 
+                                        {% if income.therapist_extra_hours_payment_date %}
+                                            {{ income.therapist_extra_hours_payment_date|date:"d.m.Y" }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if income.difference_hours > 0 %}
+                                            <button type="button"
+                                                    class="btn btn-sm {% if income.therapist_extra_hours_payment_status == 'PAID' %}btn-outline-success{% else %}btn-success{% endif %} mark-therapist-paid-btn" 
                                                     data-therapist-id="{{ income.therapist_id }}"
                                                     data-month="{{ current_date.month }}"
                                                     data-year="{{ current_date.year }}">
-                                                {% trans "Als bezahlt markieren" %}
+                                                {% if income.therapist_extra_hours_payment_status == 'PAID' %}
+                                                    <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
+                                                {% else %}
+                                                    <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
+                                                {% endif %}
                                             </button>
                                         {% endif %}
                                     </td>
@@ -102,10 +133,11 @@
                 </div>
             </div>
         </div>
-
+    </div>
+        <div class="row">
         <!-- Ausgaben -->
-        <div class="col-md-6">
-            <div class="card mb-4">
+        <div class="col-md-12">
+            <div class="card mb-6">
                 <div class="card-header bg-danger text-white">
                     <h5 class="mb-0">{% trans "Ausgaben" %}</h5>
                 </div>
@@ -159,22 +191,51 @@
                     <!-- Überstunden -->
                     <h6>{% trans "Überstunden" %}</h6>
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table">
                             <thead>
                                 <tr>
                                     <th>{% trans "Name" %}</th>
-                                    <th>{% trans "Position" %}</th>
-                                    <th class="text-end">{% trans "Stunden" %}</th>
-                                    <th class="text-end">{% trans "Betrag" %}</th>
+                                    <th>{% trans "Rolle" %}</th>
+                                    <th>{% trans "Überstunden" %}</th>
+                                    <th>{% trans "Betrag" %}</th>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Bezahlt am" %}</th>
+                                    <th>{% trans "Aktionen" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for expense in overtime_expenses %}
+                                {% for expense in expenses %}
                                 <tr>
                                     <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
                                     <td>{{ expense.employee__role }}</td>
                                     <td class="text-end">{{ expense.hours|floatformat:1 }}h</td>
                                     <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
+                                    <td>
+                                        {% if expense.overtime_paid %}
+                                            <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if expense.overtime_paid_date %}
+                                            {{ expense.overtime_paid_date|date:"d.m.Y" }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm {% if expense.overtime_paid %}btn-outline-success{% else %}btn-success{% endif %} mark-overtime-paid-btn"
+                                                data-employee-id="{{ expense.employee_id }}"
+                                                data-month="{{ current_date.month }}"
+                                                data-year="{{ current_date.year }}">
+                                            {% if expense.overtime_paid %}
+                                                <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
+                                            {% else %}
+                                                <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
+                                            {% endif %}
+                                        </button>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -188,36 +249,86 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<!-- jQuery falls nicht im base.html -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- Unser JavaScript -->
+<script type="text/javascript">
+console.log('Script block starts'); // Debug
+
 $(document).ready(function() {
-    $('.mark-paid-btn').click(function() {
-        const therapistId = $(this).data('therapist-id');
-        const month = $(this).data('month');
-        const year = $(this).data('year');
+    console.log('Document ready fired'); // Debug
+    
+    // Basis-Click-Handler für alle Buttons
+    $(document).on('click', '.mark-therapist-paid-btn, .mark-overtime-paid-btn', function(e) {
+        e.preventDefault();
+        console.log('Button clicked:', this);
+        console.log('Button data:', {
+            therapistId: $(this).data('therapist-id'),
+            month: $(this).data('month'),
+            year: $(this).data('year'),
+            class: this.className
+        });
+    });
+
+    // CSRF Setup
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const csrftoken = getCookie('csrftoken');
+    console.log('CSRF Token:', csrftoken ? 'Found' : 'Not found'); // Debug
+    
+    // Therapeuten Mehrstunden Handler
+    $(document).on('click', '.mark-therapist-paid-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
         
-        if (confirm('{% trans "Möchten Sie die Mehrstunden als bezahlt markieren?" %}')) {
-            $.ajax({
-                url: '{% url "wfm:api-mark-extra-hours-as-paid" %}',
-                method: 'POST',
-                data: JSON.stringify({
-                    therapist_id: therapistId,
-                    month: month,
-                    year: year
-                }),
-                contentType: 'application/json',
-                success: function(response) {
-                    if (response.success) {
-                        location.reload();
-                    } else {
-                        alert(response.error || '{% trans "Ein Fehler ist aufgetreten" %}');
-                    }
-                },
-                error: function() {
+        const $btn = $(this);
+        const therapistId = $btn.data('therapist-id');
+        const month = $btn.data('month');
+        const year = $btn.data('year');
+        const isPaid = $btn.hasClass('btn-outline-success');
+        
+        $.ajax({
+            url: '{% url "wfm:api-mark-therapist-extra-hours-as-paid" %}',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                therapist_id: therapistId,
+                month: month,
+                year: year,
+                set_paid: !isPaid
+            }),
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
                     alert('{% trans "Ein Fehler ist aufgetreten" %}');
                 }
-            });
-        }
+            },
+            error: function() {
+                alert('{% trans "Ein Fehler ist aufgetreten" %}');
+            }
+        });
     });
 });
+
+// Direkter Test ob Script ausgeführt wird
+console.log('Script block ends');
 </script>
 {% endblock %} 
