@@ -149,23 +149,32 @@
                             <thead>
                                 <tr>
                                     <th>{% trans "Name" %}</th>
-                                    <th class="text-end">{% trans "Gesamt-Sollstunden" %}</th>
-                                    <th class="text-end">{% trans "Arbeitsstunden" %}</th>
-                                    <th class="text-end">{% trans "Abwesenheitsstunden" %}</th>
-                                    <th class="text-end">{% trans "Betrag" %}</th>
+                                    <th>{% trans "Gesamt-Sollstunden" %}</th>
+                                    <th>{% trans "Arbeitsstunden" %}</th>
+                                    <th>{% trans "Abwesenheitsstunden" %}</th>
+                                    <th>{% trans "Betrag" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for expense in assistant_expenses %}
                                 <tr>
                                     <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
-                                    <td class="text-end">{{ expense.total_soll|floatformat:1 }}h</td>
-                                    <td class="text-end">{{ expense.worked_hours|floatformat:1 }}h</td>
-                                    <td class="text-end">{{ expense.absence_hours|floatformat:1 }}h</td>
-                                    <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
+                                    <td>{{ expense.total_soll|floatformat:1 }}h</td>
+                                    <td>{{ expense.worked_hours|floatformat:1 }}h</td>
+                                    <td>{{ expense.absence_hours|floatformat:1 }}h</td>
+                                    <td>{{ expense.amount|floatformat:2 }}€</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
+                            <tfoot>
+                                <tr class="table-secondary">
+                                    <td><strong>{% trans "Gesamt" %}</strong></td>
+                                    <td><strong>{{ total_assistant_soll_hours|floatformat:1 }}h</strong></td>
+                                    <td><strong>{{ total_assistant_ist_hours|floatformat:1 }}h</strong></td>
+                                    <td><strong>{{ total_assistant_absence_hours|floatformat:1 }}h</strong></td>
+                                    <td><strong>{{ total_assistant_amount|floatformat:2 }}€</strong></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
 
@@ -176,23 +185,31 @@
                             <thead>
                                 <tr>
                                     <th>{% trans "Name" %}</th>
-                                    <th class="text-end">{% trans "Gesamt-Sollstunden" %}</th>
-                                    <th class="text-end">{% trans "Arbeitsstunden" %}</th>
-                                    <th class="text-end">{% trans "Abwesenheitsstunden" %}</th>
-                                    <th class="text-end">{% trans "Betrag" %}</th>
+                                    <th>{% trans "Gesamt-Sollstunden" %}</th>
+                                    <th>{% trans "Arbeitsstunden" %}</th>
+                                    <th>{% trans "Abwesenheitsstunden" %}</th>
+                                    <th>{% trans "Betrag" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for expense in cleaning_expenses %}
                                 <tr>
                                     <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
-                                    <td class="text-end">{{ expense.total_soll|floatformat:1 }}h</td>
-                                    <td class="text-end">{{ expense.worked_hours|floatformat:1 }}h</td>
-                                    <td class="text-end">{{ expense.absence_hours|floatformat:1 }}h</td>
-                                    <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
+                                    <td>{{ expense.total_soll|floatformat:1 }}h</td>
+                                    <td>{{ expense.worked_hours|floatformat:1 }}h</td>
+                                    <td>{{ expense.absence_hours|floatformat:1 }}h</td>
+                                    <td>{{ expense.amount|floatformat:2 }}€</td>
                                 </tr>
                                 {% endfor %}
-                            </tbody>
+                            <tfoot>
+                                <tr class="table-secondary">
+                                    <td><strong>{% trans "Gesamt" %}</strong></td>
+                                    <td><strong>{{ total_cleaning_soll_hours|floatformat:1 }}h</strong></td>
+                                    <td><strong>{{ total_cleaning_ist_hours|floatformat:1 }}h</strong></td>
+                                    <td><strong>{{ total_cleaning_absence_hours|floatformat:1 }}h</strong></td>
+                                    <td><strong>{{ total_cleaning_amount|floatformat:2 }}€</strong></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
 

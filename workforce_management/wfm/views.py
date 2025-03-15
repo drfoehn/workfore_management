@@ -3147,6 +3147,17 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             expense['absence_hours'] = expense['total_soll'] - expense['worked_hours']
             expense['amount'] = expense['total_soll'] * expense['employee__hourly_rate']
 
+        # Berechne die Summen für die Ausgaben
+        total_assistant_soll_hours = sum(expense['total_soll'] for expense in assistant_expenses.values())
+        total_assistant_ist_hours = sum(expense['worked_hours'] for expense in assistant_expenses.values())
+        total_assistant_absence_hours = sum(expense['absence_hours'] for expense in assistant_expenses.values())
+        total_assistant_amount = sum(expense['amount'] for expense in assistant_expenses.values())
+
+        total_cleaning_soll_hours = sum(expense['total_soll'] for expense in cleaning_expenses.values())
+        total_cleaning_ist_hours = sum(expense['worked_hours'] for expense in cleaning_expenses.values())
+        total_cleaning_absence_hours = sum(expense['absence_hours'] for expense in cleaning_expenses.values())
+        total_cleaning_amount = sum(expense['amount'] for expense in cleaning_expenses.values())
+
         # c) Überstunden-Ausgaben
         overtime_expenses = OvertimeAccount.objects.filter(
             year=year,
@@ -3205,6 +3216,14 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             'total_overtime_hours': total_overtime_hours,
             'total_income': total_income,
             'total_expenses': total_expenses,
+            'total_assistant_soll_hours': total_assistant_soll_hours,
+            'total_assistant_ist_hours': total_assistant_ist_hours,
+            'total_assistant_absence_hours': total_assistant_absence_hours,
+            'total_assistant_amount': total_assistant_amount,
+            'total_cleaning_soll_hours': total_cleaning_soll_hours,
+            'total_cleaning_ist_hours': total_cleaning_ist_hours,
+            'total_cleaning_absence_hours': total_cleaning_absence_hours,
+            'total_cleaning_amount': total_cleaning_amount,
             'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
             'prev_month': (current_date - relativedelta(months=1)),
