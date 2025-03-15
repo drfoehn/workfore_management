@@ -6,7 +6,7 @@
 {% block content %}
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2">{% trans "Meine Abwesenheiten" %}  {{ timecomp_info.year }}</h1>
+        <h1 class="h2">{% trans "Meine Abwesenheiten" %} {{ timecomp_info.year }}</h1>
         <div class="btn-group">
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
                 <i class="bi bi-calendar-plus"></i> {% trans "Urlaub" %}
@@ -20,51 +20,59 @@
         </div>
     </div>
 
-    <!-- Urlaubsübersicht -->
-    <div class="card mb-4">
-        <div class="card-header bg-pistachio text-white">
-            <h5 class="card-title mb-0">{% trans "Urlaubsübersicht" %} {{ vacation_info.year }}</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <p><strong>{% trans "Urlaubsanspruch" %}:</strong> {{ vacation_info.entitlement|floatformat:1 }}h</p>
-                    <p><strong>{% trans "Übertrag aus Vorjahr" %}:</strong> {{ vacation_info.carried_over|floatformat:1 }}h</p>
-                    <p><strong>{% trans "Gesamt verfügbar" %}:</strong> {{ vacation_info.total_available|floatformat:1 }}h</p>
+    <!-- Erste Zeile: Übersichten -->
+    <div class="row mb-4">
+        <!-- Urlaubsübersicht -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-pistachio text-white">
+                    <h5 class="card-title mb-0">{% trans "Urlaubsübersicht" %} {{ vacation_info.year }}</h5>
                 </div>
-                <div class="col-md-6">
-                    <p><strong>{% trans "Genehmigt" %}:</strong> {{ vacation_info.approved_hours|floatformat:1 }}h</p>
-                    <p><strong>{% trans "Beantragt" %}:</strong> {{ vacation_info.pending_hours|floatformat:1 }}h</p>
-                    <p><strong>{% trans "Noch verfügbar" %}:</strong> {{ vacation_info.remaining_hours|floatformat:1 }}h</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Zeitausgleich-Übersicht -->
-    {% if timecomp_info %}
-    <div class="card mb-4">
-        <div class="card-header bg-queen-blue text-white">
-            <h5 class="card-title mb-0">{% trans "Zeitausgleich-Übersicht" %} {{ timecomp_info.year }}</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <p><strong>{% trans "Verfügbare Stunden" %}:</strong> {{ timecomp_info.total_hours|floatformat:1 }}h</p>
-                </div>
-                <div class="col-md-6">
-                    <p><strong>{% trans "Genehmigt" %}:</strong> {{ timecomp_info.approved_hours|floatformat:1 }}h</p>
-                    <p><strong>{% trans "Beantragt" %}:</strong> {{ timecomp_info.pending_hours|floatformat:1 }}h</p>
-                    <p><strong>{% trans "Noch verfügbar" %}:</strong> {{ timecomp_info.remaining_hours|floatformat:1 }}h</p>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>{% trans "Urlaubsanspruch" %}:</strong> {{ vacation_info.entitlement|floatformat:1 }}h</p>
+                            <p><strong>{% trans "Übertrag aus Vorjahr" %}:</strong> {{ vacation_info.carried_over|floatformat:1 }}h</p>
+                            <p><strong>{% trans "Gesamt verfügbar" %}:</strong> {{ vacation_info.total_available|floatformat:1 }}h</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>{% trans "Genehmigt" %}:</strong> {{ vacation_info.approved_hours|floatformat:1 }}h</p>
+                            <p><strong>{% trans "Beantragt" %}:</strong> {{ vacation_info.pending_hours|floatformat:1 }}h</p>
+                            <p><strong>{% trans "Noch verfügbar" %}:</strong> {{ vacation_info.remaining_hours|floatformat:1 }}h</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-    {% endif %}
 
-    <div class="row g-4">
+        <!-- Zeitausgleich-Übersicht -->
+        {% if timecomp_info %}
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-queen-blue text-white">
+                    <h5 class="card-title mb-0">{% trans "Zeitausgleich-Übersicht" %} {{ timecomp_info.year }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>{% trans "Verfügbare Stunden" %}:</strong> {{ timecomp_info.total_hours|floatformat:1 }}h</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>{% trans "Genehmigt" %}:</strong> {{ timecomp_info.approved_hours|floatformat:1 }}h</p>
+                            <p><strong>{% trans "Beantragt" %}:</strong> {{ timecomp_info.pending_hours|floatformat:1 }}h</p>
+                            <p><strong>{% trans "Noch verfügbar" %}:</strong> {{ timecomp_info.remaining_hours|floatformat:1 }}h</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Zweite Zeile: Urlaub und Zeitausgleich -->
+    <div class="row mb-4">
         <!-- Urlaub -->
-        <div class="col-md-4">
+        <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
@@ -77,7 +85,7 @@
                         <div>
                             <strong>{{ vacation.start_date|date:"d.m.Y" }} - {{ vacation.end_date|date:"d.m.Y" }}</strong>
                             <br>
-                            <small class="text-muted">{{ vacation.working_days }} {% trans "Arbeitstage" %}</small>
+                            <small class="text-muted">{{ vacation.approved_hours }} {% trans "Stunden" %}</small>
                             {% if vacation.notes %}
                             <br>
                             <small class="text-muted">{{ vacation.notes }}</small>
@@ -105,7 +113,7 @@
         </div>
 
         <!-- Zeitausgleich -->
-        <div class="col-md-4">
+        <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
@@ -142,10 +150,12 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Krankenstand -->
-        <div class="col-md-4">
-            <div class="card h-100">
+    <!-- Dritte Zeile: Krankenstand -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
                         <i class="bi bi-hospital text-danger"></i> {% trans "Krankenstand" %}
@@ -162,23 +172,24 @@
                             {% endif %}
                         </div>
                         <div class="d-flex align-items-center gap-2">
+                            <span class="badge {% if sl.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
+                                {{ sl.get_status_display }}
+                            </span>
                             {% if sl.document %}
                                 <a href="{{ sl.document.file.url }}" 
                                    class="btn btn-sm btn-info" 
                                    target="_blank">
-                                    <i class="bi bi-file-earmark-text"></i> {% trans "Anzeigen" %}
+                                    <i class="bi bi-file-earmark-text"></i> 
                                 </a>
                             {% else %}
                                 <button type="button" 
                                         class="btn btn-sm btn-primary upload-sick-note-btn" 
                                         data-sick-leave-id="{{ sl.id }}"
                                         data-employee-id="{{ request.user.id }}">
-                                    <i class="bi bi-upload"></i> {% trans "Hochladen" %}
+                                    <i class="bi bi-upload"></i> 
                                 </button>
                             {% endif %}
-                            <span class="badge {% if sl.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
-                                {{ sl.get_status_display }}
-                            </span>
+                            
                         </div>
                     </div>
                     {% empty %}
