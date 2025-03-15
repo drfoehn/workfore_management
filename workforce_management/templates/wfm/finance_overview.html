@@ -127,6 +127,19 @@
                                     <td>{{ income.total|floatformat:2 }} €</td>
                                 </tr>
                                 {% endfor %}
+                                <tfoot>
+                                    <tr class="table">
+                                        <td class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
+                                        <td class="table-sum"><strong>{{ total_therapist_hours|floatformat:2 }} h</strong></td>
+                                        <td class="table-sum"><strong>{{ total_therapist_room_cost|floatformat:2 }} €</strong></td>
+                                        <td class="table-sum"><strong>{{ total_therapist_difference_hours|floatformat:2 }} h</strong></td>
+                                        <td class="table-sum"><strong>{{ total_therapist_extra_cost|floatformat:2 }} €</strong></td>  
+                                         <td></td>
+                                         <td></td>
+                                         <td></td>
+                                         <td></td>
+                                    </tr>
+                                </tfoot>
                             </tbody>
                         </table>
                     </div>
@@ -167,12 +180,12 @@
                                 {% endfor %}
                             </tbody>
                             <tfoot>
-                                <tr class="table-secondary">
-                                    <td><strong>{% trans "Gesamt" %}</strong></td>
-                                    <td><strong>{{ total_assistant_soll_hours|floatformat:1 }}h</strong></td>
-                                    <td><strong>{{ total_assistant_ist_hours|floatformat:1 }}h</strong></td>
-                                    <td><strong>{{ total_assistant_absence_hours|floatformat:1 }}h</strong></td>
-                                    <td><strong>{{ total_assistant_amount|floatformat:2 }}€</strong></td>
+                                <tr class="table">
+                                    <td class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
+                                    <td class="table-sum"><strong>{{ total_assistant_soll_hours|floatformat:1 }}h</strong></td>
+                                    <td class="table-sum"><strong>{{ total_assistant_ist_hours|floatformat:1 }}h</strong></td>
+                                    <td class="table-sum"><strong>{{ total_assistant_absence_hours|floatformat:1 }}h</strong></td>
+                                    <td class="table-sum"><strong>{{ total_assistant_amount|floatformat:2 }}€</strong></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -202,12 +215,12 @@
                                 </tr>
                                 {% endfor %}
                             <tfoot>
-                                <tr class="table-secondary">
-                                    <td><strong>{% trans "Gesamt" %}</strong></td>
-                                    <td><strong>{{ total_cleaning_soll_hours|floatformat:1 }}h</strong></td>
-                                    <td><strong>{{ total_cleaning_ist_hours|floatformat:1 }}h</strong></td>
-                                    <td><strong>{{ total_cleaning_absence_hours|floatformat:1 }}h</strong></td>
-                                    <td><strong>{{ total_cleaning_amount|floatformat:2 }}€</strong></td>
+                                <tr class="table">
+                                    <td class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
+                                    <td class="table-sum"><strong>{{ total_cleaning_soll_hours|floatformat:1 }}h</strong></td>
+                                    <td class="table-sum"><strong>{{ total_cleaning_ist_hours|floatformat:1 }}h</strong></td>
+                                    <td class="table-sum"><strong>{{ total_cleaning_absence_hours|floatformat:1 }}h</strong></td>
+                                    <td class="table-sum"><strong>{{ total_cleaning_amount|floatformat:2 }}€</strong></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -225,6 +238,9 @@
                                             <th>{% trans "Position" %}</th>
                                             <th>{% trans "Überstunden" %}</th>
                                             <th>{% trans "Betrag" %}</th>
+                                            <th>{% trans "Status" %}</th>
+                                            <th>{% trans "Bezahlt am" %}</th>
+                                            <th>{% trans "Aktionen" %}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -234,14 +250,44 @@
                                             <td>{{ expense.role_display }}</td>
                                             <td>{{ expense.overtime_hours|floatformat:1 }} h</td>
                                             <td>{{ expense.amount|floatformat:2 }} €</td>
+                                            <td>
+                                                {% if expense.overtime_paid %}
+                                                    <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                                {% else %}
+                                                    <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if expense.overtime_paid_date %}
+                                                    {{ expense.overtime_paid_date|date:"d.m.Y" }}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <button type="button"
+                                                        class="btn btn-sm {% if expense.overtime_paid %}btn-outline-success{% else %}btn-success{% endif %} mark-overtime-paid-btn"
+                                                        data-employee-id="{{ expense.employee__id }}"
+                                                        data-month="{{ current_date.month }}"
+                                                        data-year="{{ current_date.year }}">
+                                                    {% if expense.overtime_paid %}
+                                                        <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
+                                                    {% else %}
+                                                        <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
+                                                    {% endif %}
+                                                </button>
+                                            </td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                     <tfoot>
-                                        <tr class="table-secondary">
-                                            <td colspan="2"><strong>{% trans "Gesamt" %}</strong></td>
-                                            <td><strong>{{ total_overtime_hours|floatformat:1 }} h</strong></td>
-                                            <td><strong>{{ total_overtime_amount|floatformat:2 }} €</strong></td>
+                                        <tr class="table">
+                                            <td colspan="2" class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
+                                            <td class="table-sum"><strong>{{ total_overtime_hours|floatformat:1 }} h</strong></td>
+                                            <td class="table-sum"><strong>{{ total_overtime_amount|floatformat:2 }} €</strong></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -274,6 +320,7 @@ $(document).ready(function() {
         console.log('Button clicked:', this);
         console.log('Button data:', {
             therapistId: $(this).data('therapist-id'),
+            employeeId: $(this).data('employee-id'),
             month: $(this).data('month'),
             year: $(this).data('year'),
             class: this.className
@@ -319,6 +366,43 @@ $(document).ready(function() {
             },
             data: JSON.stringify({
                 therapist_id: therapistId,
+                month: month,
+                year: year,
+                set_paid: !isPaid
+            }),
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('{% trans "Ein Fehler ist aufgetreten" %}');
+                }
+            },
+            error: function() {
+                alert('{% trans "Ein Fehler ist aufgetreten" %}');
+            }
+        });
+    });
+
+    // Neuer Überstunden Handler
+    $(document).on('click', '.mark-overtime-paid-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const $btn = $(this);
+        const employeeId = $btn.data('employee-id');
+        const month = $btn.data('month');
+        const year = $btn.data('year');
+        const isPaid = $btn.hasClass('btn-outline-success');
+        
+        $.ajax({
+            url: '{% url "wfm:api-mark-overtime-as-paid" %}',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                employee_id: employeeId,
                 month: month,
                 year: year,
                 set_paid: !isPaid

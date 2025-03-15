@@ -243,3 +243,7 @@ a:hover {
   border-color: var(--bs-success);
   opacity: 0.65;
 } 
+
+.table-sum {
+  color: var(--zomp) !important;
+}

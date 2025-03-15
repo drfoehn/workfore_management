@@ -3093,6 +3093,11 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
 
         context['grouped_income'] = grouped_income.values()
 
+        total_therapist_hours = sum(income['scheduled_hours'] for income in grouped_income.values())
+        total_therapist_room_cost = sum(income['room_cost'] for income in grouped_income.values())
+        total_therapist_difference_hours = sum(income['difference_hours'] for income in grouped_income.values())
+        total_therapist_extra_cost = sum(income['extra_cost'] for income in grouped_income.values())
+
         # 2. Ausgaben für Mitarbeiter
         # Hole die Daten aus der WorkingHoursListView
         working_hours_view = WorkingHoursListView()
@@ -3162,13 +3167,15 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         overtime_expenses = OvertimeAccount.objects.filter(
             year=year,
             month=month,
-            overtime_paid=False,  # Nur unbezahlte Überstunden
             hours_for_payment__gt=0  # Nur Einträge mit zu bezahlenden Stunden
         ).select_related('employee').values(
+            'employee__id',
             'employee__first_name',
             'employee__last_name',
             'employee__role',
-            'employee__hourly_rate'
+            'employee__hourly_rate',
+            'overtime_paid',
+            'overtime_paid_date'
         ).annotate(
             overtime_hours=Sum('hours_for_payment'),
             amount=ExpressionWrapper(
@@ -3207,19 +3214,26 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         total_expenses = sum(
             a['amount'] for a in assistant_expenses.values()) + sum(c['amount'] for c in cleaning_expenses.values()) + total_overtime_amount
         
+
         
         context.update({
             'grouped_income': grouped_income.values(),
+            'total_therapist_hours': total_therapist_hours,
+            'total_therapist_room_cost': total_therapist_room_cost,
+            'total_therapist_difference_hours': total_therapist_difference_hours,
+            'total_therapist_extra_cost': total_therapist_extra_cost,
             'assistant_expenses': assistant_expenses.values(),
             'cleaning_expenses': cleaning_expenses.values(),
             'overtime_expenses': overtime_expenses,
             'total_overtime_hours': total_overtime_hours,
+            'total_overtime_amount': total_overtime_amount,
             'total_income': total_income,
             'total_expenses': total_expenses,
             'total_assistant_soll_hours': total_assistant_soll_hours,
             'total_assistant_ist_hours': total_assistant_ist_hours,
             'total_assistant_absence_hours': total_assistant_absence_hours,
             'total_assistant_amount': total_assistant_amount,
+
             'total_cleaning_soll_hours': total_cleaning_soll_hours,
             'total_cleaning_ist_hours': total_cleaning_ist_hours,
             'total_cleaning_absence_hours': total_cleaning_absence_hours,
@@ -3438,35 +3452,32 @@ def api_mark_therapist_extra_hours_as_paid(request):
 @login_required
 def api_mark_overtime_as_paid(request):
     """API-Endpoint zum Markieren von Überstunden als bezahlt"""
-    print("=== Überstunden API aufgerufen ===")
     if request.user.role != 'OWNER':
-        print(f"Keine Berechtigung für User {request.user}")
         return JsonResponse({'success': False, 'error': gettext('Keine Berechtigung')})
     
     if request.method != 'POST':
-        print(f"Falsche HTTP Methode: {request.method}")
         return JsonResponse({'success': False, 'error': gettext('Ungültige Anfrage')})
     
     try:
         data = json.loads(request.body)
-        print(f"Empfangene Daten: {data}")
         
         employee_id = data.get('employee_id')
         month = data.get('month')
         year = data.get('year')
         set_paid = data.get('set_paid', True)
         
-        print(f"Verarbeite: Mitarbeiter {employee_id}, Monat {month}, Jahr {year}, Setze bezahlt: {set_paid}")
-        
-        # Hole Überstunden für diesen Monat
+        # Hole den Überstunden-Eintrag
         overtime = OvertimeAccount.objects.filter(
             employee_id=employee_id,
-            date__year=year,
-            date__month=month,
-            overtime_paid=not set_paid  # Nur die mit gegenteiligem Status
+            month=month,
+            year=year
         )
         
-        print(f"Gefundene Überstunden-Einträge: {overtime.count()}")
+        if not overtime.exists():
+            return JsonResponse({
+                'success': False,
+                'error': gettext('Keine Überstunden gefunden')
+            })
         
         # Markiere als bezahlt/unbezahlt
         updated_count = overtime.update(
@@ -3474,13 +3485,16 @@ def api_mark_overtime_as_paid(request):
             overtime_paid_date=timezone.now() if set_paid else None
         )
         
-        print(f"Aktualisierte Einträge: {updated_count}")
-        print(f"Neuer Status: {set_paid}, Neues Datum: {timezone.now() if set_paid else None}")
-        
-        return JsonResponse({'success': True, 'updated': updated_count})
+        return JsonResponse({
+            'success': True,
+            'updated': updated_count,
+            'new_status': {
+                'paid': set_paid,
+                'paid_date': timezone.now().strftime('%Y-%m-%d') if set_paid else None
+            }
+        })
     except Exception as e:
-        print(f"Fehler aufgetreten: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"Fehler beim Markieren der Überstunden: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)})
 
 
