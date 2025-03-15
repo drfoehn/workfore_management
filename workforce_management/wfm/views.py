@@ -2210,41 +2210,30 @@ def api_therapist_booking_update(request):
 
 class AbsenceListView(LoginRequiredMixin, ListView):
     template_name = 'wfm/absence_list.html'
-    context_object_name = 'absences'
-
+    model = SickLeave
+    context_object_name = 'sick_leaves'  # Dies ist wichtig!
+    
     def get_queryset(self):
-        return []
+        # Verwende select_related wie in der SickLeaveManagementView
+        return SickLeave.objects.filter(
+            employee=self.request.user
+        ).select_related('employee', 'document').order_by('-start_date')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        user = self.request.user
         today = timezone.now().date()
-        
-        # Hole alle zukünftigen und aktuellen Abwesenheiten
-        context['vacations'] = Vacation.objects.filter(
-            employee=self.request.user,
-            end_date__gte=today
-        ).order_by('start_date')
-        
-        context['time_comps'] = TimeCompensation.objects.filter(
-            employee=self.request.user,
-            date__gte=today
-        ).order_by('date')
-        
-        context['sick_leaves'] = SickLeave.objects.filter(
-            employee=self.request.user,
-            end_date__gte=today
-        ).order_by('start_date')
-        
+
         # Urlaubsübersicht
         entitlement = VacationEntitlement.objects.filter(
-            employee=self.request.user,
+            employee=user,
             year=today.year
         ).first()
         
         if entitlement:
             # Genehmigte Urlaubsstunden
             approved_vacations = Vacation.objects.filter(
-                employee=self.request.user,
+                employee=user,
                 start_date__year=today.year,
                 status='APPROVED'
             )
@@ -2255,7 +2244,7 @@ class AbsenceListView(LoginRequiredMixin, ListView):
             
             # Beantragte Urlaubsstunden
             pending_vacations = Vacation.objects.filter(
-                employee=self.request.user,
+                employee=user,
                 start_date__year=today.year,
                 status='REQUESTED'
             )
@@ -2264,79 +2253,63 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 for vacation in pending_vacations
             )
             
-            # Übertrag aus Vorjahr
-            last_year = today.year - 1
-            last_year_entitlement = VacationEntitlement.objects.filter(
-                employee=self.request.user,
-                year=last_year
-            ).first()
-            
-            last_year_remaining = Decimal('0')
-            if last_year_entitlement:
-                last_year_used = sum(
-                    vacation.calculate_vacation_hours()
-                    for vacation in Vacation.objects.filter(
-                        employee=self.request.user,
-                        start_date__year=last_year,
-                        status='APPROVED'
-                    )
-                )
-                last_year_remaining = max(
-                    last_year_entitlement.total_hours - last_year_used, 
-                    Decimal('0')
-                )
-            
-            total_hours = entitlement.total_hours + last_year_remaining
-            
             context['vacation_info'] = {
                 'year': today.year,
                 'entitlement': entitlement.total_hours,
-                'carried_over': last_year_remaining,
-                'total_available': total_hours,
                 'approved_hours': approved_hours,
                 'pending_hours': pending_hours,
-                'remaining_hours': total_hours - approved_hours
+                'remaining_hours': entitlement.total_hours - approved_hours
             }
 
-        # Zeitausgleich-Übersicht
-        if self.request.user.role in ['ASSISTANT', 'CLEANING']:
-            # Berechne Überstunden für das aktuelle Jahr
-            total_overtime = Decimal('0')
-            for month in range(1, 13):
-                overtime_account = OvertimeAccount.objects.filter(
-                    employee=self.request.user,
-                    year=today.year,
-                    month=month,
-                    is_finalized=True
-                ).first()
-                if overtime_account:
-                    total_overtime += overtime_account.hours_for_timecomp
-
-            # Bereits genommener Zeitausgleich
-            approved_timecomp = TimeCompensation.objects.filter(
-                employee=self.request.user,
-                date__year=today.year,
-                status='APPROVED'
-            )
-            approved_timecomp_hours = sum(tc.hours for tc in approved_timecomp)
-
-            # Beantragter Zeitausgleich
-            pending_timecomp = TimeCompensation.objects.filter(
-                employee=self.request.user,
-                date__year=today.year,
-                status='REQUESTED'
-            )
-            pending_timecomp_hours = sum(tc.hours for tc in pending_timecomp)
-
-            context['timecomp_info'] = {
-                'year': today.year,
-                'total_hours': total_overtime,
-                'approved_hours': approved_timecomp_hours,
-                'pending_hours': pending_timecomp_hours,
-                'remaining_hours': total_overtime - approved_timecomp_hours
-            }
+        # Hole andere Abwesenheiten
+        context['vacations'] = Vacation.objects.filter(employee=user).order_by('-start_date')
+        context['time_comps'] = TimeCompensation.objects.filter(employee=user).order_by('-date')
         
+        # Zeitausgleich-Info für Assistenten und Reinigungskräfte
+        if user.role in ['ASSISTANT', 'CLEANING']:
+            context['timecomp_info'] = self.get_timecomp_info(user)
+
+        # Für das Upload-Modal
+        context['users'] = [user]
+
         return context
+
+    def get_timecomp_info(self, user):
+        # Berechne Überstunden für das aktuelle Jahr
+        total_overtime = Decimal('0')
+        for month in range(1, 13):
+            overtime_account = OvertimeAccount.objects.filter(
+                employee=user,
+                year=date.today().year,
+                month=month,
+                is_finalized=True
+            ).first()
+            if overtime_account:
+                total_overtime += overtime_account.hours_for_timecomp
+
+        # Bereits genommener Zeitausgleich
+        approved_timecomp = TimeCompensation.objects.filter(
+            employee=user,
+            date__year=date.today().year,
+            status='APPROVED'
+        )
+        approved_timecomp_hours = sum(tc.hours for tc in approved_timecomp)
+
+        # Beantragter Zeitausgleich
+        pending_timecomp = TimeCompensation.objects.filter(
+            employee=user,
+            date__year=date.today().year,
+            status='REQUESTED'
+        )
+        pending_timecomp_hours = sum(tc.hours for tc in pending_timecomp)
+
+        return {
+            'year': date.today().year,
+            'total_hours': total_overtime,
+            'approved_hours': approved_timecomp_hours,
+            'pending_hours': pending_timecomp_hours,
+            'remaining_hours': total_overtime - approved_timecomp_hours
+        }
 
 @login_required
 def api_delete_absence(request, type, pk):
@@ -2634,11 +2607,13 @@ def api_calculate_vacation_hours(request):
         logger.error(f"Vacation calculation error: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
-class SickLeaveManagementView(OwnerRequiredMixin, ListView):
+class SickLeaveManagementView(LoginRequiredMixin, OwnerRequiredMixin, ListView):
     template_name = 'wfm/sick_leave_management.html'
-    context_object_name = 'sick_leaves'
-
+    model = SickLeave
+    context_object_name = 'sick_leaves'  # Wichtig für das Template
+    
     def get_queryset(self):
+        # Verwende select_related für effiziente Datenbankabfragen
         return SickLeave.objects.all().select_related('employee', 'document').order_by('-start_date')
 
     def get_context_data(self, **kwargs):
@@ -2726,40 +2701,31 @@ def upload_document(request):
             file = request.FILES.get('file')
             display_name = request.POST.get('display_name')
             notes = request.POST.get('notes')
+            sick_leave_id = request.POST.get('sick_leave_id')  # Hole die ID aus dem versteckten Feld
+            
+            # Erstelle das Dokument
+            document = UserDocument.objects.create(
+                user_id=user_id,
+                file=file,
+                display_name=display_name,
+                notes=notes
+            )
 
-            # Extrahiere die sick_leave_id aus den Notizen
-            import re
-            match = re.search(r'\[SICK_LEAVE_ID:(\d+)\]', notes)
-            if match:
-                sick_leave_id = int(match.group(1))
-                sick_leave = SickLeave.objects.get(id=sick_leave_id)
+            # Wenn eine sick_leave_id vorhanden ist, verknüpfe das Dokument
+            if sick_leave_id:
+                try:
+                    sick_leave = SickLeave.objects.get(id=sick_leave_id)
+                    sick_leave.document = document
+                    sick_leave.status = 'SUBMITTED'
+                    sick_leave.save()
+                except SickLeave.DoesNotExist:
+                    document.delete()
+                    return JsonResponse({'error': 'Krankenstand nicht gefunden'}, status=404)
 
-                # Erstelle das Dokument
-                document = UserDocument.objects.create(
-                    user_id=user_id,
-                    file=file,
-                    display_name=display_name,
-                    notes=notes
-                )
-
-                # Verknüpfe das Dokument mit dem Krankenstand und aktualisiere den Status
-                sick_leave.document = document
-                sick_leave.status = 'SUBMITTED'
-                sick_leave.save()
-
-                return JsonResponse({'success': True})
-            else:
-                # Normales Dokument ohne Krankenstand-Verknüpfung
-                UserDocument.objects.create(
-                    user_id=user_id,
-                    file=file,
-                    display_name=display_name,
-                    notes=notes
-                )
-                return JsonResponse({'success': True})
+            return JsonResponse({'success': True})
 
         except Exception as e:
-            logger.error(f"Error uploading document: {str(e)}", exc_info=True)
+            logger.error(f"Fehler beim Hochladen: {str(e)}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid method'}, status=405)

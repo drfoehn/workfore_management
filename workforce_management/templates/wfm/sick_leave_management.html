@@ -123,39 +123,14 @@ $(document).ready(function() {
         
         const sickLeaveId = $(this).data('sick-leave-id');
         const employeeId = $(this).data('employee-id');
-        const employeeName = $(this).closest('tr').find('td:first').text().trim();
-        const startDate = $(this).closest('tr').find('td:nth-child(2)').text().trim();
+        const dateText = $(this).closest('.d-flex').find('strong').text();
+        const startDate = dateText.split(' - ')[0];
         
         // Setze den Mitarbeiter und die Notiz im Upload-Modal
         $('#user').val(employeeId);
-        $('#display_name').val(`${employeeName} - Krankmeldung vom ${startDate}`);
-        $('#notes').val(`[SICK_LEAVE_ID:${sickLeaveId}]`);  // Unveränderlicher Marker
-        
-        // Überschreibe das Form-Submit-Event
-        $('#documentUploadForm').off('submit').on('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            
-            $.ajax({
-                url: $(this).attr('action'),
-                method: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function(response) {
-                    // Schließe das Modal
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('documentUploadModal'));
-                    modal.hide();
-                    
-                    // Lade die Seite neu
-                    location.reload();
-                },
-                error: function(xhr) {
-                    alert('{% trans "Fehler beim Hochladen" %}');
-                }
-            });
-        });
+        $('#sick_leave_id').val(sickLeaveId);  // Setze die ID im versteckten Feld
+        $('#display_name').val(`{{ request.user.get_full_name }} - Krankmeldung vom ${startDate}`);
+        $('#notes').val('');  // Keine ID mehr in den Notes
         
         // Öffne das Modal
         const modal = new bootstrap.Modal(document.getElementById('documentUploadModal'));

@@ -10,6 +10,9 @@
             </div>
             <form method="post" action="{% url 'wfm:upload-document' %}" enctype="multipart/form-data" id="documentUploadForm">
                 {% csrf_token %}
+                <!-- Verstecktes Feld für die sick_leave_id -->
+                <input type="hidden" name="sick_leave_id" id="sick_leave_id">
+                
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="user" class="form-label">{% trans "Mitarbeiter" %}</label>

@@ -6,7 +6,7 @@
 {% block content %}
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2">{% trans "Meine Abwesenheiten" %}</h1>
+        <h1 class="h2">{% trans "Meine Abwesenheiten" %}  {{ timecomp_info.year }}</h1>
         <div class="btn-group">
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
                 <i class="bi bi-calendar-plus"></i> {% trans "Urlaub" %}
@@ -161,24 +161,26 @@
                             <small class="text-muted">{{ sl.notes }}</small>
                             {% endif %}
                         </div>
-                        <span class="badge {% if sl.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
-                            {{ sl.get_status_display }}
-                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            {% if sl.document %}
+                                <a href="{{ sl.document.file.url }}" 
+                                   class="btn btn-sm btn-info" 
+                                   target="_blank">
+                                    <i class="bi bi-file-earmark-text"></i> {% trans "Anzeigen" %}
+                                </a>
+                            {% else %}
+                                <button type="button" 
+                                        class="btn btn-sm btn-primary upload-sick-note-btn" 
+                                        data-sick-leave-id="{{ sl.id }}"
+                                        data-employee-id="{{ request.user.id }}">
+                                    <i class="bi bi-upload"></i> {% trans "Hochladen" %}
+                                </button>
+                            {% endif %}
+                            <span class="badge {% if sl.status == 'SUBMITTED' %}bg-success{% else %}bg-warning{% endif %}">
+                                {{ sl.get_status_display }}
+                            </span>
+                        </div>
                     </div>
-                    {% if sl.type == 'sick_leave' %}
-                    <td>
-                        {% if sl.document %}
-                            <a href="{{ sl.document.document.url }}" class="btn btn-sm btn-info" target="_blank">
-                                <i class="bi bi-file-earmark-text"></i> {% trans "Krankmeldung anzeigen" %}
-                            </a>
-                        {% endif %}
-                        <button type="button" 
-                                class="btn btn-sm btn-primary upload-sick-note-btn" 
-                                data-sick-leave-id="{{ sl.id }}">
-                            <i class="bi bi-upload"></i> {% trans "Krankmeldung hochladen" %}
-                        </button>
-                    </td>
-                    {% endif %}
                     {% empty %}
                     <p class="text-muted mb-0">{% trans "Keine Krankmeldungen" %}</p>
                     {% endfor %}
@@ -188,10 +190,15 @@
     </div>
 </div>
 
+<!-- Modals am Ende des Contents -->
 {% include "wfm/modals/vacation_modal.html" %}
 {% include "wfm/modals/time_compensation_modal.html" %}
 {% include "wfm/modals/sick_leave_modal.html" %}
+{% include "wfm/modals/document_upload_modal.html" with users=users %}
+{% endblock %}
 
+{% block extra_js %}
+{{ block.super }}
 <script>
 function deleteAbsence(type, id) {
     if (confirm('{% trans "Möchten Sie diesen Antrag wirklich stornieren?" %}')) {
@@ -215,5 +222,72 @@ function deleteAbsence(type, id) {
         });
     }
 }
+
+$(document).ready(function() {
+    console.log('Document ready'); // Debug
+    
+    // Upload Button Click Handler
+    $('.upload-sick-note-btn').on('click', function(e) {
+        console.log('Upload button clicked'); // Debug
+        e.preventDefault();
+        
+        const sickLeaveId = $(this).data('sick-leave-id');
+        const employeeId = $(this).data('employee-id');
+        const dateText = $(this).closest('.d-flex').find('strong').text();
+        const startDate = dateText.split(' - ')[0];
+        
+        console.log('Data:', { // Debug
+            sickLeaveId,
+            employeeId,
+            dateText,
+            startDate
+        });
+        
+        // Setze den Mitarbeiter und die Notiz im Upload-Modal
+        $('#user').val(employeeId);
+        $('#sick_leave_id').val(sickLeaveId);  // Setze die ID im versteckten Feld
+        $('#display_name').val(`{{ request.user.get_full_name }} - Krankmeldung vom ${startDate}`);
+        $('#notes').val('');  // Keine ID mehr in den Notes
+        
+        console.log('Form values:', { // Debug
+            user: $('#user').val(),
+            display_name: $('#display_name').val(),
+            notes: $('#notes').val()
+        });
+        
+        // Überschreibe das Form-Submit-Event
+        $('#documentUploadForm').off('submit').on('submit', function(e) {
+            console.log('Form submitted'); // Debug
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            $.ajax({
+                url: $(this).attr('action'),
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    console.log('Upload success:', response); // Debug
+                    // Schließe das Modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('documentUploadModal'));
+                    modal.hide();
+                    
+                    // Lade die Seite neu
+                    location.reload();
+                },
+                error: function(xhr) {
+                    console.error('Upload error:', xhr); // Debug
+                    alert('{% trans "Fehler beim Hochladen" %}');
+                }
+            });
+        });
+        
+        // Öffne das Modal
+        const modal = new bootstrap.Modal(document.getElementById('documentUploadModal'));
+        modal.show();
+    });
+});
 </script>
 {% endblock %} 
