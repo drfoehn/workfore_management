@@ -68,7 +68,7 @@
             <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
-                        <i class="bi bi-umbrella text-primary"></i> {% trans "Urlaub" %}
+                        <i class="bi bi-brightness-high text-warning"></i> {% trans "Urlaub" %}
                     </h5>
                 </div>
                 <div class="card-body">
@@ -165,6 +165,20 @@
                             {{ sl.get_status_display }}
                         </span>
                     </div>
+                    {% if sl.type == 'sick_leave' %}
+                    <td>
+                        {% if sl.document %}
+                            <a href="{{ sl.document.document.url }}" class="btn btn-sm btn-info" target="_blank">
+                                <i class="bi bi-file-earmark-text"></i> {% trans "Krankmeldung anzeigen" %}
+                            </a>
+                        {% endif %}
+                        <button type="button" 
+                                class="btn btn-sm btn-primary upload-sick-note-btn" 
+                                data-sick-leave-id="{{ sl.id }}">
+                            <i class="bi bi-upload"></i> {% trans "Krankmeldung hochladen" %}
+                        </button>
+                    </td>
+                    {% endif %}
                     {% empty %}
                     <p class="text-muted mb-0">{% trans "Keine Krankmeldungen" %}</p>
                     {% endfor %}

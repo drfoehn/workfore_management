@@ -408,51 +408,7 @@ class VacationEntitlement(models.Model):
         return self.total_hours - used_hours
 
 
-class SickLeave(models.Model):
-    STATUS_CHOICES = [
-        ('SUBMITTED', _('Krankmeldung vorgelegt')),
-        ('PENDING', _('Keine Krankmeldung')),
-    ]
-    
-    employee = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='sick_leaves'
-    )
-    start_date = models.DateField()
-    end_date = models.DateField()
-    status = models.CharField(
-        max_length=10,
-        choices=STATUS_CHOICES,
-        default='PENDING'
-    )
-    notes = models.TextField(blank=True)
-    
-    def __str__(self):
-        return f"{self.employee} - {self.start_date} bis {self.end_date}"
 
-    def save(self, *args, **kwargs):
-        # Bei Krankmeldungen immer die WorkingHours löschen
-        if self.pk:  # Wenn es ein existierender Eintrag ist
-            old_instance = SickLeave.objects.get(pk=self.pk)
-            if (old_instance.status in ['PENDING'] and 
-                self.status == 'SUBMITTED'):
-                # Lösche WorkingHours für die Krankheitstage
-                current_date = self.start_date
-                while current_date <= self.end_date:
-                    if current_date.weekday() < 5:  # Nur Werktage
-                        WorkingHours.objects.filter(
-                            employee=self.employee,
-                            date=current_date
-                        ).delete()
-                    current_date += timedelta(days=1)
-        
-        super().save(*args, **kwargs)
-
-    class Meta:
-        ordering = ['-start_date']
-        verbose_name = _('Krankenstand')
-        verbose_name_plural = _('Krankenstände')
 
 class MonthlyReport(models.Model):
     """Monatlicher Abrechnungsbericht"""
@@ -743,6 +699,60 @@ class UserDocument(models.Model):
         verbose_name = _("Dokument")
         verbose_name_plural = _("Dokumente")
         ordering = ['-uploaded_at']
+
+class SickLeave(models.Model):
+    STATUS_CHOICES = [
+        ('SUBMITTED', _('Krankmeldung vorgelegt')),
+        ('PENDING', _('Keine Krankmeldung')),
+    ]
+    
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sick_leaves'
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='PENDING'
+    )
+    notes = models.TextField(blank=True)
+    document = models.OneToOneField( 
+        UserDocument, 
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sick_leave'
+    )
+
+    def __str__(self):
+        return f"{self.employee} - {self.start_date} bis {self.end_date}"
+
+    def save(self, *args, **kwargs):
+        # Bei Krankmeldungen immer die WorkingHours löschen
+        if self.pk:  # Wenn es ein existierender Eintrag ist
+            old_instance = SickLeave.objects.get(pk=self.pk)
+            if (old_instance.status in ['PENDING'] and 
+                self.status == 'SUBMITTED'):
+                # Lösche WorkingHours für die Krankheitstage
+                current_date = self.start_date
+                while current_date <= self.end_date:
+                    if current_date.weekday() < 5:  # Nur Werktage
+                        WorkingHours.objects.filter(
+                            employee=self.employee,
+                            date=current_date
+                        ).delete()
+                    current_date += timedelta(days=1)
+        
+        super().save(*args, **kwargs)
+
+    class Meta:
+        ordering = ['-start_date']
+        verbose_name = _('Krankenstand')
+        verbose_name_plural = _('Krankenstände')
+
 
 class OvertimeAccount(models.Model):
     """Überstundenkonto für Zeitausgleich"""

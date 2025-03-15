@@ -40,6 +40,7 @@ import traceback
 from django.views.decorators.http import require_http_methods
 from calendar import monthrange
 from datetime import datetime, date as datetime_date  # Umbenennen des date imports
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -870,9 +871,12 @@ def api_vacation_request(request):
                 status='APPROVED'
             )
         )
+
         
+
+
         remaining_hours = entitlement.total_hours - used_hours
-        
+
         if needed_hours > remaining_hours:
             return JsonResponse({
                 'error': gettext('Nicht genügend Urlaubsstunden verfügbar')
@@ -2635,7 +2639,12 @@ class SickLeaveManagementView(OwnerRequiredMixin, ListView):
     context_object_name = 'sick_leaves'
 
     def get_queryset(self):
-        return SickLeave.objects.all().select_related('employee').order_by('-start_date')
+        return SickLeave.objects.all().select_related('employee', 'document').order_by('-start_date')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['users'] = CustomUser.objects.all()
+        return context
 
     def post(self, request, *args, **kwargs):
         try:
@@ -2652,6 +2661,46 @@ class SickLeaveManagementView(OwnerRequiredMixin, ListView):
                 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def api_upload_sick_leave_document(request, sick_leave_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid method'}, status=405)
+        
+    try:
+        sick_leave = get_object_or_404(SickLeave, id=sick_leave_id)
+        
+        # Prüfe Berechtigung
+        if request.user.role != 'OWNER' and request.user != sick_leave.employee:
+            return JsonResponse({'error': gettext('Keine Berechtigung')}, status=403)
+        
+        if 'document' not in request.FILES:
+            return JsonResponse({'error': gettext('Keine Datei ausgewählt')}, status=400)
+            
+        document = request.FILES['document']
+        
+        # Lösche altes Dokument falls vorhanden
+        if sick_leave.document:
+            sick_leave.document.delete()
+        
+        # Erstelle neues Dokument
+        new_document = UserDocument.objects.create(
+            user=sick_leave.employee,
+            file=document,
+            display_name=f"{sick_leave.employee.get_full_name()} - Krankmeldung vom {sick_leave.start_date.strftime('%d.%m.%Y')}",
+            notes=''
+        )
+        
+        # Verknüpfe mit dem Krankenstand und setze Status auf SUBMITTED
+        sick_leave.document = new_document
+        sick_leave.status = 'SUBMITTED'  # Setze Status auf "Krankmeldung vorgelegt"
+        sick_leave.save()
+        
+        return JsonResponse({'success': True})
+        
+    except Exception as e:
+        logger.error(f"Error uploading sick leave document: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
 # TODO: Abgelehnte Anträge anzeigen in Liste und Kalender
 # TODO: BEi ABlehnung Begründung einfügen
@@ -2671,16 +2720,49 @@ class UserDocumentListView(OwnerRequiredMixin, ListView):
 
 @login_required
 def upload_document(request):
-    if request.user.role != 'OWNER':
-        raise PermissionDenied
-        
     if request.method == 'POST':
-        form = UserDocumentForm(request.POST, request.FILES)
-        if form.is_valid():
-            document = form.save()
-            messages.success(request, gettext('Dokument erfolgreich hochgeladen.'))
-            return redirect('wfm:user-documents')
-    return redirect('wfm:user-documents')
+        try:
+            user_id = request.POST.get('user')
+            file = request.FILES.get('file')
+            display_name = request.POST.get('display_name')
+            notes = request.POST.get('notes')
+
+            # Extrahiere die sick_leave_id aus den Notizen
+            import re
+            match = re.search(r'\[SICK_LEAVE_ID:(\d+)\]', notes)
+            if match:
+                sick_leave_id = int(match.group(1))
+                sick_leave = SickLeave.objects.get(id=sick_leave_id)
+
+                # Erstelle das Dokument
+                document = UserDocument.objects.create(
+                    user_id=user_id,
+                    file=file,
+                    display_name=display_name,
+                    notes=notes
+                )
+
+                # Verknüpfe das Dokument mit dem Krankenstand und aktualisiere den Status
+                sick_leave.document = document
+                sick_leave.status = 'SUBMITTED'
+                sick_leave.save()
+
+                return JsonResponse({'success': True})
+            else:
+                # Normales Dokument ohne Krankenstand-Verknüpfung
+                UserDocument.objects.create(
+                    user_id=user_id,
+                    file=file,
+                    display_name=display_name,
+                    notes=notes
+                )
+                return JsonResponse({'success': True})
+
+        except Exception as e:
+            logger.error(f"Error uploading document: {str(e)}", exc_info=True)
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid method'}, status=405)
 
 @login_required
 def api_document_update(request, pk):

@@ -82,9 +82,8 @@ urlpatterns = [
     # Finance Overview
     path('finance-overview/', views.FinanceOverviewView.as_view(), name='finance-overview'),
 
- 
-    # API Endpoints für Bezahlungen
 
+    path('api/sick-leave/<int:sick_leave_id>/upload-document/', views.api_upload_sick_leave_document, name='api-upload-sick-leave-document'),
 ]
 
 

@@ -41,12 +41,41 @@
                                 </span>
                             </td>
                             <td>
-                                {% if sick_leave.certificate %}
-                                <a href="{{ sick_leave.certificate.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-file-earmark-medical"></i> {% trans "Anzeigen" %}
-                                </a>
+                                {% if sick_leave.document %}
+                                    <div class="btn-group">
+                                        <a href="{{ sick_leave.document.file.url }}" 
+                                           class="btn btn-sm btn-info" 
+                                           target="_blank">
+                                            <i class="bi bi-file-earmark-text"></i> {% trans "Anzeigen" %}
+                                        </a>
+                                        <button type="button"
+                                                class="btn btn-sm btn-primary"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#documentEditModal"
+                                                data-document-id="{{ sick_leave.document.id }}"
+                                                data-document-name="{{ sick_leave.document.display_name }}"
+                                                data-document-notes="{{ sick_leave.document.notes }}"
+                                                data-document-original-name="{{ sick_leave.document.original_filename }}"
+                                                data-document-user="{{ sick_leave.document.user.get_full_name }}"
+                                                data-document-upload-date="{{ sick_leave.document.uploaded_at|date:'d.m.Y H:i' }}">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-sm btn-danger"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteDocumentModal"
+                                                data-document-id="{{ sick_leave.document.id }}"
+                                                data-document-name="{{ sick_leave.document.display_name }}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
                                 {% else %}
-                                <span class="text-muted">{% trans "Keine Krankmeldung" %}</span>
+                                    <button type="button" 
+                                            class="btn btn-sm btn-primary upload-sick-note-btn" 
+                                            data-sick-leave-id="{{ sick_leave.id }}"
+                                            data-employee-id="{{ sick_leave.employee.id }}">
+                                        <i class="bi bi-upload"></i> {% trans "Krankmeldung hochladen" %}
+                                    </button>
                                 {% endif %}
                             </td>
                             <td data-notes="{{ sick_leave.notes }}">{{ sick_leave.notes|default:"-" }}</td>
@@ -74,56 +103,67 @@
     </div>
 </div>
 
-<script>
-// Sortierung
-document.addEventListener('DOMContentLoaded', function() {
-    const table = document.getElementById('sickLeaveTable');
-    const headers = table.querySelectorAll('th.sortable');
-    let currentSort = { column: 'start', direction: 'desc' }; // Standard: Nach Datum absteigend
+<!-- Nur die Document Modals, entferne das uploadSickNoteModal -->
+{% include "wfm/modals/document_upload_modal.html" with users=users %}
+{% include "wfm/modals/document_edit_modal.html" %}
+{% include "wfm/modals/delete_document_modal.html" %}
 
-    headers.forEach(header => {
-        header.addEventListener('click', () => {
-            const column = header.dataset.sort;
-            const direction = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+{% include "wfm/modals/document_edit_modal_js.html" %}
+{% include "wfm/modals/delete_document_modal_js.html" %}
+
+<script>
+$(document).ready(function() {
+    // Upload Button Click Handler
+    $('.upload-sick-note-btn').on('click', function(e) {
+        e.preventDefault();
+        
+        const sickLeaveId = $(this).data('sick-leave-id');
+        const employeeId = $(this).data('employee-id');
+        const employeeName = $(this).closest('tr').find('td:first').text().trim();
+        const startDate = $(this).closest('tr').find('td:nth-child(2)').text().trim();
+        
+        // Setze den Mitarbeiter und die Notiz im Upload-Modal
+        $('#user').val(employeeId);
+        $('#display_name').val(`${employeeName} - Krankmeldung vom ${startDate}`);
+        $('#notes').val(`[SICK_LEAVE_ID:${sickLeaveId}]`);  // Unveränderlicher Marker
+        
+        // Überschreibe das Form-Submit-Event
+        $('#documentUploadForm').off('submit').on('submit', function(e) {
+            e.preventDefault();
             
-            // Entferne alte Sortier-Indikatoren
-            headers.forEach(h => h.classList.remove('sorting-asc', 'sorting-desc'));
+            const formData = new FormData(this);
             
-            // Setze neuen Sortier-Indikator
-            header.classList.add(`sorting-${direction}`);
-            
-            // Sortiere die Tabelle
-            sortTable(column, direction);
-            
-            // Aktualisiere den aktuellen Sortierzustand
-            currentSort = { column, direction };
+            $.ajax({
+                url: $(this).attr('action'),
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    // Schließe das Modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('documentUploadModal'));
+                    modal.hide();
+                    
+                    // Lade die Seite neu
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert('{% trans "Fehler beim Hochladen" %}');
+                }
+            });
         });
+        
+        // Öffne das Modal
+        const modal = new bootstrap.Modal(document.getElementById('documentUploadModal'));
+        modal.show();
     });
 });
 
-function sortTable(column, direction) {
-    const table = document.getElementById('sickLeaveTable');
-    const tbody = table.querySelector('tbody');
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-
-    // Sortiere die Zeilen
-    const sortedRows = rows.sort((a, b) => {
-        const aValue = a.querySelector(`td[data-${column}]`)?.dataset[column] || '';
-        const bValue = b.querySelector(`td[data-${column}]`)?.dataset[column] || '';
-        
-        if (direction === 'asc') {
-            return aValue.localeCompare(bValue);
-        } else {
-            return bValue.localeCompare(aValue);
-        }
-    });
-
-    // Leere und fülle die Tabelle neu
-    tbody.innerHTML = '';
-    sortedRows.forEach(row => tbody.appendChild(row));
-}
-
-// Status Toggle
+// Status Toggle Funktion
 function toggleStatus(id) {
     const formData = new FormData();
     formData.append('id', id);
@@ -159,11 +199,11 @@ function toggleStatus(id) {
 }
 
 .sorting-asc .bi-arrow-down-up::before {
-    content: "\f12d"; /* Bootstrap Icon für aufsteigend */
+    content: "\f12d";
 }
 
 .sorting-desc .bi-arrow-down-up::before {
-    content: "\f12c"; /* Bootstrap Icon für absteigend */
+    content: "\f12c";
 }
 </style>
 {% endblock %} 
