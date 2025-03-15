@@ -13,23 +13,7 @@
         padding: 2px;
     }
     
-    .vacation-event {
-        background-color: #d1e7dd !important;
-        border-color: #badbcc !important;
-        color: #0f5132 !important;
-    }
-    
-    .time-comp-event {
-        background-color: #fff3cd !important;
-        border-color: #ffecb5 !important;
-        color: #664d03 !important;
-    }
-    
-    .sick-leave-event {
-        background-color: #f8d7da !important;
-        border-color: #f5c2c7 !important;
-        color: #842029 !important;
-    }
+
 </style>
 {% endblock %}
 
@@ -182,6 +166,8 @@
 {% include "wfm/modals/working_hours_modal.html" %}
 {% include "wfm/modals/vacation_modal.html" %}
 {% include "wfm/modals/time_compensation_modal.html" %}
+{% include "wfm/modals/sick_leave_modal.html" %}
+{% include "wfm/modals/overtime_modal.html" %}
 {% endblock %}
 
 {% block extra_js %}
@@ -197,8 +183,8 @@ document.addEventListener('DOMContentLoaded', function() {
             right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
         firstDay: 1,
-        slotMinTime: '07:00:00',
-        slotMaxTime: '20:00:00',
+        slotMinTime: '05:00:00',
+        slotMaxTime: '22:00:00',
         locale: 'de',
         events: function(info, successCallback, failureCallback) {
             // Hole die Filter-Parameter

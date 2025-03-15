@@ -1778,132 +1778,96 @@ def api_therapist_calendar_events(request):
 
 @method_decorator(login_required, name='dispatch')
 class AssistantCalendarEventsView(View):
-    """API View für Kalender-Events"""
+    def get(self, request):
+        # Parse start und end dates aus den Request-Parametern
+        start_date = parse_datetime(request.GET.get('start'))
+        end_date = parse_datetime(request.GET.get('end'))
+        show_absences_only = request.GET.get('absences') == '1'
+        
+        # Hole employee und role Filter
+        employee_id = request.GET.get('employee')
+        role = request.GET.get('role')
+        
+        # Basis-Filter für Mitarbeiter
+        employee_filter = {}
+        if employee_id:
+            employee_filter['employee_id'] = employee_id
+        if role:
+            employee_filter['employee__role'] = role
 
-    def get(self, request, *args, **kwargs):
-        try:
-            # Get filter parameters
-            start = request.GET.get('start')
-            end = request.GET.get('end')
-            role = request.GET.get('role')
-            employee_id = request.GET.get('employee')
-            absences_only = request.GET.get('absences')  # Check if absences only is requested
+        events = []
+        
+        # Lade IMMER die Abwesenheiten
+        # Urlaub
+        vacations = Vacation.objects.filter(
+            start_date__lte=end_date.date(),
+            end_date__gte=start_date.date(),
+            status='APPROVED',
+            **employee_filter
+        ).select_related('employee')
+        
+        events.extend([{
+            'title': f"{v.employee.get_full_name()} - Urlaub",
+            'start': v.start_date.isoformat(),
+            'end': (v.end_date + timedelta(days=1)).isoformat(),
+            'className': 'vacation-event',
+            'type': 'vacation',
+            'allDay': True
+        } for v in vacations])
+        
+        # Zeitausgleich
+        time_comps = TimeCompensation.objects.filter(
+            date__lte=end_date.date(),
+            date__gte=start_date.date(),
+            status='APPROVED',
+            **employee_filter
+        ).select_related('employee')
+        
+        events.extend([{
+            'title': f"{tc.employee.get_full_name()} - Zeitausgleich",
+            'start': tc.date.isoformat(),
+            'end': (tc.date + timedelta(days=1)).isoformat(),
+            'className': 'time-comp-event',
+            'type': 'time_comp',
+            'allDay': True
+        } for tc in time_comps])
+        
+        # Krankenstände
+        sick_leaves = SickLeave.objects.filter(
+            start_date__lte=end_date.date(),
+            end_date__gte=start_date.date(),
+            **employee_filter
+        ).select_related('employee')
+        
+        events.extend([{
+            'title': f"{sl.employee.get_full_name()} - Krankenstand",
+            'start': sl.start_date.isoformat(),
+            'end': (sl.end_date + timedelta(days=1)).isoformat(),
+            'className': 'sick-leave-event',
+            'type': 'sick_leave',
+            'allDay': True
+        } for sl in sick_leaves])
 
-            # Parse dates
-            start_date = datetime.strptime(start[:10], '%Y-%m-%d').date() if start else None
-            end_date = datetime.strptime(end[:10], '%Y-%m-%d').date() if end else None
+        # Lade Arbeitsstunden nur wenn nicht nur Abwesenheiten angezeigt werden sollen
+        if not show_absences_only:
+            working_hours = WorkingHours.objects.filter(
+                date__range=(start_date.date(), end_date.date()),
+                **employee_filter
+            ).select_related('employee')
+            
+            events.extend([{
+                'id': f'work_{wh.id}',
+                'title': f"{wh.employee.get_full_name()}",
+                'start': f"{wh.date}T{wh.start_time}" if wh.start_time else wh.date.isoformat(),
+                'end': f"{wh.date}T{wh.end_time}" if wh.end_time else wh.date.isoformat(),
+                'className': 'working-hours-event',
+                'type': 'working_hours',
+                'allDay': not (wh.start_time and wh.end_time)
+            } for wh in working_hours])
 
-            # Base employee queryset
-            employees = CustomUser.objects.all()
-            if role:
-                employees = employees.filter(role=role)
-            elif not request.user.role == 'OWNER':
-                employees = employees.filter(id=request.user.id)
-            if employee_id:
-                employees = employees.filter(id=employee_id)
-
-            # Filter events
-            working_hours = WorkingHours.objects.filter(employee__in=employees)
-            vacations = Vacation.objects.filter(employee__in=employees, status='APPROVED')
-            time_comps = TimeCompensation.objects.filter(employee__in=employees, status='APPROVED')
-
-            if start_date:
-                working_hours = working_hours.filter(date__gte=start_date)
-                vacations = vacations.filter(end_date__gte=start_date)
-                time_comps = time_comps.filter(date__gte=start_date)
-            if end_date:
-                working_hours = working_hours.filter(date__lte=end_date)
-                vacations = vacations.filter(start_date__lte=end_date)
-                time_comps = time_comps.filter(date__lte=end_date)
-
-            events = []
-
-            # Only fetch absences if absences_only is set
-            if absences_only:
-                # Urlaub zu Events konvertieren
-                for vacation in vacations:
-                    event = {
-                        'id': f'vacation_{vacation.id}',
-                        'title': f'{vacation.employee.get_full_name()} - Urlaub',
-                        'start': vacation.start_date.isoformat(),
-                        'end': (vacation.end_date + timedelta(days=1)).isoformat(),
-                        'color': vacation.employee.color,
-                        'type': 'vacation',
-                        'allDay': True
-                    }
-                    events.append(event)
-
-                # Zeitausgleich zu Events konvertieren
-                for tc in time_comps:
-                    event = {
-                        'id': f'timecomp_{tc.id}',
-                        'title': f'{tc.employee.get_full_name()} - Zeitausgleich',
-                        'start': tc.date.isoformat(),
-                        'end': (tc.date + timedelta(days=1)).isoformat(),
-                        'color': tc.employee.color,
-                        'type': 'time_comp',
-                        'allDay': True
-                    }
-                    events.append(event)
-            else:
-                # Arbeitszeiten zu Events konvertieren
-                for wh in working_hours:
-                    # Berechne die Stunden
-                    start_datetime = datetime.combine(date.today(), wh.start_time)
-                    end_datetime = datetime.combine(date.today(), wh.end_time)
-                    duration = end_datetime - start_datetime
-                    hours = duration.total_seconds() / 3600  # Konvertiere zu Stunden
-
-                    # Ziehe die Pause ab
-                    if wh.break_duration:
-                        break_hours = wh.break_duration.total_seconds() / 3600
-                        hours -= break_hours
-                    event = {
-                        'id': f'work_{wh.id}',
-                        'title': f'{wh.employee.get_full_name()} ({hours:.1f}h)',
-                        'start': f'{wh.date}T{wh.start_time}',
-                        'end': f'{wh.date}T{wh.end_time}',
-                        'color': wh.employee.color,
-                        'type': 'working_hours',
-                        'allDay': False
-                    }
-                    events.append(event)
-
-                # Urlaub zu Events konvertieren
-                for vacation in vacations:
-                    event = {
-                        'id': f'vacation_{vacation.id}',
-                        'title': f'{vacation.employee.get_full_name()} - Urlaub',
-                        'start': vacation.start_date.isoformat(),
-                        'end': (vacation.end_date + timedelta(days=1)).isoformat(),
-                        'color': vacation.employee.color,
-                        'type': 'vacation',
-                        'allDay': True
-                    }
-                    events.append(event)
-
-                # Zeitausgleich zu Events konvertieren
-                for tc in time_comps:
-                    event = {
-                        'id': f'timecomp_{tc.id}',
-                        'title': f'{tc.employee.get_full_name()} - Zeitausgleich',
-                        'start': tc.date.isoformat(),
-                        'end': (tc.date + timedelta(days=1)).isoformat(),
-                        'color': tc.employee.color,
-                        'type': 'time_comp',
-                        'allDay': True
-                    }
-                    events.append(event)
+        return JsonResponse(events, safe=False)
 
 
-            return JsonResponse(events, safe=False)
-
-        except Exception as e:
-            logger.error(f"Calendar API Error: {str(e)}", exc_info=True)
-            return JsonResponse({
-                'error': str(e),
-                'events': []
-            }, status=500)
 
 class TimeCompensationListView(LoginRequiredMixin, ListView):
     model = TimeCompensation
@@ -2008,19 +1972,33 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
         end_date = parse_datetime(request.GET.get('end'))
         show_absences_only = request.GET.get('absences') == '1'
         
+        # Hole employee und role Filter
+        employee_id = request.GET.get('employee')
+        role = request.GET.get('role')
+        
+        # Basis-Filter für Mitarbeiter
+        employee_filter = {}
+        if employee_id:
+            employee_filter['employee_id'] = employee_id
+        if role:
+            employee_filter['employee__role'] = role
+
         if show_absences_only:
             # Nur Abwesenheiten zurückgeben
             events = []
             
             # Urlaub
             vacations = Vacation.objects.filter(
-                start_date__lte=end_date,
-                end_date__gte=start_date
-            )
+                start_date__lte=end_date.date(),
+                end_date__gte=start_date.date(),
+                status='APPROVED',
+                **employee_filter
+            ).select_related('employee')
+            
             events.extend([{
                 'title': f"{v.employee.get_full_name()} - Urlaub",
                 'start': v.start_date.isoformat(),
-                'end': v.end_date.isoformat(),
+                'end': (v.end_date + timedelta(days=1)).isoformat(),
                 'className': 'vacation-event',
                 'type': 'vacation',
                 'allDay': True
@@ -2028,27 +2006,32 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
             
             # Zeitausgleich
             time_comps = TimeCompensation.objects.filter(
-                start_date__lte=end_date,
-                end_date__gte=start_date
-            )
+                date__lte=end_date.date(),
+                date__gte=start_date.date(),
+                status='APPROVED',
+                **employee_filter
+            ).select_related('employee')
+            
             events.extend([{
                 'title': f"{tc.employee.get_full_name()} - Zeitausgleich",
-                'start': tc.start_date.isoformat(),
-                'end': tc.end_date.isoformat(),
+                'start': tc.date.isoformat(),
+                'end': (tc.date + timedelta(days=1)).isoformat(),
                 'className': 'time-comp-event',
                 'type': 'time_comp',
                 'allDay': True
             } for tc in time_comps])
             
-            # Krankenstand
+            # Krankenstand - Korrigierte Filterung
             sick_leaves = SickLeave.objects.filter(
-                start_date__lte=end_date,
-                end_date__gte=start_date
-            )
+                start_date__lte=end_date.date(),
+                end_date__gte=start_date.date(),
+                **employee_filter
+            ).select_related('employee')
+            
             events.extend([{
                 'title': f"{sl.employee.get_full_name()} - Krankenstand",
                 'start': sl.start_date.isoformat(),
-                'end': sl.end_date.isoformat(),
+                'end': (sl.end_date + timedelta(days=1)).isoformat(),
                 'className': 'sick-leave-event',
                 'type': 'sick_leave',
                 'allDay': True
