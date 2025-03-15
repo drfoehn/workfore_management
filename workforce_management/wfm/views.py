@@ -2211,7 +2211,7 @@ def api_therapist_booking_update(request):
 class AbsenceListView(LoginRequiredMixin, ListView):
     template_name = 'wfm/absence_list.html'
     model = SickLeave
-    context_object_name = 'sick_leaves'  # Dies ist wichtig!
+    context_object_name = 'sick_leaves'
     
     def get_queryset(self):
         # Verwende select_related wie in der SickLeaveManagementView
@@ -2224,12 +2224,21 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         user = self.request.user
         today = timezone.now().date()
 
+        # Hole die Urlaubsanträge und berechne die Stunden
+        vacations = Vacation.objects.filter(
+            employee=user
+        ).order_by('-start_date')
+        
+        # Berechne die Stunden für jeden Urlaub
+        for vacation in vacations:
+            vacation.hours = vacation.calculate_vacation_hours()
+
         # Urlaubsübersicht
         entitlement = VacationEntitlement.objects.filter(
             employee=user,
             year=today.year
         ).first()
-        
+
         if entitlement:
             # Genehmigte Urlaubsstunden
             approved_vacations = Vacation.objects.filter(
@@ -2253,16 +2262,42 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 for vacation in pending_vacations
             )
             
+            # Übertrag aus Vorjahr
+            last_year = today.year - 1
+            last_year_entitlement = VacationEntitlement.objects.filter(
+                employee=user,
+                year=last_year
+            ).first()
+            
+            last_year_remaining = Decimal('0')
+            if last_year_entitlement:
+                last_year_used = sum(
+                    vacation.calculate_vacation_hours()
+                    for vacation in Vacation.objects.filter(
+                        employee=user,
+                        start_date__year=last_year,
+                        status='APPROVED'
+                    )
+                )
+                last_year_remaining = max(
+                    last_year_entitlement.total_hours - last_year_used,
+                    Decimal('0')
+                )
+            
+            # Gesamtverfügbare Stunden
+            total_available = entitlement.total_hours + last_year_remaining
+            
             context['vacation_info'] = {
                 'year': today.year,
                 'entitlement': entitlement.total_hours,
+                'carried_over': last_year_remaining,
+                'total_available': total_available,
                 'approved_hours': approved_hours,
                 'pending_hours': pending_hours,
-                'remaining_hours': entitlement.total_hours - approved_hours
+                'remaining_hours': total_available - approved_hours
             }
 
-        # Hole andere Abwesenheiten
-        context['vacations'] = Vacation.objects.filter(employee=user).order_by('-start_date')
+        context['vacations'] = vacations
         context['time_comps'] = TimeCompensation.objects.filter(employee=user).order_by('-date')
         
         # Zeitausgleich-Info für Assistenten und Reinigungskräfte

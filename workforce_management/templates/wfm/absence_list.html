@@ -85,7 +85,7 @@
                         <div>
                             <strong>{{ vacation.start_date|date:"d.m.Y" }} - {{ vacation.end_date|date:"d.m.Y" }}</strong>
                             <br>
-                            <small class="text-muted">{{ vacation.approved_hours }} {% trans "Stunden" %}</small>
+                            <small class="text-muted">{{ vacation.hours|floatformat:1 }} {% trans "Stunden" %}</small>
                             {% if vacation.notes %}
                             <br>
                             <small class="text-muted">{{ vacation.notes }}</small>
@@ -125,6 +125,8 @@
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div>
                             <strong>{{ tc.date|date:"d.m.Y" }}</strong>
+                            <br>
+                            <small class="text-muted">{{ tc.hours|floatformat:1 }} {% trans "Stunden" %}</small>
                             {% if tc.notes %}
                             <br>
                             <small class="text-muted">{{ tc.notes }}</small>
