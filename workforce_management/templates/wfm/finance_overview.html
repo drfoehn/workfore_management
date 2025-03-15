@@ -53,7 +53,7 @@
         <div class="col-md-12">
             <div class="card mb-6">
                 <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">{% trans "Therapeuten-Einnahmen" %}</h5>
+                    <h5 class="mb-0">{% trans "Einnahmen" %}</h5>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -143,7 +143,7 @@
                 </div>
                 <div class="card-body">
                     <!-- Assistenten -->
-                    <h6>{% trans "Assistenten" %}</h6>
+                    <h4>{% trans "Assistenten" %}</h4>
                     <div class="table-responsive mb-4">
                         <table class="table table-striped">
                             <thead>
@@ -170,7 +170,7 @@
                     </div>
 
                     <!-- Reinigungskräfte -->
-                    <h6>{% trans "Reinigungskräfte" %}</h6>
+                    <h4>{% trans "Reinigungskräfte" %}</h4>
                     <div class="table-responsive mb-4">
                         <table class="table table-striped">
                             <thead>
@@ -197,13 +197,10 @@
                     </div>
 
                     <!-- Überstunden-Ausgaben -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">{% trans "Überstunden-Ausgaben" %}</h5>
-                        </div>
-                        <div class="card-body">
+                    <h4>{% trans "Überstunden-Ausgaben" %}</h4>
+                    
                             {% if overtime_expenses %}
-                            <div class="table-responsive">
+                            <div class="table-responsive mb-4">
                                 <table class="table table-striped">
                                     <thead>
                                         <tr>
@@ -235,8 +232,7 @@
                             {% else %}
                             <p class="text-muted mb-0">{% trans "Keine Überstunden im ausgewählten Zeitraum" %}</p>
                             {% endif %}
-                        </div>
-                    </div>
+                        
                 </div>
             </div>
         </div>
