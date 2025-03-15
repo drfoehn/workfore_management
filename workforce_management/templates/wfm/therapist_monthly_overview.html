@@ -104,13 +104,7 @@
                                     <td><strong>{{ stats.year_totals.total_actual|floatformat:1 }}</strong></td>
                                     <td><strong>{{ stats.year_totals.total_difference|floatformat:1 }}</strong></td>
                                     <td>
-                                        {% if stats.year_totals.total_difference > 0 %}
-                                            {% if stats.year_totals.pending_payment > 0 %}
-                                                <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
-                                            {% else %}
-                                                <span class="badge bg-success">{% trans "Bezahlt" %}</span>
-                                            {% endif %}
-                                        {% endif %}
+                                        
                                     </td>
                                     <td></td>
                                 </tr>

@@ -145,11 +145,13 @@
                     <!-- Assistenten -->
                     <h6>{% trans "Assistenten" %}</h6>
                     <div class="table-responsive mb-4">
-                        <table class="table table-sm">
+                        <table class="table table-striped">
                             <thead>
                                 <tr>
                                     <th>{% trans "Name" %}</th>
-                                    <th class="text-end">{% trans "Stunden" %}</th>
+                                    <th class="text-end">{% trans "Gesamt-Sollstunden" %}</th>
+                                    <th class="text-end">{% trans "Arbeitsstunden" %}</th>
+                                    <th class="text-end">{% trans "Abwesenheitsstunden" %}</th>
                                     <th class="text-end">{% trans "Betrag" %}</th>
                                 </tr>
                             </thead>
@@ -157,7 +159,9 @@
                                 {% for expense in assistant_expenses %}
                                 <tr>
                                     <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
-                                    <td class="text-end">{{ expense.regular_hours|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.total_soll|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.worked_hours|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.absence_hours|floatformat:1 }}h</td>
                                     <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
                                 </tr>
                                 {% endfor %}
@@ -168,11 +172,13 @@
                     <!-- Reinigungskräfte -->
                     <h6>{% trans "Reinigungskräfte" %}</h6>
                     <div class="table-responsive mb-4">
-                        <table class="table table-sm">
+                        <table class="table table-striped">
                             <thead>
                                 <tr>
                                     <th>{% trans "Name" %}</th>
-                                    <th class="text-end">{% trans "Stunden" %}</th>
+                                    <th class="text-end">{% trans "Gesamt-Sollstunden" %}</th>
+                                    <th class="text-end">{% trans "Arbeitsstunden" %}</th>
+                                    <th class="text-end">{% trans "Abwesenheitsstunden" %}</th>
                                     <th class="text-end">{% trans "Betrag" %}</th>
                                 </tr>
                             </thead>
@@ -180,7 +186,9 @@
                                 {% for expense in cleaning_expenses %}
                                 <tr>
                                     <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
-                                    <td class="text-end">{{ expense.regular_hours|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.total_soll|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.worked_hours|floatformat:1 }}h</td>
+                                    <td class="text-end">{{ expense.absence_hours|floatformat:1 }}h</td>
                                     <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
                                 </tr>
                                 {% endfor %}
@@ -188,58 +196,46 @@
                         </table>
                     </div>
 
-                    <!-- Überstunden -->
-                    <h6>{% trans "Überstunden" %}</h6>
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>{% trans "Name" %}</th>
-                                    <th>{% trans "Rolle" %}</th>
-                                    <th>{% trans "Überstunden" %}</th>
-                                    <th>{% trans "Betrag" %}</th>
-                                    <th>{% trans "Status" %}</th>
-                                    <th>{% trans "Bezahlt am" %}</th>
-                                    <th>{% trans "Aktionen" %}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for expense in expenses %}
-                                <tr>
-                                    <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
-                                    <td>{{ expense.employee__role }}</td>
-                                    <td class="text-end">{{ expense.hours|floatformat:1 }}h</td>
-                                    <td class="text-end">{{ expense.amount|floatformat:2 }}€</td>
-                                    <td>
-                                        {% if expense.overtime_paid %}
-                                            <span class="badge bg-success">{% trans "Bezahlt" %}</span>
-                                        {% else %}
-                                            <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if expense.overtime_paid_date %}
-                                            {{ expense.overtime_paid_date|date:"d.m.Y" }}
-                                        {% else %}
-                                            -
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-sm {% if expense.overtime_paid %}btn-outline-success{% else %}btn-success{% endif %} mark-overtime-paid-btn"
-                                                data-employee-id="{{ expense.employee_id }}"
-                                                data-month="{{ current_date.month }}"
-                                                data-year="{{ current_date.year }}">
-                                            {% if expense.overtime_paid %}
-                                                <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
-                                            {% else %}
-                                                <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
-                                            {% endif %}
-                                        </button>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                    <!-- Überstunden-Ausgaben -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">{% trans "Überstunden-Ausgaben" %}</h5>
+                        </div>
+                        <div class="card-body">
+                            {% if overtime_expenses %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>{% trans "Mitarbeiter" %}</th>
+                                            <th>{% trans "Position" %}</th>
+                                            <th>{% trans "Überstunden" %}</th>
+                                            <th>{% trans "Betrag" %}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for expense in overtime_expenses %}
+                                        <tr>
+                                            <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
+                                            <td>{{ expense.role_display }}</td>
+                                            <td>{{ expense.overtime_hours|floatformat:1 }} h</td>
+                                            <td>{{ expense.amount|floatformat:2 }} €</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-secondary">
+                                            <td colspan="2"><strong>{% trans "Gesamt" %}</strong></td>
+                                            <td><strong>{{ total_overtime_hours|floatformat:1 }} h</strong></td>
+                                            <td><strong>{{ total_overtime_amount|floatformat:2 }} €</strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted mb-0">{% trans "Keine Überstunden im ausgewählten Zeitraum" %}</p>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>

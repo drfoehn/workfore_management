@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, View, TemplateView
 from django.urls import reverse_lazy, reverse
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as gettext  # Umbenennen zu gettext statt _
 from .models import (
     WorkingHours, 
     Vacation, 
@@ -20,7 +20,7 @@ from .models import (
 )
 from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
-from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute, Coalesce, Concat
+from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute, Coalesce, Concat, ExtractWeekDay
 from datetime import date, datetime, timedelta, time
 import calendar
 from django.db import models
@@ -38,6 +38,8 @@ from dateutil.relativedelta import relativedelta
 from django.contrib import messages
 import traceback
 from django.views.decorators.http import require_http_methods
+from calendar import monthrange
+from datetime import datetime, date as datetime_date  # Umbenennen des date imports
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +121,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             employee__in=employees
         ).select_related('employee')
 
-        # Hier ist die Änderung: Hole nur die aktuellsten Templates pro Tag
+        # Hole nur die aktuellsten Templates pro Tag
         schedules = []
         for employee in employees:
             for day in workdays:
@@ -501,7 +503,7 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             if hours_for_timecomp > available_hours:
                 return JsonResponse({
                     'success': False,
-                    'error': _('Nicht genügend Überstunden verfügbar')
+                    'error': gettext('Nicht genügend Überstunden verfügbar')
                 })
                 
             # Addiere die neuen Stunden
@@ -856,7 +858,7 @@ def api_vacation_request(request):
         
         if not entitlement:
             return JsonResponse({
-                'error': _('Kein Urlaubsanspruch für dieses Jahr')
+                'error': gettext('Kein Urlaubsanspruch für dieses Jahr')
             }, status=400)
             
         # Berechne bereits verwendete Stunden
@@ -873,7 +875,7 @@ def api_vacation_request(request):
         
         if needed_hours > remaining_hours:
             return JsonResponse({
-                'error': _('Nicht genügend Urlaubsstunden verfügbar')
+                'error': gettext('Nicht genügend Urlaubsstunden verfügbar')
             }, status=400)
             
         # Speichere den Urlaubsantrag
@@ -1403,16 +1405,16 @@ def delete_working_hours(request, id):
             else:
                 return JsonResponse({
                     'success': False,
-                    'error': _('Keine Berechtigung')
+                    'error': gettext('Keine Berechtigung')
                 }, status=403)
         except WorkingHours.DoesNotExist:
             return JsonResponse({
                 'success': False,
-                'error': _('Arbeitszeit nicht gefunden')
+                'error': gettext('Arbeitszeit nicht gefunden')
             }, status=404)
     return JsonResponse({
         'success': False,
-        'error': _('Ungültige Anfrage')
+        'error': gettext('Ungültige Anfrage')
     }, status=400)
 
 @login_required
@@ -1939,7 +1941,7 @@ def api_sick_leave(request):
             if not all(field in data and data[field] for field in required_fields):
                 return JsonResponse({
                     'success': False,
-                    'error': _('Bitte Start- und Enddatum angeben')
+                    'error': gettext('Bitte Start- und Enddatum angeben')
                 })
 
             # Parse dates
@@ -1965,7 +1967,7 @@ def api_sick_leave(request):
     
     return JsonResponse({
         'success': False,
-        'error': _('Ungültige Anfrage')
+        'error': gettext('Ungültige Anfrage')
     })
 
 class AssistantCalendarView(LoginRequiredMixin, TemplateView):
@@ -2579,10 +2581,10 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
                 
             if action == 'approve':
                 absence.status = 'APPROVED'
-                messages.success(request, _('Antrag wurde genehmigt'))
+                messages.success(request, gettext('Antrag wurde genehmigt'))
             else:
                 absence.status = 'REJECTED'
-                messages.success(request, _('Antrag wurde abgelehnt'))
+                messages.success(request, gettext('Antrag wurde abgelehnt'))
                 
             absence.save()
             
@@ -2620,7 +2622,7 @@ def api_calculate_vacation_hours(request):
         
         if not entitlement:
             return JsonResponse({
-                'error': _('Kein Urlaubsanspruch für dieses Jahr')
+                'error': gettext('Kein Urlaubsanspruch für dieses Jahr')
             }, status=400)
             
         # Berechne bereits verwendete Stunden
@@ -2693,7 +2695,7 @@ def upload_document(request):
         form = UserDocumentForm(request.POST, request.FILES)
         if form.is_valid():
             document = form.save()
-            messages.success(request, _('Dokument erfolgreich hochgeladen.'))
+            messages.success(request, gettext('Dokument erfolgreich hochgeladen.'))
             return redirect('wfm:user-documents')
     return redirect('wfm:user-documents')
 
@@ -2737,7 +2739,7 @@ def delete_document(request, pk):
     if request.method == 'POST':
         document = get_object_or_404(UserDocument, pk=pk)
         document.delete()
-        messages.success(request, _('Dokument wurde erfolgreich gelöscht.'))
+        messages.success(request, gettext('Dokument wurde erfolgreich gelöscht.'))
         
     return redirect('wfm:user-documents')
 
@@ -3001,10 +3003,10 @@ class EmployeeListView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
 @login_required
 def api_therapist_booking_mark_as_paid(request):
     if request.user.role != 'OWNER':
-        return JsonResponse({'success': False, 'error': _('Keine Berechtigung')})
+        return JsonResponse({'success': False, 'error': gettext('Keine Berechtigung')})
     
     if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': _('Ungültige Anfrage')})
+        return JsonResponse({'success': False, 'error': gettext('Ungültige Anfrage')})
     
     try:
         data = json.loads(request.body)
@@ -3036,9 +3038,7 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             year = int(year)
 
         # Create current_date for navigation
-        current_date = date(year, month, 1)
-
-        print(f"\nDEBUG: Berechne für {month}/{year}")
+        current_date = datetime_date(year, month, 1)
 
         # 1. Einnahmen von Therapeuten
         therapist_income = TherapistBooking.objects.filter(
@@ -3071,15 +3071,6 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             )
         ).order_by('therapist__first_name', 'therapist__last_name')
 
-        # Debug-Ausgaben für Therapeuten-Daten
-        print("\nDEBUG: Therapist Income Query:")
-        for booking in therapist_income:
-            print(f"""
-            Therapeut: {booking['therapist_name']}
-            ID: {booking['therapist_id']}
-            Status: {booking['therapist_extra_hours_payment_status']}
-            Datum: {booking['therapist_extra_hours_payment_date']}
-            ---""")
 
         # Gruppiere die Ergebnisse nach Therapeut
         grouped_income = {}
@@ -3099,82 +3090,82 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                     'total': booking['room_cost'] + booking['extra_cost']
                 }
 
-        print("\nDEBUG: Grouped Income:")
-        for therapist_id, data in grouped_income.items():
-            print(f"Therapeut ID: {therapist_id}")
-            print(f"Name: {data['therapist_name']}")
-            print(f"Scheduled: {data['scheduled_hours']}")
-            print(f"Difference: {data['difference_hours']}")
-            print(f"Room Cost: {data['room_cost']}")
-            print(f"Extra Cost: {data['extra_cost']}")
-            print(f"Payment Status: {data['therapist_extra_hours_payment_status']}")
-            print(f"Total: {data['total']}")
-            print("---")
 
         context['grouped_income'] = grouped_income.values()
 
         # 2. Ausgaben für Mitarbeiter
-        # a) Assistenten
-        assistant_hours = WorkingHours.objects.filter(
-            date__year=year,
-            date__month=month,
-            employee__role='ASSISTANT'
-        )
-        print(f"\nGefundene Assistenten-Stunden: {assistant_hours.count()}")
+        # Hole die Daten aus der WorkingHoursListView
+        working_hours_view = WorkingHoursListView()
+        working_hours_view.request = self.request
+        working_hours_view.kwargs = {'year': year, 'month': month}
+        working_hours_view.object_list = working_hours_view.get_queryset()  # Setze object_list
+        working_hours_context = working_hours_view.get_context_data()
 
-        assistant_expenses = assistant_hours.select_related('employee').values(
-            'employee__first_name',
-            'employee__last_name'
-        ).annotate(
-            regular_hours=Coalesce(Sum('ist_hours'), Value(0, output_field=DecimalField())),
-            amount=ExpressionWrapper(
-                Sum(F('ist_hours') * F('employee__hourly_rate')),
-                output_field=DecimalField(max_digits=10, decimal_places=2)
-            )
-        ).order_by('employee__first_name', 'employee__last_name')
+        # Extrahiere die relevanten Daten für Assistenten und Reinigungskräfte
+        assistant_expenses = {}  # Verwende ein Dict statt Liste für eindeutige Einträge
+        cleaning_expenses = {}   # Verwende ein Dict statt Liste für eindeutige Einträge
 
-        print("\nAssistant Expenses:")
-        for a in assistant_expenses:
-            print(f"{a['employee__first_name']} {a['employee__last_name']}: {a['regular_hours']}h = {a['amount']}€")
+        for date_data in working_hours_context['dates']:
+            if date_data.get('employee'):
+                employee = date_data['employee']
+                if employee.role == 'ASSISTANT':
+                    if employee.id not in assistant_expenses:
+                        assistant_expenses[employee.id] = {
+                            'employee__id': employee.id,
+                            'employee__first_name': employee.first_name,
+                            'employee__last_name': employee.last_name,
+                            'employee__hourly_rate': employee.hourly_rate,
+                            'total_soll': Decimal('0'),
+                            'worked_hours': Decimal('0'),
+                            'absence_hours': Decimal('0')
+                        }
+                    # Addiere die Stunden
+                    assistant_expenses[employee.id]['total_soll'] += Decimal(str(date_data.get('soll_hours', 0)))
+                    assistant_expenses[employee.id]['worked_hours'] += Decimal(str(date_data.get('ist_hours', 0)))
+                    
+                elif employee.role == 'CLEANING':
+                    if employee.id not in cleaning_expenses:
+                        cleaning_expenses[employee.id] = {
+                            'employee__id': employee.id,
+                            'employee__first_name': employee.first_name,
+                            'employee__last_name': employee.last_name,
+                            'employee__hourly_rate': employee.hourly_rate,
+                            'total_soll': Decimal('0'),
+                            'worked_hours': Decimal('0'),
+                            'absence_hours': Decimal('0')
+                        }
+                    # Addiere die Stunden
+                    cleaning_expenses[employee.id]['total_soll'] += Decimal(str(date_data.get('soll_hours', 0)))
+                    cleaning_expenses[employee.id]['worked_hours'] += Decimal(str(date_data.get('ist_hours', 0)))
 
-        # b) Reinigungskräfte
-        cleaning_hours = WorkingHours.objects.filter(
-            date__year=year,
-            date__month=month,
-            employee__role='CLEANING'
-        )
-        print(f"\nGefundene Reinigungs-Stunden: {cleaning_hours.count()}")
+        # Berechne die finalen Werte für jeden Mitarbeiter
+        for expense in assistant_expenses.values():
+            expense['absence_hours'] = expense['total_soll'] - expense['worked_hours']
+            expense['amount'] = expense['total_soll'] * expense['employee__hourly_rate']
 
-        cleaning_expenses = cleaning_hours.select_related('employee').values(
-            'employee__first_name',
-            'employee__last_name'
-        ).annotate(
-            regular_hours=Coalesce(Sum('ist_hours'), Value(0, output_field=DecimalField())),
-            amount=ExpressionWrapper(
-                Sum(F('ist_hours') * F('employee__hourly_rate')),
-                output_field=DecimalField(max_digits=10, decimal_places=2)
-            )
-        ).order_by('employee__first_name', 'employee__last_name')
+        for expense in cleaning_expenses.values():
+            expense['absence_hours'] = expense['total_soll'] - expense['worked_hours']
+            expense['amount'] = expense['total_soll'] * expense['employee__hourly_rate']
 
         # c) Überstunden-Ausgaben
-        overtime_expenses = WorkingHours.objects.filter(
-            date__year=year,
-            date__month=month,
-            ist_hours__gt=F('soll_hours')
+        overtime_expenses = OvertimeAccount.objects.filter(
+            year=year,
+            month=month,
+            overtime_paid=False,  # Nur unbezahlte Überstunden
+            hours_for_payment__gt=0  # Nur Einträge mit zu bezahlenden Stunden
         ).select_related('employee').values(
             'employee__first_name',
             'employee__last_name',
-            'employee__role'
+            'employee__role',
+            'employee__hourly_rate'
         ).annotate(
-            hours=ExpressionWrapper(
-                Sum(F('ist_hours') - F('soll_hours')),
-                output_field=DecimalField()
-            ),
+            overtime_hours=Sum('hours_for_payment'),
             amount=ExpressionWrapper(
-                Sum((F('ist_hours') - F('soll_hours')) * F('employee__hourly_rate')),
+                Sum('hours_for_payment') * F('employee__hourly_rate'),
                 output_field=DecimalField(max_digits=10, decimal_places=2)
             )
         ).order_by('employee__first_name', 'employee__last_name')
+
 
         # Berechne Summen
         total_income = sum(
@@ -3182,18 +3173,36 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             for income in grouped_income.values()
         )
 
-        # Berechne die Gesamtausgaben
-        total_expenses = (
-            sum(a['amount'] for a in assistant_expenses) +  # Summe aller Assistenten
-            sum(c['amount'] for c in cleaning_expenses) +   # Summe aller Reinigungskräfte
-            sum(o['amount'] for o in overtime_expenses)     # Summe aller Überstunden
-        )
+        
+        # Berechne die Summen für Überstunden
+        total_overtime_hours = overtime_expenses.aggregate(
+            total=Coalesce(Sum('overtime_hours'), Decimal('0.00'))
+        )['total']
+        total_overtime_amount = overtime_expenses.aggregate(
+            total=Coalesce(Sum('amount'), Decimal('0.00'))
+        )['total']
 
+        # Füge die Rollen-Anzeige und Summen zum Context hinzu
+        for expense in overtime_expenses:
+            expense['role_display'] = {
+                'OWNER': gettext('Inhaber'),
+                'THERAPIST': gettext('Therapeut'),
+                'ASSISTANT': gettext('Assistent'),
+                'CLEANING': gettext('Reinigungskraft')
+            }.get(expense['employee__role'], expense['employee__role'])
+
+
+        # Berechne die Summen für die Ausgaben
+        total_expenses = sum(
+            a['amount'] for a in assistant_expenses.values()) + sum(c['amount'] for c in cleaning_expenses.values()) + total_overtime_amount
+        
+        
         context.update({
             'grouped_income': grouped_income.values(),
-            'assistant_expenses': assistant_expenses,
-            'cleaning_expenses': cleaning_expenses,
+            'assistant_expenses': assistant_expenses.values(),
+            'cleaning_expenses': cleaning_expenses.values(),
             'overtime_expenses': overtime_expenses,
+            'total_overtime_hours': total_overtime_hours,
             'total_income': total_income,
             'total_expenses': total_expenses,
             'current_date': current_date,
@@ -3207,10 +3216,10 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
 @login_required
 def api_mark_extra_hours_as_paid(request):
     if request.user.role != 'OWNER':
-        return JsonResponse({'success': False, 'error': _('Keine Berechtigung')})
+        return JsonResponse({'success': False, 'error': gettext('Keine Berechtigung')})
     
     if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': _('Ungültige Anfrage')})
+        return JsonResponse({'success': False, 'error': gettext('Ungültige Anfrage')})
     
     try:
         data = json.loads(request.body)
@@ -3223,7 +3232,7 @@ def api_mark_extra_hours_as_paid(request):
             therapist_id=therapist_id,
             date__year=year,
             date__month=month,
-            actual_hours__gt=F('booked_hours'),
+            actual_hours__gt=F('hours'),
             therapist_extra_hours_payment_status='PENDING'
         ).update(
             therapist_extra_hours_payment_status='PAID',
@@ -3250,7 +3259,7 @@ def api_working_hours_create(request):
             if existing_entry:
                 return JsonResponse({
                     'success': False,
-                    'error': _('Für diesen Tag wurde bereits ein Eintrag erstellt')
+                    'error': gettext('Für diesen Tag wurde bereits ein Eintrag erstellt')
                 }, status=400)
 
             # Hole den Arbeitsplan für diesen Tag
@@ -3413,11 +3422,11 @@ def api_mark_overtime_as_paid(request):
     print("=== Überstunden API aufgerufen ===")
     if request.user.role != 'OWNER':
         print(f"Keine Berechtigung für User {request.user}")
-        return JsonResponse({'success': False, 'error': _('Keine Berechtigung')})
+        return JsonResponse({'success': False, 'error': gettext('Keine Berechtigung')})
     
     if request.method != 'POST':
         print(f"Falsche HTTP Methode: {request.method}")
-        return JsonResponse({'success': False, 'error': _('Ungültige Anfrage')})
+        return JsonResponse({'success': False, 'error': gettext('Ungültige Anfrage')})
     
     try:
         data = json.loads(request.body)
