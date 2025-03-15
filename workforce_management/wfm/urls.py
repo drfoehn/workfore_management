@@ -39,6 +39,7 @@ urlpatterns = [
     path('api/get-scheduled-hours/', views.api_get_scheduled_hours, name='api-get-scheduled-hours'),
     path('api/mark-therapist-extra-hours-as-paid/', views.api_mark_therapist_extra_hours_as_paid, name='api-mark-therapist-extra-hours-as-paid'),
     path('api/mark-overtime-as-paid/',  views.api_mark_overtime_as_paid,  name='api-mark-overtime-as-paid'),
+    path('api/mark-salary-as-paid/', views.api_mark_salary_as_paid, name='api-mark-salary-as-paid'),
     
     # Calendars
     path('assistant-calendar/', views.AssistantCalendarView.as_view(), name='assistant-calendar'),

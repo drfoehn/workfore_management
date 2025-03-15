@@ -216,6 +216,10 @@ class WorkingHours(models.Model):
     time_comp = models.ForeignKey('TimeCompensation', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
     sick_leave = models.ForeignKey('SickLeave', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
 
+    # Neues Feld
+    is_paid = models.BooleanField(default=False)
+    paid_date = models.DateField(null=True, blank=True)
+
     def save(self, *args, **kwargs):
         # Berechne Ist-Stunden
         if self.start_time and self.end_time:
@@ -223,12 +227,7 @@ class WorkingHours(models.Model):
             end = datetime.combine(self.date, self.end_time)
             duration = end - start
             
-            # Debug-Ausgaben
-            print(f"\nDebug WorkingHours save:")
-            print(f"Start: {start}")
-            print(f"End: {end}")
-            print(f"Raw duration: {duration}")
-            print(f"Duration in hours: {duration.total_seconds() / 3600}")
+
             
             if self.break_duration:
                 duration -= self.break_duration

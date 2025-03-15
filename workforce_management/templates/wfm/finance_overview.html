@@ -166,6 +166,9 @@
                                     <th>{% trans "Arbeitsstunden" %}</th>
                                     <th>{% trans "Abwesenheitsstunden" %}</th>
                                     <th>{% trans "Betrag" %}</th>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Bezahlt am" %}</th>
+                                    <th>{% trans "Aktionen" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -176,6 +179,33 @@
                                     <td>{{ expense.worked_hours|floatformat:1 }}h</td>
                                     <td>{{ expense.absence_hours|floatformat:1 }}h</td>
                                     <td>{{ expense.amount|floatformat:2 }}€</td>
+                                    <td>
+                                        {% if expense.is_paid %}
+                                            <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if expense.paid_date %}
+                                            {{ expense.paid_date|date:"d.m.Y" }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button type="button"
+                                                class="btn btn-sm {% if expense.is_paid %}btn-outline-success{% else %}btn-success{% endif %} mark-salary-paid-btn"
+                                                data-employee-id="{{ expense.employee__id }}"
+                                                data-month="{{ current_date.month }}"
+                                                data-year="{{ current_date.year }}">
+                                            {% if expense.is_paid %}
+                                                <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
+                                            {% else %}
+                                                <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
+                                            {% endif %}
+                                        </button>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -415,6 +445,51 @@ $(document).ready(function() {
                 }
             },
             error: function() {
+                alert('{% trans "Ein Fehler ist aufgetreten" %}');
+            }
+        });
+    });
+
+    // Gehalts-Handler
+    $(document).on('click', '.mark-salary-paid-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const $btn = $(this);
+        const employeeId = $btn.data('employee-id');
+        const month = $btn.data('month');
+        const year = $btn.data('year');
+        const isPaid = $btn.hasClass('btn-outline-success');
+        
+        console.log('Salary button clicked:', {
+            employeeId: employeeId,
+            month: month,
+            year: year,
+            isPaid: isPaid
+        });
+        
+        $.ajax({
+            url: '{% url "wfm:api-mark-salary-as-paid" %}',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                employee_id: employeeId,
+                month: month,
+                year: year,
+                set_paid: !isPaid
+            }),
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('{% trans "Ein Fehler ist aufgetreten" %}: ' + response.error);
+                }
+            },
+            error: function(xhr) {
+                console.error('Error:', xhr);
                 alert('{% trans "Ein Fehler ist aufgetreten" %}');
             }
         });

@@ -3128,6 +3128,23 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                     assistant_expenses[employee.id]['total_soll'] += Decimal(str(date_data.get('soll_hours', 0)))
                     assistant_expenses[employee.id]['worked_hours'] += Decimal(str(date_data.get('ist_hours', 0)))
                     
+                    # In der FinanceOverviewView, bei der Berechnung der assistant_expenses und cleaning_expenses
+                    working_hours = WorkingHours.objects.filter(
+                        employee_id=employee.id,
+                        date__year=year,
+                        date__month=month
+                    ).values(
+                        'is_paid',
+                        'paid_date'
+                    ).first()
+
+                    if working_hours:
+                        assistant_expenses[employee.id]['is_paid'] = working_hours['is_paid']
+                        assistant_expenses[employee.id]['paid_date'] = working_hours['paid_date']
+                    else:
+                        assistant_expenses[employee.id]['is_paid'] = False
+                        assistant_expenses[employee.id]['paid_date'] = None
+                    
                 elif employee.role == 'CLEANING':
                     if employee.id not in cleaning_expenses:
                         cleaning_expenses[employee.id] = {
@@ -3495,6 +3512,49 @@ def api_mark_overtime_as_paid(request):
         })
     except Exception as e:
         logger.error(f"Fehler beim Markieren der Überstunden: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@login_required
+def api_mark_salary_as_paid(request):
+    """API-Endpoint zum Markieren des Monatsgehalts als bezahlt"""
+    if request.user.role != 'OWNER':
+        return JsonResponse({'success': False, 'error': gettext('Keine Berechtigung')})
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': gettext('Ungültige Anfrage')})
+    
+    try:
+        data = json.loads(request.body)
+        employee_id = data.get('employee_id')
+        month = data.get('month')
+        year = data.get('year')
+        set_paid = data.get('set_paid', True)
+        
+        # Aktualisiere alle Arbeitsstunden-Einträge für diesen Monat
+        working_hours = WorkingHours.objects.filter(
+            employee_id=employee_id,
+            date__year=year,
+            date__month=month
+        )
+        
+        if not working_hours.exists():
+            return JsonResponse({
+                'success': False,
+                'error': gettext('Keine Arbeitsstunden gefunden')
+            })
+        
+        updated_count = working_hours.update(
+            is_paid=set_paid,
+            paid_date=timezone.now().date() if set_paid else None
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'updated': updated_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Markieren des Gehalts: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)})
 
 
