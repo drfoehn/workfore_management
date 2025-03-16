@@ -42,11 +42,11 @@
                             <td>
                                 {% if tc.status == 'REQUESTED' %}
                                 <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-success"
+                                    <button type="button" class="btn btn-sm bg-pistachio"
                                             onclick="approveTimeComp('{{ tc.id }}')">
                                         {% trans "Genehmigen" %}
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-danger"
+                                    <button type="button" class="btn btn-sm bg-red-salsa"
                                             onclick="rejectTimeComp('{{ tc.id }}')">
                                         {% trans "Ablehnen" %}
                                     </button>

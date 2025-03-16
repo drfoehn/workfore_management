@@ -541,7 +541,7 @@ class TherapistBooking(models.Model):
         verbose_name=_('Stundendifferenz'),
         help_text=_('Differenz zwischen geplanten und tatsächlichen Stunden')
     )
-    therapist_extra_hours_payment_status = models.CharField(  # Neues Feld nur für Mehrstunden
+    therapist_extra_hours_payment_status = models.CharField(
         max_length=10,
         choices=PAYMENT_STATUS_CHOICES,
         default='PENDING',
@@ -656,7 +656,7 @@ class TherapistScheduleTemplate(models.Model):
                         hours=hours,
                         actual_hours=hours,  # Initial gleich den gebuchten Stunden
                         difference_hours=0,
-                        extra_hours_payment_status='PENDING'
+                        therapist_extra_hours_payment_status='PENDING'
                     )
             
             current_date += timedelta(days=1)

@@ -1,6 +1,6 @@
 {% load i18n %}
 {% load static %}
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+<nav class="navbar navbar-expand-lg navbar-dark bg-pistachio">
     <div class="container-fluid">
         <a class="navbar-brand" href="{% url 'wfm:dashboard' %}"><img src="{% static 'img/Logo.png' %}" alt="Praxis Moos60" style="width: 50px;"></a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -11,7 +11,7 @@
                 <ul class="navbar-nav me-auto">
                     
                     <li class="nav-item">
-                        <a class="nav-link" 
+                        <a class="nav-link fs-5" 
                            href="{% url 'wfm:dashboard' %}">
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
@@ -28,16 +28,12 @@
                 <!-- Benutzer-Menü (rechts) -->
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle fs-5" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle"></i> {{ user.get_full_name|default:user.username }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                         
-                            <li>
-                                <a class="dropdown-item" href="{% url 'wfm:user-documents' %}">
-                                    <i class="bi bi-file-earmark-text"></i> {% trans "Dokumente" %}
-                                </a>
-                            </li>
+                            
                             <li>
                                 <form method="post" action="{% url 'wfm:logout' %}" class="dropdown-item">
                                     {% csrf_token %}

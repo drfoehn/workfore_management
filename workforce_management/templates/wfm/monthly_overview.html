@@ -18,7 +18,7 @@
             <div class="col text-end">
                 <span class="badge bg-light text-dark">
                     {% trans "Urlaub" %}: {{ vacation_days_remaining }}/{{ vacation_days_total }} {% trans "Tage" %}
-                    <button class="btn btn-sm btn-success ms-2" onclick="openVacationModal()">
+                    <button class="btn btn-sm bg-pistachio ms-2" onclick="openVacationModal()">
                         <i class="fas fa-plus"></i>
                     </button>
                 </span>
@@ -220,7 +220,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn bg-queen-blue" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
                 <button type="button" class="btn btn-primary" onclick="submitTimeEntry()">{% trans "Speichern" %}</button>
             </div>
         </div>
@@ -258,8 +258,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
-                <button type="button" class="btn btn-success" onclick="submitVacation()">{% trans "Beantragen" %}</button>
+                <button type="button" class="btn bg-queen-blue" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn bg-pistachio" onclick="submitVacation()">{% trans "Beantragen" %}</button>
             </div>
         </div>
     </div>
@@ -295,7 +295,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="button" class="btn bg-queen-blue" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
                 <button type="button" class="btn btn-info" onclick="submitTimeComp()">{% trans "Beantragen" %}</button>
             </div>
         </div>

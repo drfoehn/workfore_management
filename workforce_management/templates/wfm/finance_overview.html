@@ -112,7 +112,7 @@
                                     <td>
                                         {% if income.difference_hours > 0 %}
                                             <button type="button"
-                                                    class="btn btn-sm {% if income.therapist_extra_hours_payment_status == 'PAID' %}btn-outline-success{% else %}btn-success{% endif %} mark-therapist-paid-btn" 
+                                                    class="btn btn-sm {% if income.therapist_extra_hours_payment_status == 'PAID' %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-therapist-paid-btn" 
                                                     data-therapist-id="{{ income.therapist_id }}"
                                                     data-month="{{ current_date.month }}"
                                                     data-year="{{ current_date.year }}">
@@ -195,7 +195,7 @@
                                     </td>
                                     <td>
                                         <button type="button"
-                                                class="btn btn-sm {% if expense.is_paid %}btn-outline-success{% else %}btn-success{% endif %} mark-salary-paid-btn"
+                                                class="btn btn-sm {% if expense.is_paid %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-salary-paid-btn"
                                                 data-employee-id="{{ expense.employee__id }}"
                                                 data-month="{{ current_date.month }}"
                                                 data-year="{{ current_date.year }}">
@@ -296,7 +296,7 @@
                                             </td>
                                             <td>
                                                 <button type="button"
-                                                        class="btn btn-sm {% if expense.overtime_paid %}btn-outline-success{% else %}btn-success{% endif %} mark-overtime-paid-btn"
+                                                        class="btn btn-sm {% if expense.overtime_paid %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-overtime-paid-btn"
                                                         data-employee-id="{{ expense.employee__id }}"
                                                         data-month="{{ current_date.month }}"
                                                         data-year="{{ current_date.year }}">
@@ -494,6 +494,8 @@ $(document).ready(function() {
             }
         });
     });
+
+    $('.datepicker').datepicker();  // Alle Defaults werden automatisch angewendet
 });
 
 // Direkter Test ob Script ausgeführt wird

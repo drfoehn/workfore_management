@@ -64,11 +64,11 @@
                                                 <td>{{ vacation.start_date }} - {{ vacation.end_date }}</td>
                                                 <td>{{ vacation.days }}</td>
                                                 <td>
-                                                    <button class="btn btn-sm btn-success" 
+                                                    <button class="btn btn-sm bg-pistachio" 
                                                             onclick="approveVacation({{ vacation.id }})">
                                                         <i class="bi bi-check"></i>
                                                     </button>
-                                                    <button class="btn btn-sm btn-danger"
+                                                    <button class="btn btn-sm bg-red-salsa"
                                                             onclick="rejectVacation({{ vacation.id }})">
                                                         <i class="bi bi-x"></i>
                                                     </button>
@@ -108,11 +108,11 @@
                                                 <td>{{ tc.date }}</td>
                                                 <td>{{ tc.hours }}</td>
                                                 <td>
-                                                    <button class="btn btn-sm btn-success"
+                                                    <button class="btn btn-sm bg-pistachio"
                                                             onclick="approveTimeComp({{ tc.id }})">
                                                         <i class="bi bi-check"></i>
                                                     </button>
-                                                    <button class="btn btn-sm btn-danger"
+                                                    <button class="btn btn-sm bg-red-salsa"
                                                             onclick="rejectTimeComp({{ tc.id }})">
                                                         <i class="bi bi-x"></i>
                                                     </button>

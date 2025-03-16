@@ -29,12 +29,12 @@
   border-color: var(--zomp);
 }
 
-.btn-success {
+.bg-pistachio {
   background-color: var(--bs-success);
   border-color: var(--bs-success);
 }
 
-.btn-success:hover {
+.bg-pistachio:hover {
   background-color: var(--zomp);
   border-color: var(--zomp);
 }
@@ -198,15 +198,25 @@ a:hover {
 
 .bg-pistachio {
   background-color: var(--pistachio) !important;
+  color: white !important;
 }
 
 .bg-zomp {
   background-color: var(--zomp) !important;
+  color: white !important;
 }
 
 .bg-queen-blue {
   background-color: var(--queen-blue) !important;
+  color: white !important;
 }
+
+.bg-red-salsa {
+  background-color: var(--red-salsa) !important;
+  color: white !important;
+}
+
+
 
 /* Focus States */
 .btn:focus, 
@@ -214,7 +224,7 @@ a:hover {
   box-shadow: 0 0 0 0.25rem rgba(87, 117, 144, 0.25);
 }
 
-.btn-success:focus {
+.bg-pistachio:focus {
   box-shadow: 0 0 0 0.25rem rgba(144, 190, 109, 0.25);
 }
 
@@ -225,8 +235,8 @@ a:hover {
   border-color: var(--zomp);
 }
 
-.btn-success:active,
-.btn-success.active {
+.bg-pistachio:active,
+.bg-pistachio.active {
   background-color: var(--pistachio);
   border-color: var(--pistachio);
 }
@@ -238,7 +248,7 @@ a:hover {
   opacity: 0.65;
 }
 
-.btn-success:disabled {
+.bg-pistachio:disabled {
   background-color: var(--bs-success);
   border-color: var(--bs-success);
   opacity: 0.65;
