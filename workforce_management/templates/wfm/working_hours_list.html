@@ -60,64 +60,20 @@
         </div>
     </div>
 
-    {% if show_request_buttons %}
-    <!-- Status-Anzeige für laufende Anträge/Krankmeldungen -->
-    <div class="row g-4 mb-4">
-        {% if pending_vacations %}
-        <div class="col-md-4">
-            <div class="alert alert-info">
-                <h6>{% trans "Offene Urlaubsanträge" %}</h6>
-                <ul class="list-unstyled mb-0">
-                    {% for vacation in pending_vacations %}
-                    <li>{{ vacation.start_date|date:"d.m.Y" }} - {{ vacation.end_date|date:"d.m.Y" }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if pending_time_comps %}
-        <div class="col-md-4">
-            <div class="alert alert-warning">
-                <h6>{% trans "Offene Zeitausgleichsanträge" %}</h6>
-                <ul class="list-unstyled mb-0">
-                    {% for tc in pending_time_comps %}
-                    <li>{{ tc.date|date:"d.m.Y" }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if active_sick_leaves %}
-        <div class="col-md-4">
-            <div class="alert alert-danger">
-                <h6>{% trans "Aktuelle Krankmeldungen" %}</h6>
-                <ul class="list-unstyled mb-0">
-                    {% for sl in active_sick_leaves %}
-                    <li>{{ sl.start_date|date:"d.m.Y" }} - {{ sl.end_date|date:"d.m.Y" }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-    {% endif %}
-
+    <!-- Nach der Navigationsleiste, vor der Haupttabelle -->
+    {% comment %} {% if current_period %} {% endcomment %}
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
                 <h2 class="mb-0">{% trans "Arbeitszeiten" %}</h2>
                 <div class="btn-group">
-                    <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ prev_year }}&month={{ prev_month }}" 
-                       class="btn btn-outline-primary">
+                    <a href="?date={{ prev_week }}" class="btn bg-queen-blue">
                         <i class="bi bi-chevron-left"></i>
                     </a>
-                    <button class="btn btn-outline-primary" disabled>
-                        {{ month_name }}
+                    <button class="btn bg-queen-blue" disabled>
+                        {% trans "KW" %} {{ current_week }}/{{ current_year }}
                     </button>
-                    <a href="?{% if selected_employee %}employee={{ selected_employee.id }}&{% endif %}{% if selected_role %}role={{ selected_role }}&{% endif %}year={{ next_year }}&month={{ next_month }}" 
-                       class="btn btn-outline-primary">
+                    <a href="?date={{ next_week }}" class="btn bg-queen-blue">
                         <i class="bi bi-chevron-right"></i>
                     </a>
                 </div>
@@ -188,170 +144,105 @@
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle">
-                    <thead class="table-light">
+                <table class="table table-hover">
+                    <thead>
                         <tr>
-                            <th class="text-nowrap">{% trans "Datum" %}</th>
-                            {% if user.role == 'OWNER' %}
-                                <th class="text-nowrap">{% trans "Mitarbeiter" %}</th>
-                            {% endif %}
-                            <th class="d-none d-md-table-cell text-nowrap">{% trans "Soll" %}</th>
-                            <th class="d-none d-md-table-cell text-nowrap">{% trans "Ist" %}</th>
-                            <th class="text-nowrap d-md-none">{% trans "Std" %}</th>
-                            <th class="text-nowrap">{% trans "Abwesenheit" %}</th>
-                            <th class="text-nowrap">{% trans "Status" %}</th>
-                            <th class="text-nowrap">{% trans "±" %}</th>
-                            <th class="text-center"><i class="bi bi-three-dots-vertical"></i></th>
+                            <th>{% trans "Mitarbeiter" %}</th>
+                            {% for day in weekdays %}
+                            <th class="text-center {% if day.is_today %}table-active{% endif %}">
+                                {{ day.name }}<br>
+                                <small>{{ day.date|date:"d.m." }}</small>
+                            </th>
+                            {% endfor %}
+                            <th class="text-center">{% trans "Summe" %}</th>
                         </tr>
                     </thead>
                     <tbody>
-                       
-                        
-                        {% for date_entry in dates %}
-                        <tr {% if date_entry.closure or date_entry.is_weekend %}class="table-light"{% endif %}>
-                            <td class="text-nowrap">
-                                <strong>{{ date_entry.date|date:"d.m" }}</strong>
-                                <small class="d-block text-muted">{{ date_entry.date|date:"l" }}</small>
-                            </td>
-                            {% if user.role == 'OWNER' %}
-                                <td>
-                                    {% if not date_entry.closure and not date_entry.is_weekend %}
-                                        {% if date_entry.employee.role != 'THERAPIST' %}
-                                        <span class="badge" style="background-color: {{ date_entry.employee.color|default:'#6c757d' }}">
-                                            {% if date_entry.employee %}
-                                                {{ date_entry.employee.get_full_name|default:date_entry.employee.username|default:_("Kein Mitarbeiter") }}
-                                            {% else %}
-                                                {% trans "Kein Mitarbeiter" %}
-                                            {% endif %}
+                        {% for emp_data in employees_data %}
+                        <tr>
+                            <td>{{ emp_data.employee.get_full_name }}</td>
+                            {% for day in emp_data.days %}
+                                <td class="text-center {% if day.is_today %}table-active{% endif %}">
+                                    {% with wh=day.working_hours %}
+                                    {% if wh %}
+                                        <span data-bs-toggle="tooltip" title="Soll: {{ wh.soll_hours }}h">
+                                            {{ wh.ist_hours|default_if_none:"-"|floatformat:2 }}h
                                         </span>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                            {% endif %}
-                            <td class="d-none d-md-table-cell text-nowrap">
-                                {% if date_entry.schedule %}
-                                    {{ date_entry.schedule.start_time|time:"H:i" }} - {{ date_entry.schedule.end_time|time:"H:i" }}
-                                    {% if date_entry.break_minutes %}
-                                         (<i class="bi bi-cup-hot" title="{% trans 'Pause' %}"></i> {{ date_entry.break_minutes }}min)
-                                    {% endif %}
-                                {% elif date_entry.closure %}
-                                    <em class="text-muted">{% trans "Geschlossen" %}</em>
-                                {% elif date_entry.is_weekend %}
-                                    <em class="text-muted">{% trans "Wochenende" %}</em>
-                                {% endif %}
-                            </td>
-                            <td class="d-none d-md-table-cell text-nowrap">
-                                {% if date_entry.working_hours %}
-                                    {{ date_entry.working_hours.start_time|time:"H:i" }} - {{ date_entry.working_hours.end_time|time:"H:i" }}
-                                    ({{ date_entry.ist_hours|floatformat:1 }}h)
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if date_entry.vacation %}
-                                    <i class="bi bi-brightness-high text-primary text-warning" title="{% trans 'Urlaub' %}"></i>
-                                {% endif %}
-                                {% if date_entry.time_comp %}
-                                    <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
-                                {% endif %}
-                                {% if date_entry.sick_leave %}
-                                    <i class="bi bi-hospital text-danger" title="{% trans 'Krankenstand' %}"></i>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if date_entry.closure %}
-                                    <span class="badge bg-secondary">
-                                        {{ date_entry.closure.get_type_display }}: {{ date_entry.closure.name }}
-                                    </span>
-                                {% elif date_entry.vacation %}
-                                    <span class="badge {% if date_entry.vacation.status == 'REQUESTED' %}bg-warning{% else %}bg-primary{% endif %}">
-                                        {% if date_entry.vacation.status == 'REQUESTED' %}
-                                            {% trans "Beantragt" %}
-                                        {% else %}
-                                            {% trans "Genehmigt" %}
-                                        {% endif %}
-                                    </span>
-                                {% elif date_entry.time_comp %}
-                                    <span class="badge {% if date_entry.time_comp.status == 'REQUESTED' %}bg-warning{% else %}bg-info{% endif %}">
-                                        {% if date_entry.time_comp.status == 'REQUESTED' %}
-                                            {% trans "Beantragt" %}
-                                        {% else %}
-                                            {% trans "Genehmigt" %}
-                                        {% endif %}
-                                    </span>
-                                {% elif date_entry.sick_leave %}
-                                    <span class="badge {% if date_entry.sick_leave.status == 'PENDING' %}bg-warning{% else %}bg-danger{% endif %}">
-                                        {% if date_entry.sick_leave.status == 'PENDING' %}
-                                            {% trans "Keine Krankmeldung" %}
-                                        {% else %}
-                                            {% trans "Krankmeldung vorgelegt" %}
-                                        {% endif %}
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if date_entry.schedule or date_entry.working_hours %}
-                                    {{ date_entry.difference|floatformat:1 }}h
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if not date_entry.closure and not date_entry.is_weekend %}
-                                    <div class="btn-group">
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-primary"
+                                        {% if user.role == 'OWNER' or user == emp_data.employee %}
+                                        <button class="btn btn-sm btn-link" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#workingHoursModal"
-                                                data-id="{{ date_entry.working_hours.id|default:'' }}"
-                                                data-date="{{ date_entry.date|date:'Y-m-d' }}"
-                                                title="{% trans 'Bearbeiten' %}">
+                                                data-id="{{ wh.id }}"
+                                                data-date="{{ day.date|date:'Y-m-d' }}">
                                             <i class="bi bi-pencil"></i>
                                         </button>
-                                        {% if date_entry.working_hours and user.role == 'OWNER' %}
-                                            <button type="button" 
-                                                    class="btn btn-sm btn-outline-danger"
-                                                    onclick="deleteWorkingHours('{{ date_entry.working_hours.id }}')"
-                                                    title="{% trans 'Löschen' %}">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
                                         {% endif %}
-                                    </div>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                            <tr>
-                                <td colspan="9" class="text-center py-4">
-                                    <i class="bi bi-calendar-x display-4 d-block text-muted"></i>
-                                    {% trans "Keine Arbeitszeiten gefunden" %}
+                                    {% else %}
+                                        {% if user.role == 'OWNER' or user == emp_data.employee %}
+                                        <button class="btn btn-sm btn-link" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#workingHoursModal"
+                                                data-date="{{ day.date|date:'Y-m-d' }}">
+                                            <i class="bi bi-plus"></i>
+                                        </button>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    {% endif %}
+                                    {% endwith %}
                                 </td>
-                            </tr>
-                        {% endfor %}
-                        
-                        <!-- Summenzeile -->
-                        <tr class="table-secondary fw-bold">
-                            <td class="text-nowrap">{% trans "Summe" %}</td>
-                            {% if user.role == 'OWNER' %}
-                                <td></td>
-                            {% endif %}
-                            <td class="d-none d-md-table-cell text-nowrap">
-                                {{ total_soll|floatformat:1 }}h
+                            {% endfor %}
+                            <td class="text-center">
+                                {{ emp_data.weekly_total|floatformat:2 }}h
                             </td>
-                            <td class="d-none d-md-table-cell text-nowrap">
-                                {{ total_ist|floatformat:1 }}h
-                            </td>
-                            <!-- Mobile: Nur Stunden anzeigen -->
-                            <td class="text-nowrap d-md-none">
-                                <div>{{ total_soll|floatformat:1 }}h</div>
-                                <div>{{ total_ist|floatformat:1 }}h</div>
-                            </td>
-                            <td></td>
-                            <td></td>
-                            <td class="text-nowrap {% if total_diff < 0 %}text-danger{% elif total_diff > 0 %}text-success{% endif %}">
-                                {{ total_diff|floatformat:1 }}h
-                            </td>
-                            <td></td>
                         </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Durchrechnungszeiträume pro Mitarbeiter -->
+            <h5 class="mt-4 mb-3">{% trans "Durchrechnungszeiträume" %}</h5>
+            <div class="row g-4">
+                {% for emp_data in employees_data %}
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-queen-blue">
+                            <h6 class="mb-0">{{ emp_data.employee.get_full_name }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-2">
+                                    <strong>{% trans "Zeitraum" %}:</strong><br>
+                                    {{ emp_data.averaging_period.calendar_weeks }}
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>{% trans "Soll-Stunden" %}:</strong><br>
+                                    {{ emp_data.averaging_period.target_hours|floatformat:2 }} h
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>{% trans "Ist-Stunden" %}:</strong><br>
+                                    {{ emp_data.averaging_period.actual_hours|floatformat:2 }} h
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>{% trans "Ø Std/Woche" %}:</strong><br>
+                                    {{ emp_data.averaging_period.average_weekly_hours|floatformat:2 }} h
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>{% trans "Soll Std/Woche" %}:</strong><br>
+                                    {{ emp_data.employee.working_hours_per_week|floatformat:2 }} h
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>{% trans "Saldo" %}:</strong><br>
+                                    <span class="{% if emp_data.averaging_period.balance < 0 %}text-danger{% elif emp_data.averaging_period.balance > 0 %}text-success{% endif %}">
+                                        {{ emp_data.averaging_period.balance|floatformat:2 }} h
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
     </div>

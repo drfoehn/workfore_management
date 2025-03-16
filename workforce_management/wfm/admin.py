@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
 from .models import (
+    AveragingPeriod,
     CustomUser,
     WorkingHours,
     Vacation,
@@ -199,3 +200,11 @@ class ClosureDayAdmin(ImportExportModelAdmin):
     search_fields = ['name', 'notes']
     date_hierarchy = 'date'
     resource_class = ClosureDayResource
+
+@admin.register(AveragingPeriod)
+class AveragingPeriodAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'start_date', 'end_date', 'target_hours', 'actual_hours')
+    list_filter = ('employee',)
+    search_fields = ('employee__username', 'employee__first_name', 'employee__last_name')
+    date_hierarchy = 'start_date'
+

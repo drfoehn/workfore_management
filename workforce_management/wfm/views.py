@@ -16,7 +16,8 @@ from .models import (
     CustomUser,
     OvertimeAccount,
     ClosureDay,
-    UserDocument
+    UserDocument,
+    AveragingPeriod
 )
 from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
@@ -60,8 +61,90 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
+        # Hole das Datum aus den GET-Parametern oder nutze das aktuelle Datum
+        selected_date = self.request.GET.get('date')
+        if selected_date:
+            current_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
+        else:
+            current_date = date.today()
+
+        # Berechne Montag und Freitag der aktuellen Woche
+        monday = current_date - timedelta(days=current_date.weekday())
+        friday = monday + timedelta(days=4)
+
+        # Bestehender Code für Mitarbeiter-Filter bleibt unverändert
+        employees = self.get_employees()
+
+        # Hole die Arbeitsstunden für die aktuelle Woche
+        working_hours = WorkingHours.objects.filter(
+            date__range=[monday, friday],
+            employee__in=employees
+        ).select_related('employee')
+
+        
+
+
+
+        # Berechne die Wochenstunden pro Mitarbeiter
+        weekly_hours = {}
+        for employee in employees:
+            total = working_hours.filter(employee=employee).aggregate(
+                total=Coalesce(Sum('ist_hours'), Decimal('0'))
+            )['total']
+            weekly_hours[employee.id] = total
+
+        # Erstelle eine Liste der Wochentage
+        weekdays = []
+        for i in range(5):  # Montag bis Freitag
+            day = monday + timedelta(days=i)
+            weekdays.append({
+                'date': day,
+                'name': day.strftime('%A'),
+                'is_today': day == date.today(),
+            })
+
+        # Erstelle vorbereitete Daten für das Template
+        employees_data = []
+        for employee in employees:
+            employee_hours = []
+            weekly_total = Decimal('0')
+            
+            # Hole oder erstelle den Durchrechnungszeitraum für diesen Mitarbeiter
+            averaging_period = AveragingPeriod.get_or_create_current(employee)
+            
+            for day in weekdays:
+                # Finde die Arbeitsstunden für diesen Tag
+                wh = working_hours.filter(
+                    employee=employee,
+                    date=day['date']
+                ).first()
+                
+                if wh:
+                    weekly_total += wh.ist_hours or Decimal('0')
+                
+                employee_hours.append({
+                    'working_hours': wh,
+                    'date': day['date'],
+                    'is_today': day['is_today']
+                })
+            
+            employees_data.append({
+                'employee': employee,
+                'days': employee_hours,
+                'weekly_total': weekly_total,
+                'averaging_period': averaging_period
+            })
+            
+        context.update({
+            'weekdays': weekdays,
+            'current_week': monday.isocalendar()[1],
+            'current_year': monday.year,
+            'prev_week': (monday - timedelta(days=7)).strftime('%Y-%m-%d'),
+            'next_week': (monday + timedelta(days=7)).strftime('%Y-%m-%d'),
+            'employees_data': employees_data
+        })
+
         # 1. Hole Jahr und Monat aus URL oder nutze aktuelles Datum
-        today = timezone.now().date()
         year = int(self.request.GET.get('year', date.today().year))
         month = int(self.request.GET.get('month', date.today().month))
         
@@ -322,7 +405,41 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             }
         })
 
+        # Füge Durchrechnungszeitraum-Informationen hinzu
+        if self.request.user.role in ['ASSISTANT', 'CLEANING']:
+            current_period = AveragingPeriod.get_or_create_current(self.request.user)
+            
+            if current_period:
+                context['current_period'] = {
+                    'calendar_weeks': current_period.calendar_weeks,
+                    'target_hours': current_period.target_hours,
+                    'actual_hours': current_period.actual_hours,
+                    'balance': current_period.balance
+                }
+
         return context
+
+    def get_queryset(self):
+        # Nur Owner dürfen alle Mitarbeiter sehen, andere nur sich selbst
+        if self.request.user.role == 'OWNER':
+            return CustomUser.objects.all()
+        return CustomUser.objects.filter(id=self.request.user.id)
+
+    def get_employees(self):
+        """Holt die relevanten Mitarbeiter basierend auf Filtern"""
+        queryset = CustomUser.objects.exclude(role='OWNER')
+        
+        # Wenn ein Rollenfilter gesetzt ist
+        role_filter = self.request.GET.get('role')
+        if role_filter:
+            queryset = queryset.filter(role=role_filter)
+        
+        # Wenn ein spezifischer Mitarbeiter ausgewählt ist
+        employee_id = self.request.GET.get('employee')
+        if employee_id:
+            queryset = queryset.filter(id=employee_id)
+        
+        return queryset.order_by('first_name', 'last_name')
 
 class WorkingHoursCreateOrUpdateView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
@@ -3629,5 +3746,16 @@ def api_mark_salary_as_paid(request):
     except Exception as e:
         logger.error(f"Fehler beim Markieren des Gehalts: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)})
+
+@login_required
+def check_averaging_periods(request):
+    """API-Endpoint zum Überprüfen und Erstellen von Durchrechnungszeiträumen"""
+    if request.method == 'POST':
+        try:
+            AveragingPeriod.check_and_create_periods()
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    return JsonResponse({'success': False, 'error': 'Invalid method'})
 
 

@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db.models import Q, Sum
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.db.models.functions import ExtractWeek, Coalesce
 
 
 class CustomUser(AbstractUser):
@@ -20,7 +21,14 @@ class CustomUser(AbstractUser):
         ('CLEANING', _('Reinigungsdienst')),  
         ('THERAPIST', _('Therapeut/in')),
     ]
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='ASSISTANT')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    working_hours_per_week = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=40.00,
+        verbose_name=_("Wöchentliche Sollstunden"),
+        help_text=_("Vereinbarte wöchentliche Arbeitsstunden")
+    )
     hourly_rate = models.DecimalField(
         max_digits=6, 
         decimal_places=2,
@@ -53,6 +61,14 @@ class CustomUser(AbstractUser):
     city = models.CharField(max_length=100, blank=True, verbose_name=_("Ort"))
     date_of_birth = models.DateField(null=True, blank=True, verbose_name=_("Geburtsdatum"))
     employed_since = models.DateField(null=True, blank=True, verbose_name=_("Angestellt seit"))
+
+    weekly_target_hours = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=40.00,
+        verbose_name=_("Wöchentliche Sollstunden"),
+        help_text=_("Vereinbarte wöchentliche Arbeitsstunden")
+    )
 
     def save(self, *args, **kwargs):
         if not self.color:
@@ -759,23 +775,26 @@ class OvertimeAccount(models.Model):
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     month = models.IntegerField()
     year = models.IntegerField()
-    total_overtime = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    total_overtime = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        help_text=_("Positiv = Überstunden, Negativ = Unterstunden")
+    )
     hours_for_payment = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     hours_for_timecomp = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    overtime_paid    = models.BooleanField(default=False)
+    overtime_paid = models.BooleanField(default=False)
     overtime_paid_date = models.DateTimeField(null=True, blank=True)
     is_finalized = models.BooleanField(default=False)
     finalized_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        # Berechne hours_for_payment
-        self.hours_for_payment = self.total_overtime - self.hours_for_timecomp
+        if self.total_overtime > 0:  # Nur bei positiven Überstunden
+            self.hours_for_payment = self.total_overtime - self.hours_for_timecomp
+        else:
+            self.hours_for_payment = 0
+            self.hours_for_timecomp = 0
         
-        # Wenn Stunden für Zeitausgleich umgebucht wurden, sind diese sofort verfügbar
-        if self.hours_for_timecomp > 0:
-            self.is_finalized = True
-            self.finalized_at = timezone.now()
-            
         super().save(*args, **kwargs)
 
     class Meta:
@@ -858,5 +877,89 @@ class ClosureDay(models.Model):
         verbose_name = _('Schließtag')
         verbose_name_plural = _('Schließtage')
         unique_together = ['date', 'type']  # Verhindert doppelte Einträge
+
+class AveragingPeriod(models.Model):
+    """Durchrechnungszeitraum für flexible Arbeitszeiten"""
+    weeks = models.IntegerField(
+        default=13,
+        help_text=_("Anzahl der Wochen im Durchrechnungszeitraum")
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    is_completed = models.BooleanField(
+        default=False,
+        help_text=_("Kennzeichnet, ob der Durchrechnungszeitraum abgeschlossen ist")
+    )
+    notes = models.TextField(blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.end_date and self.start_date:
+            self.end_date = self.start_date + timedelta(weeks=self.weeks - 1)
+        super().save(*args, **kwargs)
+
+    @property
+    def target_hours(self):
+        """Berechnet die Soll-Stunden für den gesamten Zeitraum"""
+        return self.employee.working_hours_per_week * self.weeks
+
+    @property
+    def actual_hours(self):
+        """Berechnet die tatsächlich geleisteten Stunden im Zeitraum"""
+        return WorkingHours.objects.filter(
+            employee=self.employee,
+            date__range=(self.start_date, self.end_date)
+        ).aggregate(
+            total=Coalesce(Sum('ist_hours'), Decimal('0'))
+        )['total']
+
+    @property
+    def balance(self):
+        """Berechnet den Stundensaldo"""
+        return self.actual_hours - self.target_hours
+
+    @property
+    def calendar_weeks(self):
+        """Gibt den Zeitraum in Kalenderwochen zurück"""
+        start_week = self.start_date.isocalendar()[1]
+        end_week = self.end_date.isocalendar()[1]
+        start_year = self.start_date.isocalendar()[0]
+        end_year = self.end_date.isocalendar()[0]
+        
+        if start_year == end_year:
+            return f"KW{start_week} - KW{end_week}"
+        return f"KW{start_week}/{start_year} - KW{end_week}/{end_year}"
+
+    @property
+    def average_weekly_hours(self):
+        """Berechnet die durchschnittlichen Wochenstunden"""
+        if not self.actual_hours:
+            return Decimal('0')
+        total_weeks = Decimal(str((self.end_date - self.start_date).days / 7))
+        return self.actual_hours / total_weeks
+
+    @classmethod
+    def get_or_create_current(cls, employee):
+        """Holt oder erstellt den aktuellen Durchrechnungszeitraum"""
+        today = date.today()
+        current_week_start = today - timedelta(days=today.weekday())
+        
+        # Suche nach einem aktiven Zeitraum
+        current_period = cls.objects.filter(
+            employee=employee,
+            start_date__lte=today,
+            end_date__gte=today,
+            is_completed=False
+        ).first()
+        
+        if not current_period:
+            # Erstelle neuen Zeitraum ab aktueller Woche
+            current_period = cls.objects.create(
+                employee=employee,
+                start_date=current_week_start,
+                weeks=13  # Standard: 13 Wochen
+            )
+        
+        return current_period
 
 
