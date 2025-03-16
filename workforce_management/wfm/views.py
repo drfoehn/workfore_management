@@ -1814,6 +1814,7 @@ class AssistantCalendarEventsView(View):
             'title': f"{v.employee.get_full_name()} - Urlaub",
             'start': v.start_date.isoformat(),
             'end': (v.end_date + timedelta(days=1)).isoformat(),
+            'backgroundColor': v.employee.color,
             'className': 'vacation-event',
             'type': 'vacation',
             'allDay': True
@@ -1831,6 +1832,7 @@ class AssistantCalendarEventsView(View):
             'title': f"{tc.employee.get_full_name()} - Zeitausgleich",
             'start': tc.date.isoformat(),
             'end': (tc.date + timedelta(days=1)).isoformat(),
+            'backgroundColor': tc.employee.color,
             'className': 'time-comp-event',
             'type': 'time_comp',
             'allDay': True
@@ -1847,6 +1849,7 @@ class AssistantCalendarEventsView(View):
             'title': f"{sl.employee.get_full_name()} - Krankenstand",
             'start': sl.start_date.isoformat(),
             'end': (sl.end_date + timedelta(days=1)).isoformat(),
+            'backgroundColor': sl.employee.color,
             'className': 'sick-leave-event',
             'type': 'sick_leave',
             'allDay': True
@@ -1864,6 +1867,7 @@ class AssistantCalendarEventsView(View):
                 'title': f"{wh.employee.get_full_name()}",
                 'start': f"{wh.date}T{wh.start_time}" if wh.start_time else wh.date.isoformat(),
                 'end': f"{wh.date}T{wh.end_time}" if wh.end_time else wh.date.isoformat(),
+                'backgroundColor': wh.employee.color,
                 'className': 'working-hours-event',
                 'type': 'working_hours',
                 'allDay': not (wh.start_time and wh.end_time)

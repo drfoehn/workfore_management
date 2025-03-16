@@ -73,17 +73,7 @@
                             </thead>
                             <tbody>
                                 {% for income in grouped_income %}
-                                <!-- Debug Info -->
-                                <tr class="d-none">
-                                    <td colspan="9">
-                                        <pre>
-                                        DEBUG:
-                                        therapist_id: {{ income.therapist_id }}
-                                        name: {{ income.therapist_name }}
-                                        status: {{ income.therapist_extra_hours_payment_status }}
-                                        </pre>
-                                    </td>
-                                </tr>
+                                
                                 <!-- Normaler Tabellen-Inhalt -->
                                 <tr>
                                     <td>{{ income.therapist_name }}</td>
@@ -134,10 +124,10 @@
                                         <td class="table-sum"><strong>{{ total_therapist_room_cost|floatformat:2 }} €</strong></td>
                                         <td class="table-sum"><strong>{{ total_therapist_difference_hours|floatformat:2 }} h</strong></td>
                                         <td class="table-sum"><strong>{{ total_therapist_extra_cost|floatformat:2 }} €</strong></td>  
-                                         <td></td>
-                                         <td></td>
-                                         <td></td>
-                                         <td></td>
+                                         <td class="table-sum"></td>
+                                         <td class="table-sum"></td>
+                                         <td class="table-sum"></td>
+                                         <td class="table-sum"><strong>{{ total_income|floatformat:2 }} €</strong></td>
                                     </tr>
                                 </tfoot>
                             </tbody>
@@ -216,6 +206,9 @@
                                     <td class="table-sum"><strong>{{ total_assistant_ist_hours|floatformat:1 }}h</strong></td>
                                     <td class="table-sum"><strong>{{ total_assistant_absence_hours|floatformat:1 }}h</strong></td>
                                     <td class="table-sum"><strong>{{ total_assistant_amount|floatformat:2 }}€</strong></td>
+                                    <td class="table-sum"></td>
+                                    <td class="table-sum"></td> 
+                                    <td class="table-sum"></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -251,6 +244,9 @@
                                     <td class="table-sum"><strong>{{ total_cleaning_ist_hours|floatformat:1 }}h</strong></td>
                                     <td class="table-sum"><strong>{{ total_cleaning_absence_hours|floatformat:1 }}h</strong></td>
                                     <td class="table-sum"><strong>{{ total_cleaning_amount|floatformat:2 }}€</strong></td>
+                                    <td class="table-sum"></td>
+                                    <td class="table-sum"></td> 
+                                    <td class="table-sum"></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -315,9 +311,9 @@
                                             <td colspan="2" class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
                                             <td class="table-sum"><strong>{{ total_overtime_hours|floatformat:1 }} h</strong></td>
                                             <td class="table-sum"><strong>{{ total_overtime_amount|floatformat:2 }} €</strong></td>
-                                            <td></td>
-                                            <td></td>
-                                            <td></td>
+                                            <td class="table-sum"></td>
+                                            <td class="table-sum"></td>
+                                            <td class="table-sum"></td>
                                         </tr>
                                     </tfoot>
                                 </table>

@@ -13,14 +13,14 @@
                 <!-- Monatsnavigation -->
                 <div class="btn-group">
                     <a href="?month={{ prev_month.month }}&year={{ prev_month.year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
-                       class="btn btn-outline-primary">
+                       class="btn bg-white-outline">
                         <i class="bi bi-chevron-left"></i>
                     </a>
-                    <button class="btn btn-outline-primary" disabled>
+                    <button class="btn bg-white-outline" disabled>
                         {{ month_name }}
                     </button>
                     <a href="?month={{ next_month.month }}&year={{ next_month.year }}{% if selected_therapist %}&therapist={{ selected_therapist.id }}{% endif %}" 
-                       class="btn btn-outline-primary">
+                       class="btn bg-white-outline">
                         <i class="bi bi-chevron-right"></i>
                     </a>
                 </div>
@@ -28,7 +28,7 @@
                 <!-- Therapeuten Filter -->
                 {% if user.role == 'OWNER' %}
                 <div class="dropdown">
-                    <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <button class="btn bg-white-outline dropdown-toggle" type="button" data-bs-toggle="dropdown">
                         {% if selected_therapist %}
                             {{ selected_therapist.get_full_name|default:selected_therapist.username }}
                         {% else %}
@@ -54,7 +54,7 @@
                 
                 <!-- Kalender-Button -->
                 <a href="{% url 'wfm:therapist-calendar' %}" 
-                   class="btn btn-outline-primary">
+                   class="btn bg-white-outline">
                     <i class="bi bi-calendar3"></i> {% trans "Kalender" %}
                 </a>
             </div>

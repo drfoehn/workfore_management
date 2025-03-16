@@ -216,6 +216,12 @@ a:hover {
   color: white !important;
 }
 
+.bg-white-outline {
+  background-color: none !important;
+  border-color: white !important;
+  color: white !important;
+}
+
 
 
 /* Focus States */
@@ -255,5 +261,6 @@ a:hover {
 } 
 
 .table-sum {
-  color: var(--zomp) !important;
+  background-color: darkgray !important;
+  color: white !important;
 }
