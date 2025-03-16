@@ -36,7 +36,7 @@
                         </div>
                         <div class="col">
                             <label class="form-label">{% trans "Verwendet (Std)" %}</label>
-                            <input type="number" class="form-control" id="actualHours" step="0.25" min="0">
+                            <input type="number" class="form-control" id="actualHours" step="0.25" oninput="validateActualHours(this)">
                         </div>
                     </div>
                     <div class="mb-3">
@@ -67,4 +67,41 @@
             </div>
         </div>
     </div>
-</div> 
+</div>
+
+<script>
+function validateActualHours(input) {
+    const bookedHours = parseFloat(document.getElementById('bookedHours').value);
+    let actualHours = parseFloat(input.value);
+    
+    if (isNaN(actualHours)) {
+        input.value = bookedHours;
+        return;
+    }
+
+    // Runde auf 0.25 Schritte
+    actualHours = Math.round(actualHours * 4) / 4;
+    
+    // Wenn der Wert kleiner als die gebuchten Stunden ist
+    if (actualHours < bookedHours) {
+        alert('{% trans "Die tatsächlichen Stunden können nicht kleiner als die gebuchten Stunden sein." %}');
+        input.value = bookedHours;
+        return;
+    }
+    
+    input.value = actualHours;
+}
+
+// Zusätzliche Validierung beim Speichern
+function validateBeforeSave() {
+    const actualHours = document.getElementById('actualHours');
+    const bookedHours = parseFloat(document.getElementById('bookedHours').value);
+    
+    if (parseFloat(actualHours.value) < bookedHours) {
+        alert('{% trans "Die tatsächlichen Stunden können nicht kleiner als die gebuchten Stunden sein." %}');
+        actualHours.value = bookedHours;
+        return false;
+    }
+    return true;
+}
+</script> 

@@ -11,18 +11,18 @@
 {% block content %}
 <div class="container py-4">
     <!-- Navigation -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 ">
         <h1>{% trans "Finanzübersicht" %}</h1>
         <div class="btn-group">
             <a href="?month={{ prev_month.month }}&year={{ prev_month.year }}" 
-               class="btn btn-outline-primary">
+               class="btn bg-queen-blue">
                 <i class="bi bi-chevron-left"></i>
             </a>
-            <button class="btn btn-outline-primary" disabled>
+            <button class="btn bg-queen-blue" disabled>
                 {{ month_name }}
             </button>
             <a href="?month={{ next_month.month }}&year={{ next_month.year }}" 
-               class="btn btn-outline-primary">
+               class="btn bg-queen-blue">
                 <i class="bi bi-chevron-right"></i>
             </a>
         </div>
@@ -31,7 +31,7 @@
     <!-- Zusammenfassung -->
     <div class="row mb-4">
         <div class="col-md-6">
-            <div class="card bg-success text-white">
+            <div class="card bg-pistachio-outline">
                 <div class="card-body">
                     <h5 class="card-title">{% trans "Einnahmen" %}</h5>
                     <h3 class="mb-0">{{ total_income|floatformat:2 }}€</h3>
@@ -39,7 +39,7 @@
             </div>
         </div>
         <div class="col-md-6">
-            <div class="card bg-danger text-white">
+            <div class="card bg-red-salsa-outline">
                 <div class="card-body">
                     <h5 class="card-title">{% trans "Ausgaben" %}</h5>
                     <h3 class="mb-0">{{ total_expenses|floatformat:2 }}€</h3>
@@ -137,11 +137,13 @@
             </div>
         </div>
     </div>
-        <div class="row">
+
+
         <!-- Ausgaben -->
+        <div class="row mt-4">
         <div class="col-md-12">
             <div class="card mb-6">
-                <div class="card-header bg-danger text-white">
+                <div class="card-header bg-red-salsa">
                     <h5 class="mb-0">{% trans "Ausgaben" %}</h5>
                 </div>
                 <div class="card-body">

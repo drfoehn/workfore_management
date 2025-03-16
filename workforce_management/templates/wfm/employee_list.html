@@ -67,22 +67,22 @@
         <div class="card">
             <div class="card-header bg-success text-white">
                 <h5 class="mb-0">
-                    <i class="bi bi-person-fill"></i> {% trans "Geschäftsführung" %}
+                    <i class="bi bi-person-fill"></i> {% trans "Reinigungskräfte" %}
                 </h5>
             </div>
             <div class="card-body">
-                {% if owners %}
+                {% if cleaners %}
                 <div class="list-group list-group-flush">
-                    {% for owner in owners %}
-                    <a href="{% url 'wfm:employee-detail' owner.id %}" 
+                    {% for cleaner in cleaners %}
+                    <a href="{% url 'wfm:employee-detail' cleaner.id %}" 
                        class="list-group-item list-group-item-action">
-                        <h6 class="mb-0">{{ owner.get_full_name }}</h6>
-                        <small class="text-muted">{{ owner.email }}</small>
+                        <h6 class="mb-0">{{ cleaner.get_full_name }}</h6>
+                        <small class="text-muted">{{ cleaner.email }}</small>
                     </a>
                     {% endfor %}
                 </div>
                 {% else %}
-                <p class="text-muted mb-0">{% trans "Keine Geschäftsführer vorhanden" %}</p>
+                <p class="text-muted mb-0">{% trans "Keine Reinigungskräfte vorhanden" %}</p>
                 {% endif %}
             </div>
         </div>

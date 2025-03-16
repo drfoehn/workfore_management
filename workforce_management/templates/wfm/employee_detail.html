@@ -74,7 +74,7 @@
                     <dd class="col-sm-8">{{ employee.room_rate|default:"-" }} €/h</dd>
                     {% endif %}
                     
-                    {% if request.user.role == 'OWNER' %}
+                    {% if request.user.role == 'OWNER' and employee.role != 'THERAPIST' %}
                     <dt class="col-sm-4">{% trans "Gehalt" %}</dt>
                     <dd class="col-sm-8">{{ employee.hourly_rate|default:"-" }} €/h</dd>
                     {% endif %}

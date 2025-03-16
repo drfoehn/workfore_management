@@ -2740,7 +2740,7 @@ def upload_document(request):
             file = request.FILES.get('file')
             display_name = request.POST.get('display_name')
             notes = request.POST.get('notes')
-            sick_leave_id = request.POST.get('sick_leave_id')  # Hole die ID aus dem versteckten Feld
+            sick_leave_id = request.POST.get('sick_leave_id')
             
             # Erstelle das Dokument
             document = UserDocument.objects.create(
@@ -2759,15 +2759,18 @@ def upload_document(request):
                     sick_leave.save()
                 except SickLeave.DoesNotExist:
                     document.delete()
-                    return JsonResponse({'error': 'Krankenstand nicht gefunden'}, status=404)
+                    messages.error(request, gettext('Krankenstand nicht gefunden'))
+                    return redirect('wfm:user-documents')
 
-            return JsonResponse({'success': True})
+            messages.success(request, gettext('Dokument erfolgreich hochgeladen'))
+            return redirect('wfm:user-documents')
 
         except Exception as e:
             logger.error(f"Fehler beim Hochladen: {str(e)}", exc_info=True)
-            return JsonResponse({'error': str(e)}, status=500)
+            messages.error(request, gettext('Fehler beim Hochladen des Dokuments'))
+            return redirect('wfm:user-documents')
 
-    return JsonResponse({'error': 'Invalid method'}, status=405)
+    return redirect('wfm:user-documents')
 
 @login_required
 def api_document_update(request, pk):
@@ -3024,7 +3027,6 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
                     therapist=employee,
                     date__year=date.year,
                     date__month=date.month,
-                    status='COMPLETED'  # Nur abgeschlossene Buchungen
                 )
                 
                 total_hours = bookings.aggregate(
@@ -3066,6 +3068,7 @@ class EmployeeListView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         # Mitarbeiter nach Rollen gruppieren
         context['therapists'] = CustomUser.objects.filter(role='THERAPIST').order_by('first_name', 'last_name')
         context['assistants'] = CustomUser.objects.filter(role='ASSISTANT').order_by('first_name', 'last_name')
+        context['cleaners'] = CustomUser.objects.filter(role='CLEANING').order_by('first_name', 'last_name')
         context['owners'] = CustomUser.objects.filter(role='OWNER').order_by('first_name', 'last_name')
         
         return context
