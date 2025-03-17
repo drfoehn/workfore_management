@@ -11,6 +11,7 @@
                 <form id="workingHoursForm">
                     {% csrf_token %}
                     <input type="hidden" id="workingHoursId" name="id">
+                    <input type="hidden" id="employeeId" name="employee_id">
                     
                     <div class="mb-3">
                         <label for="workDate" class="form-label">{% trans "Datum" %}</label>
@@ -63,6 +64,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Hole die Daten aus den data-Attributen des Buttons
         const id = button.getAttribute('data-id');
         const date = button.getAttribute('data-date');
+        const employeeId = button.getAttribute('data-employee-id');
+        
+        document.getElementById('employeeId').value = employeeId;
         
         if (id) {
             // Existierender Eintrag
@@ -80,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
             fillWorkingHoursModal({
                 id: '',
                 date: date,
+                employee_id: employeeId,
                 start_time: '',
                 end_time: '',
                 break_duration: '',
@@ -89,20 +94,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Die Funktion muss global verfügbar sein
-window.fillWorkingHoursModal = function(data) {
-    document.getElementById('workingHoursId').value = data.id || '';
-    document.getElementById('workDate').value = data.date;
-    document.getElementById('startTime').value = data.start_time || '';
-    document.getElementById('endTime').value = data.end_time || '';
-    document.getElementById('breakDuration').value = data.id ? (data.break_duration || '') : '';
-    document.getElementById('notes').value = data.notes || '';
-}
-
 function saveWorkingHours() {
     const form = document.getElementById('workingHoursForm');
     const formData = {
-        date: form.date.value,
+        employee_id: form.employee_id.value,
         start_time: form.start_time.value,
         end_time: form.end_time.value,
         break_duration: parseInt(form.break_duration.value),
@@ -110,9 +105,12 @@ function saveWorkingHours() {
     };
 
     const id = document.getElementById('workingHoursId').value;
+    const date = document.getElementById('workDate').value;
+    
+    // Verwende das Datum aus dem Formular für die URL
     const url = id ? 
         `/api/working-hours/${id}/update/` : 
-        `/api/working-hours/${formData.date}/save/`;
+        `/api/working-hours/${date}/save/`;
 
     fetch(url, {
         method: 'POST',
@@ -125,11 +123,9 @@ function saveWorkingHours() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Schließe das Modal und lade die Seite neu
             bootstrap.Modal.getInstance(document.getElementById('workingHoursModal')).hide();
             location.reload();
         } else {
-            // Zeige Fehlermeldung
             alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
         }
     })
@@ -137,5 +133,16 @@ function saveWorkingHours() {
         console.error('Error:', error);
         alert('{% trans "Ein Fehler ist aufgetreten" %}');
     });
+}
+
+// Die Funktion muss global verfügbar sein
+window.fillWorkingHoursModal = function(data) {
+    document.getElementById('workingHoursId').value = data.id || '';
+    // Stelle sicher, dass das Datum im Format YYYY-MM-DD ist
+    document.getElementById('workDate').value = data.date;
+    document.getElementById('startTime').value = data.start_time || '';
+    document.getElementById('endTime').value = data.end_time || '';
+    document.getElementById('breakDuration').value = data.break_duration || '30';
+    document.getElementById('notes').value = data.notes || '';
 }
 </script> 

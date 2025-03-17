@@ -285,7 +285,6 @@ class WorkingHours(models.Model):
         verbose_name = _('Arbeitszeit')
         verbose_name_plural = _('Arbeitszeiten')
         ordering = ['-date', 'start_time']
-        unique_together = ['employee', 'date']
 
 class Vacation(models.Model):
     """Urlaubsverwaltung"""

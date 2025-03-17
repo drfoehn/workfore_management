@@ -927,36 +927,62 @@ def get_working_hours(request, date):
 
 @login_required
 @ensure_csrf_cookie  # Stellt sicher, dass der CSRF-Token verfügbar ist
-def save_working_hours(request, date=None):
-    if request.method == 'POST':
+def save_working_hours(request, date):
+    """API-Endpoint zum Speichern von Arbeitsstunden"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid method'}, status=405)
+        
+    try:
+        data = json.loads(request.body)
+        
+        # Hole den Mitarbeiter aus der ID
         try:
-            data = json.loads(request.body.decode('utf-8'))
-            
-            # Erstelle oder aktualisiere den Eintrag
-            working_hours, created = WorkingHours.objects.update_or_create(
-                employee=request.user,
-                date=date,  # Datum aus der URL
-                defaults={
-                    'start_time': data['start_time'],
-                    'end_time': data['end_time'],
-                    'break_duration': timedelta(minutes=int(data['break_duration'])),
-                    'notes': data.get('notes', '')
-                }
-            )
-            
-            return JsonResponse({'success': True})
-            
-        except Exception as e:
-            print("Error:", str(e))
+            employee = CustomUser.objects.get(id=data['employee_id'])
+        except CustomUser.DoesNotExist:
             return JsonResponse({
                 'success': False,
-                'error': str(e)
-            })
-    
-    return JsonResponse({
-        'success': False,
-        'error': 'Ungültige Anfrage'
-    })
+                'error': 'Mitarbeiter nicht gefunden'
+            }, status=404)
+            
+        # Prüfe Berechtigung (nur Owner oder der Mitarbeiter selbst)
+        if not (request.user.role == 'OWNER' or request.user.id == employee.id):
+            return JsonResponse({
+                'success': False,
+                'error': 'Keine Berechtigung'
+            }, status=403)
+        
+        work_date = datetime.strptime(date, '%Y-%m-%d').date()
+        start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+        end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+        break_duration = timedelta(minutes=int(data.get('break_duration', 0)))
+        
+        # Berechne die Ist-Stunden
+        start_datetime = datetime.combine(work_date, start_time)
+        end_datetime = datetime.combine(work_date, end_time)
+        duration = end_datetime - start_datetime - break_duration
+        ist_hours = Decimal(str(duration.total_seconds() / 3600))
+        
+        working_hours = WorkingHours.objects.create(
+            employee=employee,  # Verwende den ausgewählten Mitarbeiter
+            date=work_date,
+            start_time=start_time,
+            end_time=end_time,
+            break_duration=break_duration,
+            ist_hours=ist_hours,
+            notes=data.get('notes', '')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'id': working_hours.id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error saving working hours: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
 
 @login_required
 def api_vacation_request(request):

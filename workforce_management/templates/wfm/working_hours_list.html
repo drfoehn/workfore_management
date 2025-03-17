@@ -173,7 +173,8 @@
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#workingHoursModal"
                                                 data-id="{{ wh.id }}"
-                                                data-date="{{ day.date|date:'Y-m-d' }}">
+                                                data-date="{{ day.date|date:'Y-m-d' }}"
+                                                data-employee-id="{{ emp_data.employee.id }}">
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                         {% endif %}
@@ -182,7 +183,8 @@
                                         <button class="btn btn-sm btn-link" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#workingHoursModal"
-                                                data-date="{{ day.date|date:'Y-m-d' }}">
+                                                data-date="{{ day.date|date:'Y-m-d' }}"
+                                                data-employee-id="{{ emp_data.employee.id }}">
                                             <i class="bi bi-plus"></i>
                                         </button>
                                         {% else %}
@@ -276,6 +278,7 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             const id = this.getAttribute('data-id');
             const date = this.getAttribute('data-date');
+            const employee_id = this.getAttribute('data-employee-id');
             
             if (id) {
                 fetch(`/api/working-hours/${id}/`)
@@ -283,7 +286,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(data => {
                         fillWorkingHoursModal({
                             ...data,
-                            date: date
+                            date: date,
+                            employee_id: employee_id
                         });
                         modal.show();
                     });
@@ -294,7 +298,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     start_time: '',
                     end_time: '',
                     break_duration: '',
-                    notes: ''
+                    notes: '',
+                    employee_id: employee_id
                 });
                 modal.show();
             }
@@ -344,6 +349,7 @@ function fillWorkingHoursModal(data) {
     document.getElementById('endTime').value = data.end_time || '';
     document.getElementById('breakDuration').value = data.break_duration || '30';
     document.getElementById('notes').value = data.notes || '';
+    document.getElementById('employeeId').value = data.employee_id || '';
 }
 
 function saveWorkingHours() {
@@ -352,7 +358,8 @@ function saveWorkingHours() {
         start_time: form.start_time.value,
         end_time: form.end_time.value,
         break_duration: parseInt(form.break_duration.value),
-        notes: form.notes.value
+        notes: form.notes.value,
+        employee_id: document.getElementById('employeeId').value
     };
 
     const id = document.getElementById('workingHoursId').value;
