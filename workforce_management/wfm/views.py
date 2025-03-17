@@ -2018,13 +2018,19 @@ class AssistantCalendarEventsView(View):
             
             events.extend([{
                 'id': f'work_{wh.id}',
-                'title': f"{wh.employee.get_full_name()}",
+                'title': f"{wh.employee.get_full_name()}\n{wh.notes if wh.notes else ''}",
                 'start': f"{wh.date}T{wh.start_time}" if wh.start_time else wh.date.isoformat(),
                 'end': f"{wh.date}T{wh.end_time}" if wh.end_time else wh.date.isoformat(),
                 'backgroundColor': wh.employee.color,
                 'className': 'working-hours-event',
                 'type': 'working_hours',
-                'allDay': not (wh.start_time and wh.end_time)
+                'allDay': not (wh.start_time and wh.end_time),
+                'extendedProps': {
+                    'notes': wh.notes,
+                    'employee_id': wh.employee.id,
+                    'ist_hours': float(wh.ist_hours) if wh.ist_hours else 0,
+                    'type': 'working_hours'
+                }
             } for wh in working_hours])
 
         return JsonResponse(events, safe=False)

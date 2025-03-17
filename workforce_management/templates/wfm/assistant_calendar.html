@@ -248,6 +248,38 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert('{% trans "Fehler beim Laden der Daten" %}');
                     });
             }
+        },
+        eventContent: function(arg) {
+            const eventType = arg.event.extendedProps?.type;
+            if (eventType === 'working_hours') {
+                return {
+                    html: `
+                        <div class="fc-event-main-frame">
+                            <div class="fc-event-title-container">
+                                <div class="fc-event-title fc-sticky">
+                                    ${arg.event.title.split('\n')[0]}
+                                </div>
+                                ${arg.event.title.split('\n')[1] ? 
+                                    `<div class="fc-event-notes">${arg.event.title.split('\n')[1]}</div>` 
+                                    : ''}
+                            </div>
+                        </div>
+                    `
+                };
+            } else {
+                // Standard-Rendering für andere Event-Typen
+                return {
+                    html: `
+                        <div class="fc-event-main-frame">
+                            <div class="fc-event-title-container">
+                                <div class="fc-event-title fc-sticky">
+                                    ${arg.event.title}
+                                </div>
+                            </div>
+                        </div>
+                    `
+                };
+            }
         }
     });
     

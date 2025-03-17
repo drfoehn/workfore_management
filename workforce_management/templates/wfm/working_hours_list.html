@@ -149,7 +149,7 @@
                         <tr>
                             <th>{% trans "Mitarbeiter" %}</th>
                             {% for day in weekdays %}
-                            <th class="text-center {% if day.is_today %}table-active{% endif %}">
+                            <th class="text-center {% if day.is_today %}bg-pistachio{% endif %}">
                                 {{ day.name }}<br>
                                 <small>{{ day.date|date:"d.m." }}</small>
                             </th>
@@ -162,12 +162,19 @@
                         <tr>
                             <td>{{ emp_data.employee.get_full_name }}</td>
                             {% for day in emp_data.days %}
-                                <td class="text-center {% if day.is_today %}table-active{% endif %}">
+                                <td class="text-center {% if day.is_today %}bg-pistachio-light{% endif %}">
                                     {% with wh=day.working_hours %}
                                     {% if wh %}
-                                        <span data-bs-toggle="tooltip" title="Soll: {{ wh.soll_hours }}h">
-                                            {{ wh.ist_hours|default_if_none:"-"|floatformat:2 }}h
-                                        </span>
+                                        <div data-bs-toggle="tooltip" 
+                                             data-bs-placement="top" 
+                                             title="{{ wh.notes|default:'' }}"
+                                        >
+                                            {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
+                                            <br>
+                                            <small class="text-muted">
+                                                ({{ wh.ist_hours|floatformat:2 }}h)
+                                            </small>
+                                        </div>
                                         {% if user.role == 'OWNER' or user == emp_data.employee %}
                                         <button class="btn btn-sm btn-link" 
                                                 data-bs-toggle="modal" 
@@ -187,8 +194,6 @@
                                                 data-employee-id="{{ emp_data.employee.id }}">
                                             <i class="bi bi-plus"></i>
                                         </button>
-                                        {% else %}
-                                        -
                                         {% endif %}
                                     {% endif %}
                                     {% endwith %}
@@ -205,12 +210,12 @@
 
             <!-- Durchrechnungszeiträume pro Mitarbeiter -->
             
-            <h5 class="mt-4 mb-3">{% trans "Durchrechnungszeiträume" %}</h5>
+            <h5 class="mt-4 mb-3">{% trans "Durchrechnungszeiträume" %} - Zeitraum {{ employees_data.0.averaging_period.calendar_weeks }}</h5>
             <div class="row g-4">
                 {% for emp_data in employees_data %}
                 <div class="col-12">
                     <div class="card">
-                        <div class="card-header bg-queen-blue">
+                        <div class="card-header bg-pistachio-light">
                             <h6 class="mb-0">{{ emp_data.employee.get_full_name }}</h6>
                         </div>
                         <div class="card-body">
@@ -415,6 +420,16 @@ $(document).ready(function() {
                 }
             });
         }
+    });
+});
+
+// Am Ende des Templates, nach den anderen Scripts
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialisiere alle Tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
 </script>
