@@ -49,6 +49,7 @@ class CustomUserAdmin(UserAdmin):
             'fields': (
                 'role',
                 'employed_since',
+                'working_hours_per_week',
                 'hourly_rate',
                 'room_rate'
             )
@@ -203,7 +204,7 @@ class ClosureDayAdmin(ImportExportModelAdmin):
 
 @admin.register(AveragingPeriod)
 class AveragingPeriodAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'start_date', 'end_date', 'target_hours', 'actual_hours')
+    list_display = ('employee', 'start_date', 'end_date')
     list_filter = ('employee',)
     search_fields = ('employee__username', 'employee__first_name', 'employee__last_name')
     date_hierarchy = 'start_date'

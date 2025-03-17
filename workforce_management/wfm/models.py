@@ -27,6 +27,8 @@ class CustomUser(AbstractUser):
         decimal_places=2,
         default=40.00,
         verbose_name=_("Wöchentliche Sollstunden"),
+        null=True,
+        blank=True,
         help_text=_("Vereinbarte wöchentliche Arbeitsstunden")
     )
     hourly_rate = models.DecimalField(
@@ -61,14 +63,6 @@ class CustomUser(AbstractUser):
     city = models.CharField(max_length=100, blank=True, verbose_name=_("Ort"))
     date_of_birth = models.DateField(null=True, blank=True, verbose_name=_("Geburtsdatum"))
     employed_since = models.DateField(null=True, blank=True, verbose_name=_("Angestellt seit"))
-
-    weekly_target_hours = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=40.00,
-        verbose_name=_("Wöchentliche Sollstunden"),
-        help_text=_("Vereinbarte wöchentliche Arbeitsstunden")
-    )
 
     def save(self, *args, **kwargs):
         if not self.color:
@@ -886,17 +880,16 @@ class AveragingPeriod(models.Model):
     )
     start_date = models.DateField()
     end_date = models.DateField()
-    employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    employee = models.ForeignKey(
+        CustomUser, 
+        on_delete=models.CASCADE,
+        limit_choices_to={'role__in': ['ASSISTANT', 'CLEANING']}
+    )
     is_completed = models.BooleanField(
         default=False,
         help_text=_("Kennzeichnet, ob der Durchrechnungszeitraum abgeschlossen ist")
     )
     notes = models.TextField(blank=True)
-
-    def save(self, *args, **kwargs):
-        if not self.end_date and self.start_date:
-            self.end_date = self.start_date + timedelta(weeks=self.weeks - 1)
-        super().save(*args, **kwargs)
 
     @property
     def target_hours(self):
@@ -919,18 +912,6 @@ class AveragingPeriod(models.Model):
         return self.actual_hours - self.target_hours
 
     @property
-    def calendar_weeks(self):
-        """Gibt den Zeitraum in Kalenderwochen zurück"""
-        start_week = self.start_date.isocalendar()[1]
-        end_week = self.end_date.isocalendar()[1]
-        start_year = self.start_date.isocalendar()[0]
-        end_year = self.end_date.isocalendar()[0]
-        
-        if start_year == end_year:
-            return f"KW{start_week} - KW{end_week}"
-        return f"KW{start_week}/{start_year} - KW{end_week}/{end_year}"
-
-    @property
     def average_weekly_hours(self):
         """Berechnet die durchschnittlichen Wochenstunden"""
         if not self.actual_hours:
@@ -940,26 +921,75 @@ class AveragingPeriod(models.Model):
 
     @classmethod
     def get_or_create_current(cls, employee):
-        """Holt oder erstellt den aktuellen Durchrechnungszeitraum"""
+        """Holt oder erstellt den aktuellen Durchrechnungszeitraum basierend auf fixen Quartalen"""
+        if employee.role not in ['ASSISTANT', 'CLEANING']:
+            return None
+            
         today = date.today()
-        current_week_start = today - timedelta(days=today.weekday())
+        current_week = today.isocalendar()[1]
         
-        # Suche nach einem aktiven Zeitraum
-        current_period = cls.objects.filter(
+        # Debug-Ausgaben
+        print(f"Current week: {current_week}")
+        
+        # Bestimme das aktuelle Quartal (0-3)
+        quarter = (current_week - 1) // 13
+        print(f"Quarter: {quarter}")
+        
+        # Berechne Start- und Endwoche (1-13, 14-26, 27-39, 40-52)
+        start_week = (quarter * 13) + 1
+        end_week = start_week + 12  # 13 Wochen, also start_week + 12
+        print(f"Start week: {start_week}, End week: {end_week}")
+        
+        # Konvertiere Kalenderwoche zu Datum
+        year = today.year
+        
+        # Behandle Jahresübergang
+        if start_week > 52:
+            start_week = 1
+            year += 1
+        if end_week > 52:
+            end_week = end_week - 52
+            year += 1
+            
+        print(f"Final start week: {start_week}, Final end week: {end_week}, Year: {year}")
+        
+        try:
+            start_date = datetime.strptime(f'{year}-W{start_week:02d}-1', '%Y-W%W-%w').date()
+            end_date = datetime.strptime(f'{year}-W{end_week:02d}-5', '%Y-W%W-%w').date()
+            print(f"Start date: {start_date}, End date: {end_date}")
+        except ValueError as e:
+            print(f"Error converting weeks to dates: {e}")
+            return None
+
+        # Hole oder erstelle den Zeitraum
+        period, created = cls.objects.get_or_create(
             employee=employee,
-            start_date__lte=today,
-            end_date__gte=today,
-            is_completed=False
-        ).first()
+            start_date=start_date,
+            end_date=end_date,
+            defaults={
+                'weeks': 13
+            }
+        )
         
-        if not current_period:
-            # Erstelle neuen Zeitraum ab aktueller Woche
-            current_period = cls.objects.create(
-                employee=employee,
-                start_date=current_week_start,
-                weeks=13  # Standard: 13 Wochen
-            )
+        return period
+
+    @property
+    def calendar_weeks(self):
+        """Gibt den Zeitraum in Kalenderwochen zurück"""
+        # Berechne das Quartal basierend auf dem Startdatum
+        start_week = self.start_date.isocalendar()[1]
+        quarter = (start_week - 1) // 13
         
-        return current_period
+        # Berechne die korrekten Wochen für das Quartal
+        start_week = (quarter * 13) + 1
+        end_week = start_week + 12
+        year = self.start_date.year
+        
+        return f"KW{start_week:02d}-{end_week:02d}/{year}"
+
+    class Meta:
+        verbose_name = _("Durchrechnungszeitraum")
+        verbose_name_plural = _("Durchrechnungszeiträume")
+        ordering = ['-start_date']
 
 

@@ -106,11 +106,16 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         # Erstelle vorbereitete Daten für das Template
         employees_data = []
         for employee in employees:
+            if employee.role not in ['ASSISTANT', 'CLEANING']:
+                continue  # Überspringe andere Rollen
+                
             employee_hours = []
             weekly_total = Decimal('0')
             
             # Hole oder erstelle den Durchrechnungszeitraum für diesen Mitarbeiter
             averaging_period = AveragingPeriod.get_or_create_current(employee)
+            if not averaging_period:
+                continue  # Überspringe wenn kein Durchrechnungszeitraum erstellt werden konnte
             
             for day in weekdays:
                 # Finde die Arbeitsstunden für diesen Tag
@@ -132,7 +137,8 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 'employee': employee,
                 'days': employee_hours,
                 'weekly_total': weekly_total,
-                'averaging_period': averaging_period
+                'averaging_period': averaging_period,
+                'target_hours_per_week': employee.working_hours_per_week
             })
             
         context.update({
@@ -427,7 +433,8 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
 
     def get_employees(self):
         """Holt die relevanten Mitarbeiter basierend auf Filtern"""
-        queryset = CustomUser.objects.exclude(role='OWNER')
+        # Schließe Therapeuten und Owner aus
+        queryset = CustomUser.objects.exclude(role__in=['OWNER', 'THERAPIST'])
         
         # Wenn ein Rollenfilter gesetzt ist
         role_filter = self.request.GET.get('role')
