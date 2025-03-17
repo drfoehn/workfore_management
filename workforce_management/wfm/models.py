@@ -920,28 +920,24 @@ class AveragingPeriod(models.Model):
         return self.actual_hours / total_weeks
 
     @classmethod
-    def get_or_create_current(cls, employee):
-        """Holt oder erstellt den aktuellen Durchrechnungszeitraum basierend auf fixen Quartalen"""
+    def get_or_create_current(cls, employee, reference_date=None):
+        """Holt oder erstellt den Durchrechnungszeitraum basierend auf fixen Quartalen"""
         if employee.role not in ['ASSISTANT', 'CLEANING']:
             return None
             
-        today = date.today()
-        current_week = today.isocalendar()[1]
-        
-        # Debug-Ausgaben
-        print(f"Current week: {current_week}")
+        # Verwende das übergebene Datum oder heute
+        reference_date = reference_date or date.today()
+        current_week = reference_date.isocalendar()[1]
         
         # Bestimme das aktuelle Quartal (0-3)
         quarter = (current_week - 1) // 13
-        print(f"Quarter: {quarter}")
         
         # Berechne Start- und Endwoche (1-13, 14-26, 27-39, 40-52)
         start_week = (quarter * 13) + 1
-        end_week = start_week + 12  # 13 Wochen, also start_week + 12
-        print(f"Start week: {start_week}, End week: {end_week}")
+        end_week = start_week + 12
         
         # Konvertiere Kalenderwoche zu Datum
-        year = today.year
+        year = reference_date.year
         
         # Behandle Jahresübergang
         if start_week > 52:
@@ -951,15 +947,8 @@ class AveragingPeriod(models.Model):
             end_week = end_week - 52
             year += 1
             
-        print(f"Final start week: {start_week}, Final end week: {end_week}, Year: {year}")
-        
-        try:
-            start_date = datetime.strptime(f'{year}-W{start_week:02d}-1', '%Y-W%W-%w').date()
-            end_date = datetime.strptime(f'{year}-W{end_week:02d}-5', '%Y-W%W-%w').date()
-            print(f"Start date: {start_date}, End date: {end_date}")
-        except ValueError as e:
-            print(f"Error converting weeks to dates: {e}")
-            return None
+        start_date = datetime.strptime(f'{year}-W{start_week:02d}-1', '%Y-W%W-%w').date()
+        end_date = datetime.strptime(f'{year}-W{end_week:02d}-5', '%Y-W%W-%w').date()
 
         # Hole oder erstelle den Zeitraum
         period, created = cls.objects.get_or_create(

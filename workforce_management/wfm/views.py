@@ -112,8 +112,12 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             employee_hours = []
             weekly_total = Decimal('0')
             
-            # Hole oder erstelle den Durchrechnungszeitraum für diesen Mitarbeiter
-            averaging_period = AveragingPeriod.get_or_create_current(employee)
+            # Übergebe das ausgewählte Datum an get_or_create_current
+            averaging_period = AveragingPeriod.get_or_create_current(
+                employee, 
+                reference_date=current_date
+            )
+            
             if not averaging_period:
                 continue  # Überspringe wenn kein Durchrechnungszeitraum erstellt werden konnte
             
