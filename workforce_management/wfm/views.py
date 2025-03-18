@@ -57,7 +57,7 @@ def dashboard(request):
 class WorkingHoursListView(LoginRequiredMixin, ListView):
     template_name = 'wfm/working_hours_list.html'
     model = WorkingHours
-
+    #TODO: Break-Duration mit Kaffehäferl anzeigen wenn >0 Minuten
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
@@ -1056,6 +1056,7 @@ def api_vacation_request(request):
 
 @login_required
 def api_time_compensation_request(request):
+    #TODO: Anträge werden doppelt gestellt
     """API-Endpunkt für Zeitausgleichsanträge"""
     if request.method == 'POST':
         try:

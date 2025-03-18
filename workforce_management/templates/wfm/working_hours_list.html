@@ -167,12 +167,16 @@
                                     {% if wh %}
                                         <div data-bs-toggle="tooltip" 
                                              data-bs-placement="top" 
-                                             title="{{ wh.notes|default:'' }}"
+                                             title="{% if wh.notes %}{{ wh.notes }}{% endif %}{% if wh.break_duration %}
+                                                    {% if wh.notes %}&#13;{% endif %}Pause: {{ wh.break_duration }} Min.{% endif %}"
                                         >
                                             {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
                                             <br>
                                             <small class="text-muted">
-                                                ({{ wh.ist_hours|floatformat:2 }}h)
+                                                ({{ wh.ist_hours|floatformat:2 }}h
+                                                {% if wh.break_duration %}
+                                                    <i class="bi bi-cup-hot" title="Pause: {{ wh.break_duration }} Min."></i>
+                                                {% endif %})
                                             </small>
                                         </div>
                                         {% if user.role == 'OWNER' or user == emp_data.employee %}
@@ -302,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     date: date,
                     start_time: '',
                     end_time: '',
-                    break_duration: '',
+                    break_minutes: '',
                     notes: '',
                     employee_id: employee_id
                 });
@@ -352,7 +356,7 @@ function fillWorkingHoursModal(data) {
     document.getElementById('workDate').value = data.date;  // Das Datum aus der Zeile
     document.getElementById('startTime').value = data.start_time || '';
     document.getElementById('endTime').value = data.end_time || '';
-    document.getElementById('breakDuration').value = data.break_duration || '30';
+    document.getElementById('breakMinutes').value = data.break_minutes;
     document.getElementById('notes').value = data.notes || '';
     document.getElementById('employeeId').value = data.employee_id || '';
 }
@@ -362,7 +366,7 @@ function saveWorkingHours() {
     const formData = {
         start_time: form.start_time.value,
         end_time: form.end_time.value,
-        break_duration: parseInt(form.break_duration.value),
+        break_minutes: parseInt(form.break_minutes.value),
         notes: form.notes.value,
         employee_id: document.getElementById('employeeId').value
     };
