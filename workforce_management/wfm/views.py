@@ -2377,31 +2377,24 @@ class AbsenceListView(LoginRequiredMixin, ListView):
     model = SickLeave
     context_object_name = 'sick_leaves'
     
-    def get_queryset(self):
-        # Verwende select_related wie in der SickLeaveManagementView
-        return SickLeave.objects.filter(
-            employee=self.request.user
-        ).select_related('employee', 'document').order_by('-start_date')
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
         today = timezone.now().date()
 
-        # Hole die Urlaubsanträge und berechne die Stunden
-        vacations = Vacation.objects.filter(
-            employee=user
-        ).order_by('-start_date')
-        
-        # Berechne die Stunden für jeden Urlaub
-        for vacation in vacations:
-            vacation.hours = vacation.calculate_vacation_hours()
+        print("\n=== DEBUG: Starting context generation ===")
+        print(f"Current user: {user}, Today: {today}")
+
+ 
 
         # Urlaubsübersicht
         entitlement = VacationEntitlement.objects.filter(
             employee=user,
             year=today.year
         ).first()
+        
+        print(f"\nEntitlement found: {entitlement}")
+        print(f"Entitlement total_hours: {entitlement.total_hours if entitlement else 'None'}")
 
         if entitlement:
             # Genehmigte Urlaubsstunden
@@ -2415,6 +2408,9 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 for vacation in approved_vacations
             )
             
+            print(f"\nApproved vacations count: {approved_vacations.count()}")
+            print(f"Approved hours: {approved_hours}")
+
             # Beantragte Urlaubsstunden
             pending_vacations = Vacation.objects.filter(
                 employee=user,
@@ -2426,15 +2422,16 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 for vacation in pending_vacations
             )
             
+            print(f"\nPending vacations count: {pending_vacations.count()}")
+            print(f"Pending hours: {pending_hours}")
+
             # Übertrag aus Vorjahr
             last_year = today.year - 1
-            last_year_entitlement = VacationEntitlement.objects.filter(
+            last_year_remaining = Decimal('0')
+            if last_year_entitlement := VacationEntitlement.objects.filter(
                 employee=user,
                 year=last_year
-            ).first()
-            
-            last_year_remaining = Decimal('0')
-            if last_year_entitlement:
+            ).first():
                 last_year_used = sum(
                     vacation.calculate_vacation_hours()
                     for vacation in Vacation.objects.filter(
@@ -2448,67 +2445,79 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                     Decimal('0')
                 )
             
+            print(f"\nLast year remaining: {last_year_remaining}")
+
             # Gesamtverfügbare Stunden
             total_available = entitlement.total_hours + last_year_remaining
+            remaining_hours = total_available - approved_hours - pending_hours
+            remaining_minus_pending = remaining_hours - pending_hours
             
-            context['vacation_info'] = {
-                'year': today.year,
-                'entitlement': entitlement.total_hours,
-                'carried_over': last_year_remaining,
-                'total_available': total_available,
-                'approved_hours': approved_hours,
-                'pending_hours': pending_hours,
-                'remaining_hours': total_available - approved_hours
-            }
 
-        context['vacations'] = vacations
-        context['time_comps'] = TimeCompensation.objects.filter(employee=user).order_by('-date')
+
+            context.update({
+                'vacation_entitlement': entitlement,
+                'vacation_total_available': total_available,
+                'vacation_approved_hours': approved_hours,
+                'vacation_pending_hours': pending_hours,
+                'vacation_remaining_hours': remaining_hours,
+                'vacation_last_year_remaining': last_year_remaining,
+                'vacation_remaining_minus_pending': remaining_minus_pending
+            })
+
+        # Hole alle Urlaube
+        vacations = Vacation.objects.filter(
+            employee=user
+        ).order_by('-start_date')
         
-        # Zeitausgleich-Info für Assistenten und Reinigungskräfte
-        if user.role in ['ASSISTANT', 'CLEANING']:
-            context['timecomp_info'] = self.get_timecomp_info(user)
-
-        # Für das Upload-Modal
-        context['users'] = [user]
-
-        return context
-
-    def get_timecomp_info(self, user):
-        # Berechne Überstunden für das aktuelle Jahr
-        total_overtime = Decimal('0')
-        for month in range(1, 13):
-            overtime_account = OvertimeAccount.objects.filter(
-                employee=user,
-                year=date.today().year,
-                month=month,
-                is_finalized=True
-            ).first()
-            if overtime_account:
-                total_overtime += overtime_account.hours_for_timecomp
-
-        # Bereits genommener Zeitausgleich
-        approved_timecomp = TimeCompensation.objects.filter(
+        context['vacations'] = vacations
+        
+        # Zeitausgleichsübersicht
+        # Hole das Überstundenkonto für diesen Monat
+        overtime_account = OvertimeAccount.objects.filter(
             employee=user,
-            date__year=date.today().year,
+            year=today.year,
+            month=today.month
+        ).first()
+
+        if overtime_account:
+            total_hours = overtime_account.hours_for_timecomp
+        else:
+            total_hours = 0
+
+        # Hole genehmigte und beantragte Zeitausgleiche
+        approved_time_comps = TimeCompensation.objects.filter(  
+            employee=user,
             status='APPROVED'
         )
-        approved_timecomp_hours = sum(tc.hours for tc in approved_timecomp)
-
-        # Beantragter Zeitausgleich
-        pending_timecomp = TimeCompensation.objects.filter(
+        pending_time_comps = TimeCompensation.objects.filter(
             employee=user,
-            date__year=date.today().year,
             status='REQUESTED'
         )
-        pending_timecomp_hours = sum(tc.hours for tc in pending_timecomp)
 
-        return {
-            'year': date.today().year,
-            'total_hours': total_overtime,
-            'approved_hours': approved_timecomp_hours,
-            'pending_hours': pending_timecomp_hours,
-            'remaining_hours': total_overtime - approved_timecomp_hours
-        }
+        # Berechne die Stunden
+        used_hours = sum(tc.hours for tc in approved_time_comps)
+        pending_hours = sum(tc.hours for tc in pending_time_comps)
+        remaining_hours = total_hours - used_hours      
+
+        context.update({
+            'timecomp_total_hours': total_hours,
+            'timecomp_used_hours': used_hours,
+            'timecomp_pending_hours': pending_hours,
+            'timecomp_remaining_hours': remaining_hours
+        })
+        
+        
+        
+        
+
+        # Hole alle Zeitausgleiche
+        time_comps = TimeCompensation.objects.filter(
+            employee=user
+        ).order_by('-date')
+        context['time_comps'] = time_comps
+
+
+        return context
 
 @login_required
 def api_delete_absence(request, type, pk):
