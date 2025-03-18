@@ -212,51 +212,50 @@
                 </table>
             </div>
 
-            <!-- Durchrechnungszeiträume pro Mitarbeiter -->
-            
-            <h5 class="mt-4 mb-3">{% trans "Durchrechnungszeiträume" %} - Zeitraum {{ employees_data.0.averaging_period.calendar_weeks }}</h5>
-            <div class="row g-4">
-                {% for emp_data in employees_data %}
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-pistachio-light">
-                            <h6 class="mb-0">{{ emp_data.employee.get_full_name }}</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-2">
-                                    <strong>{% trans "Zeitraum" %}:</strong><br>
-                                    {{ emp_data.averaging_period.calendar_weeks }}
-                                </div>
-                                <div class="col-md-2">
-                                    <strong>{% trans "Soll-Stunden" %}:</strong><br>
-                                    {{ emp_data.averaging_period.target_hours|floatformat:2 }} h
-                                </div>
-                                <div class="col-md-2">
-                                    <strong>{% trans "Ist-Stunden" %}:</strong><br>
-                                    {{ emp_data.averaging_period.actual_hours|floatformat:2 }} h
-                                </div>
-                                <div class="col-md-2">
-                                    <strong>{% trans "Ø Std/Woche" %}:</strong><br>
-                                    {{ emp_data.averaging_period.average_weekly_hours|floatformat:2 }} h
-                                </div>
-                                <div class="col-md-2">
-                                    <strong>{% trans "Soll Std/Woche" %}:</strong><br>
-                                    {{ emp_data.employee.working_hours_per_week|floatformat:2 }} h
-                                </div>
-                                <div class="col-md-2">
-                                    <strong>{% trans "Saldo" %}:</strong><br>
-                                    <span class="{% if emp_data.averaging_period.balance < 0 %}text-danger{% elif emp_data.averaging_period.balance > 0 %}text-success{% endif %}">
-                                        {{ emp_data.averaging_period.balance|floatformat:2 }} h
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+            <!-- Durchrechnungszeitraum-Anzeige -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Durchrechnungszeitraum für {{ employees_data.0.averaging_period.calendar_weeks }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Mitarbeiter" %}</th>
+                                    <th>{% trans "Soll-Stunden" %}</th>
+                                    <th>{% trans "Ist-Stunden" %}</th>
+                                    <th>{% trans "Ø Std/Woche" %}</th>
+                                    <th>{% trans "Soll Std/Woche" %}</th>
+                                    <th>{% trans "Saldo" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for emp_data in employees_data %}
+                                    {% if user.role == 'OWNER' or user.id == emp_data.employee.id %}
+                                        {% with period=emp_data.averaging_period %}
+                                            {% if period %}
+                                                <tr>
+                                                    <td>{{ emp_data.employee.get_full_name }}</td>
+                                                    <td>{{ period.target_hours|floatformat:2 }} h</td>
+                                                    <td>{{ period.actual_hours|floatformat:2 }} h</td>
+                                                    <td>{{ period.average_weekly_hours|floatformat:2 }} h</td>
+                                                    <td>{{ emp_data.employee.working_hours_per_week|floatformat:2 }} h</td>
+                                                    <td>
+                                                        <span class="{% if period.balance < 0 %}text-danger{% elif period.balance > 0 %}text-success{% endif %}">
+                                                            {{ period.balance|floatformat:2 }} h
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            {% endif %}
+                                        {% endwith %}
+                                    {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                {% endfor %}
             </div>
-           
         </div>
     </div>
 </div>
