@@ -2132,6 +2132,7 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
             context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
             context['cleaners'] = CustomUser.objects.filter(role='CLEANING')
         
+        
         return context
 
     def get_events(self, request):
