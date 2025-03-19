@@ -125,7 +125,7 @@ class WorkingHoursAdmin(admin.ModelAdmin):
 
 @admin.register(Vacation)
 class VacationAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'start_date', 'end_date', 'status')
+    list_display = ('employee', 'start_date', 'end_date', 'hours', 'status')
     list_filter = ('status', 'start_date', 'employee')
     search_fields = ('employee__username', 'notes')
     date_hierarchy = 'start_date'

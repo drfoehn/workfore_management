@@ -301,6 +301,12 @@ class Vacation(models.Model):
         default='REQUESTED'
     )
     notes = models.TextField(blank=True)
+    hours = models.DecimalField(
+        max_digits=6, 
+        decimal_places=2, 
+        default=0,
+        verbose_name=_("Stunden")
+    )
     
     def calculate_vacation_hours(self):
         """Berechnet die Urlaubsstunden basierend auf den Soll-Arbeitszeiten"""
@@ -369,8 +375,12 @@ class Vacation(models.Model):
             raise ValidationError(_('Nicht genügend Urlaubsstunden verfügbar'))
 
     def save(self, *args, **kwargs):
-        # Prüfe ob es eine Statusänderung von REQUESTED/PENDING zu APPROVED gibt
-        if self.pk:  # Wenn es ein existierender Eintrag ist
+        # Berechne die Stunden vor dem Speichern
+        if self.start_date and self.end_date:
+            self.hours = self.calculate_vacation_hours()
+        
+        # Bestehende save-Logik
+        if self.pk:  
             old_instance = Vacation.objects.get(pk=self.pk)
             if (old_instance.status in ['REQUESTED', 'PENDING'] and 
                 self.status == 'APPROVED'):
