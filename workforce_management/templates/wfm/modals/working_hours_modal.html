@@ -10,8 +10,8 @@
             <div class="modal-body">
                 <form id="workingHoursForm">
                     {% csrf_token %}
-                    <input type="hidden" id="workingHoursId" name="id">
-                    <input type="hidden" id="employeeId" name="employee_id">
+                    <input type="hidden" id="employeeId" name="employee_id" value="{{ request.user.id }}">
+                    <input type="hidden" id="workingHoursId" name="id" value="">
                     
                     <div class="mb-3">
                         <label for="workDate" class="form-label">{% trans "Datum" %}</label>

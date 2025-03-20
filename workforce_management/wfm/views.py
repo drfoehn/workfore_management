@@ -935,15 +935,17 @@ def save_working_hours(request, date):
     try:
         data = json.loads(request.body)
         
-        # Hole den Mitarbeiter aus der ID
+        # Hole den Mitarbeiter aus der ID oder verwende den aktuellen User
+        employee_id = data.get('employee_id') or request.user.id
+        
         try:
-            employee = CustomUser.objects.get(id=data['employee_id'])
+            employee = CustomUser.objects.get(id=employee_id)
         except CustomUser.DoesNotExist:
             return JsonResponse({
                 'success': False,
                 'error': 'Mitarbeiter nicht gefunden'
             }, status=404)
-            
+        
         # Prüfe Berechtigung (nur Owner oder der Mitarbeiter selbst)
         if not (request.user.role == 'OWNER' or request.user.id == employee.id):
             return JsonResponse({
