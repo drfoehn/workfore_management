@@ -16,12 +16,17 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="user" class="form-label">{% trans "Mitarbeiter" %}</label>
-                        <select class="form-select" id="user" name="user" required>
-                            <option value="">{% trans "Bitte wählen..." %}</option>
-                            {% for user in users %}
-                                <option value="{{ user.id }}">{{ user.get_full_name }}</option>
-                            {% endfor %}
-                        </select>
+                        {% if user.role == 'OWNER' %}
+                            <select class="form-select" id="user" name="user" required>
+                                <option value="">{% trans "Bitte wählen..." %}</option>
+                                {% for user in users %}
+                                    <option value="{{ user.id }}">{{ user.get_full_name }}</option>
+                                {% endfor %}
+                            </select>
+                        {% else %}
+                            <input type="hidden" id="user" name="user" value="{{ user.id }}">
+                            <input type="text" class="form-control" value="{{ user.get_full_name }}" readonly>
+                        {% endif %}
                     </div>
                     <div class="mb-3">
                         <label for="file" class="form-label">{% trans "Datei auswählen" %}</label>

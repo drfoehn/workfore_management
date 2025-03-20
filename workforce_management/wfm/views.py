@@ -2879,21 +2879,35 @@ def api_upload_sick_leave_document(request, sick_leave_id):
 
 
 
-class UserDocumentListView(OwnerRequiredMixin, ListView):
+class UserDocumentListView(LoginRequiredMixin, ListView):  # OwnerRequiredMixin entfernt
     model = UserDocument
     template_name = 'wfm/user_documents.html'
     context_object_name = 'documents'
 
+    def get_queryset(self):
+        # Owner sieht alle Dokumente, andere nur ihre eigenen
+        if self.request.user.role == 'OWNER':
+            return UserDocument.objects.all()
+        return UserDocument.objects.filter(user=self.request.user)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['users'] = CustomUser.objects.all().order_by('first_name', 'last_name')
+        # Nur Owner sieht die User-Liste für das Dropdown
+        if self.request.user.role == 'OWNER':
+            context['users'] = CustomUser.objects.all().order_by('first_name', 'last_name')
         return context
 
 @login_required
 def upload_document(request):
     if request.method == 'POST':
         try:
-            user_id = request.POST.get('user')
+            # Wenn kein user_id übergeben wurde oder User kein Owner ist, 
+            # verwende den eingeloggten User
+            if not request.POST.get('user') or request.user.role != 'OWNER':
+                user_id = request.user.id
+            else:
+                user_id = request.POST.get('user')
+                
             file = request.FILES.get('file')
             display_name = request.POST.get('display_name')
             notes = request.POST.get('notes')
