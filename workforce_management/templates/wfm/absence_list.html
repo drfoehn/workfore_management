@@ -296,7 +296,15 @@
                 <div class="card-header">
                     <h5 class="card-title mb-0">
                         <i class="bi bi-hospital text-danger"></i> {% trans "Krankenstand" %}
-                    </h5>
+                    
+               
+                    <button class="btn bg-queen-blue" 
+                    data-bs-toggle="modal" 
+                    data-bs-target="#sickLeaveModal"
+                    style="float: right;">
+                <i class="bi bi-plus-circle"></i> {% trans "Krankenstand melden" %}
+            </h5>
+            </button>
                 </div>
                 <div class="card-body">
                     {% for sl in sick_leaves %}
@@ -322,7 +330,7 @@
                                 <button type="button" 
                                         class="btn btn-sm btn-primary upload-sick-note-btn" 
                                         data-sick-leave-id="{{ sl.id }}"
-                                        data-employee-id="{{ request.user.id }}">
+                                        data-employee-id="{{ sl.user_id }}">
                                     <i class="bi bi-upload"></i> 
                                 </button>
                             {% endif %}

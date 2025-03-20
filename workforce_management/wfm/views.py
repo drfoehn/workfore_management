@@ -2384,19 +2384,11 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         user = self.request.user
         today = timezone.now().date()
 
-        print("\n=== DEBUG: Starting context generation ===")
-        print(f"Current user: {user}, Today: {today}")
-
- 
-
         # Urlaubsübersicht
         entitlement = VacationEntitlement.objects.filter(
             employee=user,
             year=today.year
         ).first()
-        
-        print(f"\nEntitlement found: {entitlement}")
-        print(f"Entitlement total_hours: {entitlement.total_hours if entitlement else 'None'}")
 
         if entitlement:
             # Genehmigte Urlaubsstunden
@@ -2409,9 +2401,6 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 vacation.calculate_vacation_hours() 
                 for vacation in approved_vacations
             )
-            
-            print(f"\nApproved vacations count: {approved_vacations.count()}")
-            print(f"Approved hours: {approved_hours}")
 
             # Beantragte Urlaubsstunden
             pending_vacations = Vacation.objects.filter(
@@ -2423,9 +2412,6 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 vacation.calculate_vacation_hours() 
                 for vacation in pending_vacations
             )
-            
-            print(f"\nPending vacations count: {pending_vacations.count()}")
-            print(f"Pending hours: {pending_hours}")
 
             # Übertrag aus Vorjahr
             last_year = today.year - 1
@@ -2446,8 +2432,6 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                     last_year_entitlement.total_hours - last_year_used,
                     Decimal('0')
                 )
-            
-            print(f"\nLast year remaining: {last_year_remaining}")
 
             # Gesamtverfügbare Stunden
             total_available = entitlement.total_hours + last_year_remaining
@@ -2499,7 +2483,7 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         # Berechne die Stunden
         used_hours = sum(tc.hours for tc in approved_time_comps)
         pending_hours = sum(tc.hours for tc in pending_time_comps)
-        remaining_hours = total_hours - used_hours      
+        remaining_hours = total_hours - pending_hours - used_hours      
 
         context.update({
             'timecomp_total_hours': total_hours,
@@ -2868,23 +2852,23 @@ def api_upload_sick_leave_document(request, sick_leave_id):
         if sick_leave.document:
             sick_leave.document.delete()
         
-        # Erstelle neues Dokument
+        # Erstelle neues Dokument mit korrektem User-Feld
         new_document = UserDocument.objects.create(
-            user=sick_leave.employee,
+            user=sick_leave.employee,  # employee statt user
             file=document,
-            display_name=f"{sick_leave.employee.get_full_name()} - Krankmeldung vom {sick_leave.start_date.strftime('%d.%m.%Y')}",
+            display_name=f"Krankmeldung - {sick_leave.employee.get_full_name()} - {sick_leave.start_date:%d.%m.%Y}",  # Formatierung geändert
             notes=''
         )
         
         # Verknüpfe mit dem Krankenstand und setze Status auf SUBMITTED
         sick_leave.document = new_document
-        sick_leave.status = 'SUBMITTED'  # Setze Status auf "Krankmeldung vorgelegt"
+        sick_leave.status = 'SUBMITTED'
         sick_leave.save()
         
         return JsonResponse({'success': True})
         
     except Exception as e:
-        logger.error(f"Error uploading sick leave document: {str(e)}", exc_info=True)
+        logger.error(f"Document upload error: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 # TODO: Abgelehnte Anträge anzeigen in Liste und Kalender
