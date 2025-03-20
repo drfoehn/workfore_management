@@ -1074,28 +1074,39 @@ def api_time_compensation_request(request):
             # Parse date
             date = datetime.strptime(data['date'], '%Y-%m-%d').date()
             
-            # Prüfe verfügbare Stunden
-            current_year = timezone.now().year
-            total_hours = calculate_overtime_hours(request.user, current_year)
-            
-            used_hours = TimeCompensation.objects.filter(
+            # Prüfe ob bereits ein Antrag für diesen Tag existiert
+            existing_request = TimeCompensation.objects.filter(
                 employee=request.user,
-                date__year=current_year,
-                status='APPROVED'
-            ).count() * 8  # 8 Stunden pro Tag
+                date=date,
+                status__in=['REQUESTED', 'APPROVED']  # Prüfe nur aktive Anträge
+            ).first()
             
-            remaining_hours = total_hours - used_hours
-            
-            if remaining_hours < 8:  # Standard-Arbeitstag
+            if existing_request:
                 return JsonResponse({
                     'success': False,
-                    'error': f'Nicht genügend Überstunden verfügbar. Verfügbar: {remaining_hours:.1f}h'
+                    'error': f'Für den {date.strftime("%d.%m.%Y")} existiert bereits ein Zeitausgleichsantrag'
                 })
+
+            # Hole die geplanten Stunden für diesen Tag
+            schedule = ScheduleTemplate.objects.filter(
+                employee=request.user,
+                weekday=date.weekday(),
+                valid_from__lte=date
+            ).order_by('-valid_from').first()
+
+            if not schedule:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Keine Arbeitszeit für diesen Tag geplant'
+                })
+
+            required_hours = schedule.hours
 
             # Erstelle den Zeitausgleichsantrag
             time_comp = TimeCompensation.objects.create(
                 employee=request.user,
                 date=date,
+                hours=required_hours,  # Speichere die tatsächlich benötigten Stunden
                 notes=data.get('notes', ''),
                 status='REQUESTED'
             )
@@ -1103,16 +1114,16 @@ def api_time_compensation_request(request):
             return JsonResponse({'success': True})
             
         except Exception as e:
-            logger.error(f"Time compensation request error: {str(e)}", exc_info=True)
+            logger.error(f"Error in time compensation request: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
                 'error': str(e)
             })
-    
+
     return JsonResponse({
         'success': False,
-        'error': 'Ungültige Anfrage'
-    }, status=400)
+        'error': 'Invalid method'
+    })
 
 class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
     template_name = 'wfm/therapist_monthly_overview.html'
@@ -1973,7 +1984,7 @@ class AssistantCalendarEventsView(View):
             'end': (v.end_date + timedelta(days=1)).isoformat(),
             'backgroundColor': v.employee.color,
             'className': 'vacation-event',
-            'type': 'vacation',
+            # 'type': 'vacation',
             'allDay': True
         } for v in vacations])
         
@@ -2460,6 +2471,9 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         context['vacations'] = vacations
         
         # Zeitausgleichsübersicht
+        print("\n=== DEBUG: TimeCompensation Info ===")
+        print(f"Current user: {user}, Today: {today}")
+
         # Hole das Überstundenkonto für diesen Monat
         overtime_account = OvertimeAccount.objects.filter(
             employee=user,
@@ -2467,10 +2481,14 @@ class AbsenceListView(LoginRequiredMixin, ListView):
             month=today.month
         ).first()
 
+        print(f"\nOvertime Account found: {overtime_account}")
+        
         if overtime_account:
             total_hours = overtime_account.hours_for_timecomp
+            print(f"Total overtime hours: {total_hours}")
         else:
             total_hours = 0
+            print("No overtime account found, setting total_hours to 0")
 
         # Hole genehmigte und beantragte Zeitausgleiche
         approved_time_comps = TimeCompensation.objects.filter(  
@@ -2486,6 +2504,12 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         used_hours = sum(tc.hours for tc in approved_time_comps)
         pending_hours = sum(tc.hours for tc in pending_time_comps)
         remaining_hours = total_hours - pending_hours - used_hours      
+
+        print(f"\nApproved time comps count: {approved_time_comps.count()}")
+        print(f"Used hours: {used_hours}")
+        print(f"Pending time comps count: {pending_time_comps.count()}")
+        print(f"Pending hours: {pending_hours}")
+        print(f"Remaining hours: {remaining_hours}")
 
         context.update({
             'timecomp_total_hours': total_hours,
@@ -2504,7 +2528,13 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         ).order_by('-date')
         context['time_comps'] = time_comps
 
-
+        print("\n=== Final TimeComp context values ===")
+        print(f"Total hours: {context.get('timecomp_total_hours')}")
+        print(f"Used hours: {context.get('timecomp_used_hours')}")
+        print(f"Pending hours: {context.get('timecomp_pending_hours')}")
+        print(f"Remaining hours: {context.get('timecomp_remaining_hours')}")
+        print("================================\n")
+        
         return context
 
 @login_required
@@ -2585,7 +2615,7 @@ def api_time_compensation_status(request):
         # Berechne die Stunden
         used_hours = sum(tc.hours for tc in approved_time_comps)
         pending_hours = sum(tc.hours for tc in pending_time_comps)
-        remaining_hours = total_hours - used_hours
+        remaining_hours = total_hours - used_hours - pending_hours
         
         return JsonResponse({
             'total_hours': float(total_hours),

@@ -138,9 +138,20 @@ document.getElementById('timeCompModal').addEventListener('show.bs.modal', funct
     }
 });
 
-// Form Submit Handler
+// Form Submit Handler - Füge eine Sperre hinzu
+let isSubmitting = false;  // Verhindert doppelte Submissions
+
 document.getElementById('timeCompForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
+    // Prüfe ob bereits ein Submit läuft
+    if (isSubmitting) {
+        return;
+    }
+    
+    isSubmitting = true;  // Setze die Sperre
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;  // Deaktiviere den Submit-Button
     
     const formData = new FormData(this);
     
@@ -167,6 +178,25 @@ document.getElementById('timeCompForm').addEventListener('submit', function(e) {
     })
     .catch(error => {
         showAlert('danger', error.message);
+        isSubmitting = false;  // Setze die Sperre zurück
+        submitBtn.disabled = false;  // Aktiviere den Submit-Button wieder
+    })
+    .finally(() => {
+        // Setze die Sperre nach kurzer Verzögerung zurück
+        setTimeout(() => {
+            isSubmitting = false;
+            submitBtn.disabled = false;
+        }, 2000);
     });
+});
+
+// Setze die Submission-Sperre zurück, wenn das Modal geschlossen wird
+document.getElementById('timeCompModal').addEventListener('hidden.bs.modal', function() {
+    isSubmitting = false;
+    const form = document.getElementById('timeCompForm');
+    if (form) {
+        form.reset();
+        form.querySelector('button[type="submit"]').disabled = false;
+    }
 });
 </script> 
