@@ -3489,6 +3489,24 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                     cleaning_expenses[employee.id]['total_soll'] += Decimal(str(date_data.get('soll_hours', 0)))
                     cleaning_expenses[employee.id]['worked_hours'] += Decimal(str(date_data.get('ist_hours', 0)))
 
+                    # In der FinanceOverviewView, bei der Berechnung der assistant_expenses und cleaning_expenses
+                    working_hours = WorkingHours.objects.filter(
+                        employee_id=employee.id,
+                        date__year=year,
+                        date__month=month
+                    ).values(
+                        'is_paid',
+                        'paid_date'
+                    ).first()
+
+                    if working_hours:
+                        cleaning_expenses[employee.id]['is_paid'] = working_hours['is_paid']
+                        cleaning_expenses[employee.id]['paid_date'] = working_hours['paid_date']
+                    else:
+                        cleaning_expenses[employee.id]['is_paid'] = False
+                        cleaning_expenses[employee.id]['paid_date'] = None
+
+
         # Berechne die finalen Werte für jeden Mitarbeiter
         for expense in assistant_expenses.values():
             expense['absence_hours'] = expense['total_soll'] - expense['worked_hours']

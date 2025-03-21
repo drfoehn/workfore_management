@@ -133,15 +133,15 @@
         <table class="table">
             <tr>
                 <th>{% trans "Verwendete Stunden" %}</th>
-                <th>{% trans "Kosten" %}</th>
+                {% comment %} <th>{% trans "Kosten" %}</th> {% endcomment %}
                 <th>{% trans "Mehrstunden" %}</th>
                 <th>{% trans "Zusätzliche Kosten" %}</th>
                 <th>{% trans "Zahlungsstatus" %}</th>
-                <th>{% trans "Gesamtkosten" %}</th>
+                {% comment %} <th>{% trans "Gesamtkosten" %}</th> {% endcomment %}
             </tr>
             <tr>
                 <td>{{ totals.total_actual_hours|floatformat:2 }}</td>
-                <td>{{ totals.total_booked_amount|floatformat:2 }} €</td>
+                {% comment %} <td>{{ totals.total_booked_amount|floatformat:2 }} €</td> {% endcomment %}
                 <td>{{ totals.total_extra_hours|floatformat:2 }}</td> 
                 <td>{{ totals.extra_costs|floatformat:2 }} €</td> 
                 <td>
@@ -158,7 +158,7 @@
                 
             
        
-                <td>{{ totals.total_sum|floatformat:2 }} €</td>
+                {% comment %} <td>{{ totals.total_sum|floatformat:2 }} €</td> {% endcomment %}
             </tr>
         </table>
     </div>

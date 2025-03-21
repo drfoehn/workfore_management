@@ -227,6 +227,9 @@
                                     <th>{% trans "Arbeitsstunden" %}</th>
                                     <th>{% trans "Abwesenheitsstunden" %}</th>
                                     <th>{% trans "Betrag" %}</th>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Bezahlt am" %}</th>
+                                    <th>{% trans "Aktionen" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -237,6 +240,33 @@
                                     <td>{{ expense.worked_hours|floatformat:1 }}h</td>
                                     <td>{{ expense.absence_hours|floatformat:1 }}h</td>
                                     <td>{{ expense.amount|floatformat:2 }}€</td>
+                                    <td>
+                                        {% if expense.is_paid %}
+                                            <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if expense.paid_date %}
+                                            {{ expense.paid_date|date:"d.m.Y" }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button type="button"
+                                                class="btn btn-sm {% if expense.is_paid %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-salary-paid-btn"
+                                                data-employee-id="{{ expense.employee__id }}"
+                                                data-month="{{ current_date.month }}"
+                                                data-year="{{ current_date.year }}">
+                                            {% if expense.is_paid %}
+                                                <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
+                                            {% else %}
+                                                <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
+                                            {% endif %}
+                                        </button>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             <tfoot>
