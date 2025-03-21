@@ -17,7 +17,7 @@ from .models import (
     OvertimeAccount,
     ClosureDay,
     UserDocument,
-    AveragingPeriod
+    AveragingPeriod,
 )
 from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm, TimeCompensationForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
@@ -544,114 +544,149 @@ class WorkingHoursUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_valid(form)
 
 class OvertimeOverviewView(LoginRequiredMixin, View):
-    template_name = 'wfm/overtime_overview.html'
-
     def get(self, request):
-        today = date.today()
-        
-        # Bestimme den relevanten Monat für die Überstunden
-        if today.day <= 7:
-            target_date = today - relativedelta(months=1)
-        else:
-            target_date = today
-            
-        year = target_date.year
-        month = target_date.month
-        
-        # Berechne die Überstunden
-        total_overtime = Decimal(str(calculate_overtime_hours(request.user, year, month)))  # Convert to Decimal
-        
-        # Hole oder erstelle das Überstundenkonto
-        overtime_account, created = OvertimeAccount.objects.get_or_create(
-            employee=request.user,
-            year=year,
-            month=month,
-            defaults={
-                'total_overtime': total_overtime
-            }
-        )
-        
-        if not created and overtime_account.total_overtime != total_overtime:
-            overtime_account.total_overtime = total_overtime
-            overtime_account.save()
+        try:
+            user = request.user
+            today = timezone.now().date()
 
-        # Prüfe ob Übertrag möglich ist
-        can_transfer = (
-            request.user.role in ['ASSISTANT', 'CLEANING'] and
-            not overtime_account.is_finalized and
-            overtime_account.total_overtime > 0 and
-            (
-                (today.day <= 7 and month == (today - relativedelta(months=1)).month) or
-                (today.day > 7 and month == today.month)
+            print(f"\n=== DEBUG: OvertimeOverview ===")
+            print(f"User: {user}")
+            print(f"Today: {today}")
+
+            # Hole den aktuellen Durchrechnungszeitraum
+            current_period = AveragingPeriod.objects.filter(
+                start_date__lte=today,
+                end_date__gte=today
+            ).first()
+
+            # Wenn kein aktueller Zeitraum gefunden wurde, hole den letzten abgeschlossenen
+            if not current_period:
+                current_period = AveragingPeriod.objects.filter(
+                    end_date__lt=today
+                ).order_by('-end_date').first()
+
+            print(f"Current period found: {current_period}")
+            
+            if not current_period:
+                return JsonResponse({
+                    'error': 'Kein Durchrechnungszeitraum gefunden'
+                })
+
+            print(f"Period start: {current_period.start_date}")
+            print(f"Period end: {current_period.end_date}")
+            print(f"Period balance: {current_period.balance}")
+
+            # Hole oder erstelle den OvertimeAccount Eintrag
+            overtime_account, created = OvertimeAccount.objects.get_or_create(
+                employee=user,
+                year=current_period.end_date.year,
+                month=current_period.end_date.month,
+                defaults={
+                    'total_overtime': current_period.balance or Decimal('0'),
+                    'hours_for_timecomp': Decimal('0'),
+                    'is_finalized': False
+                }
             )
-        )
 
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({
-                'overtime_hours': float(overtime_account.total_overtime),
-                'transferred_hours': float(overtime_account.hours_for_timecomp),
-                'payment_hours': float(overtime_account.hours_for_payment),
+            print(f"Overtime account: {overtime_account}")
+            print(f"Was created: {created}")
+
+            # Prüfe ob die 2-Wochen-Frist noch läuft
+            transfer_deadline = current_period.end_date + timedelta(days=14)
+            can_transfer = today <= transfer_deadline and not overtime_account.is_finalized
+
+            print(f"Transfer deadline: {transfer_deadline}")
+            print(f"Can transfer: {can_transfer}")
+
+            response_data = {
+                'overtime_hours': float(overtime_account.total_overtime or 0),
+                'transferred_hours': float(overtime_account.hours_for_timecomp or 0),
+                'payment_hours': float((overtime_account.total_overtime or 0) - (overtime_account.hours_for_timecomp or 0)),
                 'is_finalized': overtime_account.is_finalized,
-                'can_transfer': can_transfer
+                'can_transfer': can_transfer,
+                'transfer_deadline': transfer_deadline.strftime('%d.%m.%Y'),
+                'period_end': current_period.end_date.strftime('%d.%m.%Y'),
+                'period_start': current_period.start_date.strftime('%d.%m.%Y')
+            }
+
+            print(f"Response data: {response_data}")
+            print("================================\n")
+
+            return JsonResponse(response_data)
+
+        except Exception as e:
+            print(f"Error in OvertimeOverview: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                'error': f'Ein Fehler ist aufgetreten: {str(e)}'
             })
-            
-        context = {
-            'overtime_hours': overtime_account.total_overtime,
-            'transferred_hours': overtime_account.hours_for_timecomp,
-            'payment_hours': overtime_account.hours_for_payment,
-            'is_finalized': overtime_account.is_finalized,
-            'can_transfer': can_transfer,
-            'month_name': target_date.strftime('%B %Y')
-        }
-        
-        return render(request, self.template_name, context)
 
     def post(self, request):
         try:
-            if request.user.role not in ['ASSISTANT', 'CLEANING']:
-                raise PermissionDenied
-            
             data = json.loads(request.body)
-            hours_for_timecomp = Decimal(str(data.get('hours_for_timecomp', 0)))
+            hours = Decimal(str(data.get('hours_for_timecomp', 0)))
             
-            today = date.today()
-            if today.day <= 7:
-                target_date = today - relativedelta(months=1)
-            else:
-                target_date = today
-                
-            overtime_account = OvertimeAccount.objects.get(
-                employee=request.user,
-                year=target_date.year,
-                month=target_date.month
-            )
-            
-            # Berechne die verfügbaren Stunden
-            available_hours = overtime_account.total_overtime - overtime_account.hours_for_timecomp
-            
-            if hours_for_timecomp > available_hours:
+            today = timezone.now().date()
+
+            # Hole den aktuellen Durchrechnungszeitraum (gleiche Logik wie in get)
+            current_period = AveragingPeriod.objects.filter(
+                start_date__lte=today,
+                end_date__gte=today
+            ).first()
+
+            # Wenn kein aktueller Zeitraum gefunden wurde, hole den letzten abgeschlossenen
+            if not current_period:
+                current_period = AveragingPeriod.objects.filter(
+                    end_date__lt=today
+                ).order_by('-end_date').first()
+
+            if not current_period:
                 return JsonResponse({
-                    'success': False,
-                    'error': gettext('Nicht genügend Überstunden verfügbar')
+                    'error': 'Kein Durchrechnungszeitraum gefunden'
                 })
-                
-            # Addiere die neuen Stunden
-            overtime_account.hours_for_timecomp += hours_for_timecomp
-            overtime_account.save()  # Dies setzt automatisch is_finalized = True
+
+            # Prüfe ob die 2-Wochen-Frist noch läuft
+            transfer_deadline = current_period.end_date + timedelta(days=14)
             
+            if today > transfer_deadline:
+                return JsonResponse({
+                    'error': 'Die Frist für die Übertragung ist abgelaufen'
+                })
+
+            overtime_account = OvertimeAccount.objects.filter(
+                employee=request.user,
+                year=current_period.end_date.year,
+                month=current_period.end_date.month,
+                is_finalized=False
+            ).first()
+
+            if not overtime_account:
+                return JsonResponse({
+                    'error': 'Keine offenen Überstunden gefunden'
+                })
+
+            if hours > overtime_account.total_overtime:
+                return JsonResponse({
+                    'error': 'Nicht genügend Überstunden verfügbar'
+                })
+
+            # Übertrage die Stunden
+            overtime_account.hours_for_timecomp = hours
+            overtime_account.save()
+
             return JsonResponse({
                 'success': True,
                 'overtime_hours': float(overtime_account.total_overtime),
                 'transferred_hours': float(overtime_account.hours_for_timecomp),
-                'payment_hours': float(overtime_account.hours_for_payment)
+                'payment_hours': float(overtime_account.total_overtime - overtime_account.hours_for_timecomp)
             })
-            
+
         except Exception as e:
-            logger.error(f"Overtime overview error: {str(e)}", exc_info=True)
-            return JsonResponse({
-                'success': False,
-                'error': str(e)
-            }, status=500)
+            print(f"Error in overtime transfer: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'error': str(e)})
 
 class VacationListView(LoginRequiredMixin, ListView):
     model = Vacation

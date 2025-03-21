@@ -12,6 +12,11 @@
                 </button>
             </div>
             <div class="modal-body">
+                <div class="alert alert-info mb-3">
+                    <p>{% trans "Durchrechnungszeitraum endete am" %}: <span id="periodEnd"></span></p>
+                    <p>{% trans "Übertragung möglich bis" %}: <span id="transferDeadline"></span></p>
+                </div>
+
                 <div class="mb-3">
                     <div class="row">
                         <div class="col-8">{% trans "Gesamte Überstunden" %}:</div>
@@ -103,16 +108,24 @@ document.addEventListener('DOMContentLoaded', function() {
 function loadOvertimeData() {
     fetch('{% url "wfm:api-overtime-overview" %}', {
         headers: {
-            'X-Requested-With': 'XMLHttpRequest'  // Wichtig!
+            'X-Requested-With': 'XMLHttpRequest'
         }
     })
     .then(response => {
         if (!response.ok) {
-            throw new Error('Network response was not ok');
+            return response.json().then(data => {
+                throw new Error(data.error || 'Network response was not ok');
+            });
         }
         return response.json();
     })
     .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        console.log('Received data:', data);  // Debug-Ausgabe
+        
         document.getElementById('totalOvertime').textContent = data.overtime_hours.toFixed(1);
         document.getElementById('transferredHours').textContent = data.transferred_hours.toFixed(1);
         document.getElementById('paymentHours').textContent = data.payment_hours.toFixed(1);
@@ -125,23 +138,44 @@ function loadOvertimeData() {
             statusBadge.innerHTML = '<span class="badge bg-warning">{% trans "Offen" %}</span>';
         }
         
+        // Zeige Zeitraum-Informationen
+        document.getElementById('periodEnd').textContent = data.period_end || '-';
+        document.getElementById('transferDeadline').textContent = data.transfer_deadline || '-';
+        
         // Button-Status aktualisieren
         const submitButton = document.getElementById('overtimeSubmitButton');
         if (submitButton) {
-            submitButton.disabled = data.is_finalized || !data.can_transfer;
+            submitButton.disabled = !data.can_transfer;
+            if (!data.can_transfer) {
+                if (data.is_finalized) {
+                    submitButton.title = '{% trans "Überstunden wurden bereits abgerechnet" %}';
+                } else {
+                    submitButton.title = '{% trans "Die Übertragungsfrist ist abgelaufen" %}';
+                }
+            }
         }
         
         // Input-Feld aktualisieren
         const input = document.getElementById('hoursForTimecomp');
         if (input) {
-            input.max = data.overtime_hours - data.transferred_hours;
-            input.disabled = data.is_finalized || !data.can_transfer;
+            input.max = data.overtime_hours;
+            input.disabled = !data.can_transfer;
             input.value = '';  // Reset input value
         }
     })
     .catch(error => {
         console.error('Error loading overtime data:', error);
-        alert('{% trans "Fehler beim Laden der Überstunden" %}');
+        const errorMessage = error.message || '{% trans "Fehler beim Laden der Überstunden" %}';
+        document.getElementById('overtimeStatus').innerHTML = `
+            <div class="alert alert-danger">
+                ${errorMessage}
+            </div>
+        `;
+        // Deaktiviere Input und Button
+        const input = document.getElementById('hoursForTimecomp');
+        if (input) input.disabled = true;
+        const submitButton = document.getElementById('overtimeSubmitButton');
+        if (submitButton) submitButton.disabled = true;
     });
 }
 
