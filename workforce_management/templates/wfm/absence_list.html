@@ -122,86 +122,100 @@
             </div>
         </div>
 
-        <!-- Zeitausgleich-Übersicht -->
+        <!-- Zeitausgleich-Bereich -->
         <div class="col-md-6">
-            <div class="card mb-4">
+            <!-- Überstunden-Karte -->
+            <div class="card mb-3">
                 <div class="card-header bg-queen-blue">
-                    <h5 class="mb-0">{% trans "Zeitausgleich-Übersicht" %}</h5>
+                    <h5 class="mb-0">{% trans "Überstunden" %}</h5>
                 </div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="card border-0">
-                                <div class="card-body text-center">
-                                    <h6>{% trans "ZA-Konto" %}</h6>
-                                    {% widthratio timecomp_remaining_hours timecomp_total_hours 100 as timecomp_percent %}
-                                    <h3>{{ timecomp_total_hours|floatformat:1 }}h</h3>
-                                    <small class="text-muted">
-                                        {% trans "Verfügbare Überstunden für Zeitausgleich" %}
-                                    </small>
-                                </div>
-                                <div class="progress mb-3" style="height: 25px;">
-                                    <div class="progress-bar 
-                                        {% with percent_num=timecomp_percent|add:"0" %}
-                                            {% if percent_num >= 50 %}bg-pistachio
-                                            {% elif percent_num >= 25 %}bg-yellow-orange
-                                            {% else %}bg-red-salsa{% endif %}
-                                        {% endwith %}"
-                                        role="progressbar" 
-                                        style="width: {{ timecomp_percent }}%;" 
-                                        aria-valuenow="{{ timecomp_remaining_hours|default:0 }}" 
-                                        aria-valuemin="0" 
-                                        aria-valuemax="{{ timecomp_total_hours|default:0 }}">
-                                        {{ timecomp_remaining_hours|default:0|floatformat:1 }}h
-                                    </div>
-                                </div>
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <div class="border-end">
+                                <h3>{{ timecomp_total_overtime|floatformat:1 }}h</h3>
+                                <small class="text-muted">{% trans "Gesamt" %}</small>
                             </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border-end">
+                                <h3>{{ timecomp_za_hours|floatformat:1 }}h</h3>
+                                <small class="text-muted">{% trans "Für ZA umgebucht" %}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <h3>{{ timecomp_payment_hours|floatformat:1 }}h</h3>
+                            <small class="text-muted">{% trans "Zur Auszahlung" %}</small>
                         </div>
                     </div>
-                    <div class="row">
+                    <div class="text-center mt-3">
+                        <button class="btn bg-queen-blue" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#overtimeModal">
+                            <i class="bi bi-arrow-left-right"></i> {% trans "Überstunden umbuchen" %}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ZA-Konto-Karte -->
+            <div class="card">
+                <div class="card-header bg-pistachio">
+                    <h5 class="mb-0">{% trans "Zeitausgleichs-Konto" %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <h2>{{ timecomp_za_hours|floatformat:1 }}h</h2>
+                        <small class="text-muted">{% trans "Verfügbare Stunden gesamt" %}</small>
+                    </div>
+
+                    {% widthratio timecomp_remaining_hours timecomp_za_hours 100 as timecomp_percent %}
+                    <div class="progress mb-4" style="height: 25px;">
+                        <div class="progress-bar 
+                            {% with percent_num=timecomp_percent|add:"0" %}
+                                {% if percent_num >= 50 %}bg-pistachio
+                                {% elif percent_num >= 25 %}bg-yellow-orange
+                                {% else %}bg-red-salsa{% endif %}
+                            {% endwith %}"
+                            role="progressbar" 
+                            style="width: {{ timecomp_percent }}%;" 
+                            aria-valuenow="{{ timecomp_remaining_hours|default:0 }}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="{{ timecomp_za_hours|default:0 }}">
+                            {{ timecomp_remaining_hours|floatformat:1 }}h
+                        </div>
+                    </div>
+
+                    <div class="row text-center">
                         <div class="col-md-4">
-                            <div class="card border-0">
-                                <div class="card-body text-center">
-                                    <h6>{% trans "Genommen" %}</h6>
-                                    <h3>{{ timecomp_used_hours|floatformat:1 }}h</h3>
-                                </div>
+                            <div class="border-end">
+                                <h3>{{ timecomp_used_hours|floatformat:1 }}h</h3>
+                                <small class="text-muted">{% trans "Genommen" %}</small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card border-0">
-                                <div class="card-body text-center">
-                                    <h6>{% trans "Beantragt" %}</h6>
-                                    <h3>{{ timecomp_pending_hours|floatformat:1 }}h</h3>
-                                </div>
+                            <div class="border-end">
+                                <h3>{{ timecomp_pending_hours|floatformat:1 }}h</h3>
+                                <small class="text-muted">{% trans "Beantragt" %}</small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card border-0">
-                                <div class="card-body text-center">
-                                    <h6>{% trans "Verbleibend" %}</h6>
-                                    <h3>{{ timecomp_remaining_hours|floatformat:1 }}h</h3>
-                                </div>
-                            </div>
+                            <h3>{{ timecomp_remaining_hours|floatformat:1 }}h</h3>
+                            <small class="text-muted">{% trans "Noch verfügbar" %}</small>
                         </div>
-                    </div>  
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="card border-0">
-                                <div class="card-body text-center">
-                                    <button class="btn bg-queen-blue" 
-                                            data-bs-toggle="modal" 
-                                            data-bs-target="#timeCompModal"
-                                            data-remaining-hours="{{ timecomp_remaining_hours }}">
-                                        <i class="bi bi-plus-circle"></i> {% trans "Zeitausgleich beantragen" %}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                    </div>
+
+                    <div class="text-center mt-3">
+                        <button class="btn bg-queen-blue" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#timeCompModal"
+                                data-remaining-hours="{{ timecomp_remaining_hours }}">
+                            <i class="bi bi-plus-circle"></i> {% trans "Zeitausgleich beantragen" %}
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
-
     </div>
 
     <!-- Zweite Zeile: Urlaub und Zeitausgleich -->

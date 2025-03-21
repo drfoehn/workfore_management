@@ -2157,7 +2157,6 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Bestehender Code...
         role = self.request.GET.get('role')
         employee_id = self.request.GET.get('employee')
         
@@ -2426,7 +2425,13 @@ class AbsenceListView(LoginRequiredMixin, ListView):
     template_name = 'wfm/absence_list.html'
     model = SickLeave
     context_object_name = 'sick_leaves'
-    
+
+    def get_queryset(self):
+        # Filtere Krankenstände nach angemeldetem User
+        return SickLeave.objects.filter(
+            employee=self.request.user
+        ).order_by('-start_date')
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
@@ -2504,72 +2509,72 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         ).order_by('-start_date')
         
         context['vacations'] = vacations
-        
-        # Zeitausgleichsübersicht
-        print("\n=== DEBUG: TimeCompensation Info ===")
-        print(f"Current user: {user}, Today: {today}")
 
-        # Hole das Überstundenkonto für diesen Monat
-        overtime_account = OvertimeAccount.objects.filter(
-            employee=user,
-            year=today.year,
-            month=today.month
+        # Zeitausgleichsübersicht 
+        current_period = AveragingPeriod.objects.filter(
+            start_date__lte=today,
+            end_date__gte=today
         ).first()
 
-        print(f"\nOvertime Account found: {overtime_account}")
-        
-        if overtime_account:
-            total_hours = overtime_account.hours_for_timecomp
-            print(f"Total overtime hours: {total_hours}")
+        if not current_period:
+            current_period = AveragingPeriod.objects.filter(
+                end_date__lt=today
+            ).order_by('-end_date').first()
+
+        if current_period:
+            overtime_account = OvertimeAccount.objects.filter(
+                employee=user,
+                year=current_period.end_date.year,
+                month=current_period.end_date.month
+            ).first()
+
+            if overtime_account:
+                total_overtime = overtime_account.total_overtime  # Gesamte Überstunden
+                za_hours = overtime_account.hours_for_timecomp    # Für ZA umgebucht
+                payment_hours = total_overtime - za_hours         # Zur Auszahlung
+            else:
+                total_overtime = current_period.balance or Decimal('0')
+                za_hours = Decimal('0')
+                payment_hours = total_overtime
         else:
-            total_hours = 0
-            print("No overtime account found, setting total_hours to 0")
+            total_overtime = Decimal('0')
+            za_hours = Decimal('0')
+            payment_hours = Decimal('0')
 
-        # Hole genehmigte und beantragte Zeitausgleiche
-        approved_time_comps = TimeCompensation.objects.filter(  
-            employee=user,
-            status='APPROVED'
+        # Hole bereits genommene Zeitausgleiche
+        used_hours = sum(
+            tc.hours for tc in TimeCompensation.objects.filter(
+                employee=user,
+                status='APPROVED'
+            )
         )
-        pending_time_comps = TimeCompensation.objects.filter(
-            employee=user,
-            status='REQUESTED'
+
+        # Hole beantragte Zeitausgleiche
+        pending_hours = sum(
+            tc.hours for tc in TimeCompensation.objects.filter(
+                employee=user,
+                status='REQUESTED'
+            )
         )
 
-        # Berechne die Stunden
-        used_hours = sum(tc.hours for tc in approved_time_comps)
-        pending_hours = sum(tc.hours for tc in pending_time_comps)
-        remaining_hours = total_hours - pending_hours - used_hours      
-
-        print(f"\nApproved time comps count: {approved_time_comps.count()}")
-        print(f"Used hours: {used_hours}")
-        print(f"Pending time comps count: {pending_time_comps.count()}")
-        print(f"Pending hours: {pending_hours}")
-        print(f"Remaining hours: {remaining_hours}")
+        # Noch verfügbare ZA-Stunden
+        remaining_za_hours = za_hours - (used_hours + pending_hours)
 
         context.update({
-            'timecomp_total_hours': total_hours,
+            'timecomp_total_overtime': total_overtime,
+            'timecomp_za_hours': za_hours,
+            'timecomp_payment_hours': payment_hours,
             'timecomp_used_hours': used_hours,
             'timecomp_pending_hours': pending_hours,
-            'timecomp_remaining_hours': remaining_hours
+            'timecomp_remaining_hours': remaining_za_hours
         })
-        
-        
-        
-        
 
-        # Hole alle Zeitausgleiche
+        # Hole alle Zeitausgleiche für die Liste
         time_comps = TimeCompensation.objects.filter(
             employee=user
         ).order_by('-date')
         context['time_comps'] = time_comps
 
-        print("\n=== Final TimeComp context values ===")
-        print(f"Total hours: {context.get('timecomp_total_hours')}")
-        print(f"Used hours: {context.get('timecomp_used_hours')}")
-        print(f"Pending hours: {context.get('timecomp_pending_hours')}")
-        print(f"Remaining hours: {context.get('timecomp_remaining_hours')}")
-        print("================================\n")
-        
         return context
 
 @login_required
@@ -2614,54 +2619,69 @@ def api_delete_absence(request, type, pk):
 
 @login_required
 def api_time_compensation_status(request):
-    """API-Endpunkt für den aktuellen Zeitausgleichsstatus"""
-    try:
-        today = timezone.now().date()
-        
-        # Hole den relevanten Monat
-        if today.day <= 7:
-            target_date = today - relativedelta(months=1)
-        else:
-            target_date = today
-            
-        # Hole das Überstundenkonto für diesen Monat
-        overtime_account = OvertimeAccount.objects.filter(
-            employee=request.user,
-            year=target_date.year,
-            month=target_date.month
-        ).first()
-        
-        if overtime_account:
-            total_hours = overtime_account.hours_for_timecomp
-        else:
-            total_hours = 0
-        
-        # Hole genehmigte und beantragte Zeitausgleiche
-        approved_time_comps = TimeCompensation.objects.filter(
-            employee=request.user,
-            status='APPROVED'
-        )
-        
-        pending_time_comps = TimeCompensation.objects.filter(
-            employee=request.user,
+    user = request.user
+    today = timezone.now().date()
+
+    # Hole den aktuellen Durchrechnungszeitraum
+    current_period = AveragingPeriod.objects.filter(
+        start_date__lte=today,
+        end_date__gte=today
+    ).first()
+
+    # Wenn kein aktueller Zeitraum gefunden wurde, hole den letzten abgeschlossenen
+    if not current_period:
+        current_period = AveragingPeriod.objects.filter(
+            end_date__lt=today
+        ).order_by('-end_date').first()
+
+    if not current_period:
+        return JsonResponse({
+            'error': 'Kein Durchrechnungszeitraum gefunden'
+        })
+
+    # Hole den OvertimeAccount Eintrag
+    overtime_account = OvertimeAccount.objects.filter(
+        employee=user,
+        year=current_period.end_date.year,
+        month=current_period.end_date.month
+    ).first()
+
+    if overtime_account:
+        total_overtime = overtime_account.total_overtime  # Gesamte Überstunden
+        za_hours = overtime_account.hours_for_timecomp    # Für ZA umgebucht
+        payment_hours = total_overtime - za_hours         # Zur Auszahlung
+    else:
+        total_overtime = current_period.balance or Decimal('0')
+        za_hours = Decimal('0')
+        payment_hours = total_overtime
+
+    # Hole beantragte Zeitausgleiche
+    pending_hours = sum(
+        tc.hours for tc in TimeCompensation.objects.filter(
+            employee=user,
             status='REQUESTED'
         )
-        
-        # Berechne die Stunden
-        used_hours = sum(tc.hours for tc in approved_time_comps)
-        pending_hours = sum(tc.hours for tc in pending_time_comps)
-        remaining_hours = total_hours - used_hours - pending_hours
-        
-        return JsonResponse({
-            'total_hours': float(total_hours),
-            'used_hours': float(used_hours),
-            'pending_hours': float(pending_hours),
-            'remaining_hours': float(remaining_hours)
-        })
-        
-    except Exception as e:
-        logger.error(f"Time compensation status error: {str(e)}", exc_info=True)
-        return JsonResponse({'error': str(e)}, status=500)
+    )
+
+    # Hole bereits genommene Zeitausgleiche
+    used_hours = sum(
+        tc.hours for tc in TimeCompensation.objects.filter(
+            employee=user,
+            status='APPROVED'
+        )
+    )
+
+    # Noch verfügbare ZA-Stunden = Umgebuchte Stunden - (Genommene + Beantragte)
+    remaining_za_hours = za_hours - (used_hours + pending_hours)
+
+    return JsonResponse({
+        'total_overtime': float(total_overtime),        # Gesamte Überstunden
+        'za_hours': float(za_hours),                    # Für ZA umgebucht
+        'payment_hours': float(payment_hours),          # Zur Auszahlung
+        'used_hours': float(used_hours),               # Bereits genommener ZA
+        'pending_hours': float(pending_hours),          # Beantragter ZA
+        'remaining_za_hours': float(remaining_za_hours) # Noch verfügbare ZA-Stunden
+    })
 
 def calculate_overtime_hours(user, year, month=None):
     """Berechnet die Überstunden für einen Benutzer in einem Jahr/Monat"""

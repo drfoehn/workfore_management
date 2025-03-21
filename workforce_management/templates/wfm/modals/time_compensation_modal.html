@@ -49,17 +49,22 @@ function loadTimeCompStatus() {
             
             const statusHtml = `
                 <div class="alert alert-info">
-                    <h6>{% trans "Verfügbare Stunden" %}:</h6>
+                    <h6>{% trans "Überstunden-Übersicht" %}:</h6>
                     <ul class="mb-0">
-                        <li>{% trans "Gesamte Überstunden" %}: ${data.total_hours}h</li>
-                        <li>{% trans "Bereits verwendet" %}: ${data.used_hours}h</li>
-                        <li>{% trans "In Bearbeitung" %}: ${data.pending_hours}h</li>
-                        <li><strong>{% trans "Noch verfügbar" %}: ${data.remaining_hours}h</strong></li>
+                        <li>{% trans "Gesamte Überstunden" %}: ${data.total_overtime}h</li>
+                        <li>{% trans "Davon für Zeitausgleich" %}: ${data.za_hours}h</li>
+                        <li>{% trans "Davon zur Auszahlung" %}: ${data.payment_hours}h</li>
+                    </ul>
+                    <h6 class="mt-3">{% trans "Zeitausgleichs-Konto" %}:</h6>
+                    <ul class="mb-0">
+                        <li>{% trans "Bereits genommen" %}: ${data.used_hours}h</li>
+                        <li>{% trans "Beantragt" %}: ${data.pending_hours}h</li>
+                        <li><strong>{% trans "Noch verfügbar" %}: ${data.remaining_za_hours}h</strong></li>
                     </ul>
                 </div>
             `;
             document.getElementById('timeCompStatus').innerHTML = statusHtml;
-            window.availableHours = data.remaining_hours;
+            window.availableHours = data.remaining_za_hours;
             checkSubmitButton();
         })
         .catch(error => {
