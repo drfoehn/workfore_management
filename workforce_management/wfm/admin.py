@@ -172,11 +172,62 @@ class MonthlyReportAdmin(admin.ModelAdmin):
 
 @admin.register(OvertimeAccount)
 class OvertimeAccountAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'year', 'month', 'total_overtime', 'hours_for_payment', 
-                   'hours_for_timecomp', 'overtime_paid', 'overtime_paid_date']
+    list_display = [
+        'employee', 
+        'month_year', 
+        'balance', 
+        'hours_for_payment',
+        'payment_status'
+    ]
     list_filter = ['employee', 'year', 'month', 'overtime_paid']
-    search_fields = ['employee__username', 'employee__first_name', 'employee__last_name']
-    ordering = ['-year', '-month', 'employee']
+    search_fields = ['employee__first_name', 'employee__last_name']
+    ordering = ['-year', '-month', 'employee__first_name']
+    
+    def month_year(self, obj):
+        return f"{obj.month}/{obj.year}"
+    month_year.short_description = _("Monat/Jahr")
+    
+    def payment_status(self, obj):
+        if obj.overtime_paid:
+            return _("Bezahlt am {}").format(
+                timezone.localtime(obj.overtime_paid_date).strftime("%d.%m.%Y")
+            )
+        elif obj.hours_for_payment > 0:
+            return _("Zur Auszahlung markiert")
+        return _("Offen")
+    payment_status.short_description = _("Zahlungsstatus")
+
+    actions = ['mark_as_paid']
+
+    def mark_as_paid(self, request, queryset):
+        updated = 0
+        for account in queryset:
+            if account.hours_for_payment > 0 and not account.overtime_paid:
+                account.overtime_paid = True
+                account.save()
+                updated += 1
+        
+        if updated == 0:
+            self.message_user(request, _("Keine Konten zur Auszahlung markiert"))
+        else:
+            self.message_user(
+                request, 
+                _("{} Konten wurden als bezahlt markiert").format(updated)
+            )
+    mark_as_paid.short_description = _("Als bezahlt markieren")
+
+    fieldsets = (
+        (None, {
+            'fields': ('employee', 'year', 'month')
+        }),
+        (_('Stunden'), {
+            'fields': ('balance', 'hours_for_payment')
+        }),
+        (_('Zahlungsstatus'), {
+            'fields': ('overtime_paid', 'overtime_paid_date')
+        })
+    )
+    readonly_fields = ['overtime_paid_date']
 
 @admin.register(UserDocument)
 class UserDocumentAdmin(admin.ModelAdmin):

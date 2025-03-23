@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db.models import Q, Sum
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+import decimal
 
 
 class CustomUser(AbstractUser):
@@ -150,15 +151,6 @@ class ScheduleTemplate(models.Model):
             template.end_time = self.end_time
             template.save(update_fields=['start_time', 'end_time'])
         
-        # # Debug: Zeige alle Templates nach dem Update
-        # print("\nAll templates after update:")
-        # for template in ScheduleTemplate.objects.filter(
-        #     employee=self.employee,
-        #     weekday=self.weekday
-        # ).order_by('valid_from'):
-        #     print(f"- ID: {template.pk}, valid_from: {template.valid_from}, "
-        #           f"time: {template.start_time}-{template.end_time}")
-        
         # Aktualisiere WorkingHours nur für zukünftige Tage
         current_date = max(self.valid_from, today)  # Starte ab heute oder valid_from
         end_date = current_date + timedelta(days=365)
@@ -231,12 +223,9 @@ class WorkingHours(models.Model):
             
             if self.break_duration:
                 duration -= self.break_duration
-                print(f"Break duration: {self.break_duration}")
-                print(f"Duration after break: {duration}")
-                print(f"Hours after break: {duration.total_seconds() / 3600}")
             
             self.ist_hours = Decimal(str(duration.total_seconds() / 3600))
-            print(f"Final ist_hours: {self.ist_hours}")
+
         else:
             self.ist_hours = Decimal('0')
 
@@ -755,55 +744,159 @@ class SickLeave(models.Model):
 
 
 class OvertimeAccount(models.Model):
-    """Überstundenkonto für Zeitausgleich"""
+    """Überstundenkonto für Auszahlungen"""
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     month = models.IntegerField()
     year = models.IntegerField()
-    total_overtime = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    hours_for_payment = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    hours_for_timecomp = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    overtime_paid    = models.BooleanField(default=False)
+    # Gesamtbilanz (kann positiv oder negativ sein)
+    balance = models.DecimalField(
+        max_digits=8,  # Erhöht von 6 auf 8
+        decimal_places=2, 
+        default=0,
+        help_text=_("Positive Werte = Überstunden, Negative = Minderstunden")
+    )
+    # Stunden die zur Auszahlung markiert wurden
+    hours_for_payment = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0
+    )
+    overtime_paid = models.BooleanField(default=False)
     overtime_paid_date = models.DateTimeField(null=True, blank=True)
-    is_finalized = models.BooleanField(default=False)
-    finalized_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        # Berechne hours_for_payment
-        self.hours_for_payment = self.total_overtime - self.hours_for_timecomp
-        
-        # Wenn Stunden für Zeitausgleich umgebucht wurden, sind diese sofort verfügbar
-        if self.hours_for_timecomp > 0:
-            self.is_finalized = True
-            self.finalized_at = timezone.now()
+        # Wenn Überstunden als bezahlt markiert werden
+        if self.overtime_paid and not self.overtime_paid_date:
+            self.overtime_paid_date = timezone.now()
+            # Ziehe bezahlte Stunden von der Balance ab
+            self.balance -= self.hours_for_payment
+            # Setze bezahlte Stunden zurück
+            self.hours_for_payment = 0
             
         super().save(*args, **kwargs)
+
+    @staticmethod
+    def calculate_overtime_hours(employee, year, month):
+        """Berechnet die Überstunden für einen bestimmten Monat"""
+        start_date = date(year, month, 1)
+        if month == 12:
+            end_date = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = date(year, month + 1, 1) - timedelta(days=1)
+        
+        total_ist = Decimal('0.0')
+        total_soll = Decimal('0.0')
+        
+        current_date = start_date
+        while current_date <= end_date:
+            # Überspringe Wochenenden
+            if current_date.weekday() >= 5:
+                current_date += timedelta(days=1)
+                continue
+
+            # Überspringe Feiertage/Schließtage
+            if ClosureDay.is_closure_day(current_date):
+                current_date += timedelta(days=1)
+                continue
+
+            # Prüfe auf Urlaub oder Krankenstand
+            has_vacation = Vacation.objects.filter(
+                employee=employee,
+                start_date__lte=current_date,
+                end_date__gte=current_date,
+                status='APPROVED'
+            ).exists()
+            
+            has_sick_leave = SickLeave.objects.filter(
+                employee=employee,
+                start_date__lte=current_date,
+                end_date__gte=current_date
+            ).exists()
+
+            if has_vacation or has_sick_leave:
+                current_date += timedelta(days=1)
+                continue
+
+            # Hole Arbeitsstunden für diesen Tag
+            working_hours = WorkingHours.objects.filter(
+                employee=employee,
+                date=current_date
+            ).first()
+
+            # Hole Template für diesen Wochentag
+            template = ScheduleTemplate.objects.filter(
+                employee=employee,
+                weekday=current_date.weekday(),
+                valid_from__lte=current_date
+            ).order_by('-valid_from').first()
+
+            if template:
+                try:
+                    # Berechne Soll-Stunden aus Template
+                    start = datetime.combine(date.min, template.start_time)
+                    end = datetime.combine(date.min, template.end_time)
+                    template_duration = end - start
+                    if template.break_duration:
+                        template_duration -= template.break_duration
+                    soll = Decimal(str(round(template_duration.total_seconds() / 3600, 2)))
+                    total_soll += soll
+
+                    # Wenn Arbeitsstunden existieren, addiere Ist-Stunden
+                    if working_hours and working_hours.ist_hours is not None:
+                        ist = Decimal(str(round(float(working_hours.ist_hours), 2)))
+                        total_ist += ist
+                except (TypeError, ValueError, decimal.InvalidOperation) as e:
+                    print(f"Error calculating hours for {current_date}: {e}")
+
+            current_date += timedelta(days=1)
+
+        total_diff = total_ist - total_soll
+        return total_diff.quantize(Decimal('.01'))
+
+    @classmethod
+    def get_current_balance(cls, employee, year=None, month=None):
+        """Berechnet die aktuelle Gesamtbilanz für einen Mitarbeiter (letzte 12 Monate)"""
+        if year is None or month is None:
+            today = timezone.now().date()
+            year = today.year
+            month = today.month
+
+        # Hole oder erstelle das aktuelle Konto
+        account, created = cls.objects.get_or_create(
+            employee=employee,
+            year=year,
+            month=month,
+            defaults={'balance': Decimal('0')}
+        )
+
+        # Berechne die Balance für den aktuellen Monat
+        current_month_diff = cls.calculate_overtime_hours(employee, year, month)
+        total_balance = current_month_diff
+        
+        # Berechne die letzten 12 Monate
+        current_date = date(year, month, 1)
+        months_back = 0
+        
+        while months_back < 11:  # 11 weil der aktuelle Monat schon berechnet wurde
+            current_date = (current_date - timedelta(days=1)).replace(day=1)
+            prev_diff = cls.calculate_overtime_hours(
+                employee, 
+                current_date.year, 
+                current_date.month
+            )
+            total_balance += prev_diff
+            months_back += 1
+
+        # Aktualisiere das Konto
+        account.balance = total_balance
+        account.save()
+        return account.balance
 
     class Meta:
         unique_together = ['employee', 'year', 'month']
         ordering = ['-year', '-month']
         verbose_name = _('Überstundenkonto')
         verbose_name_plural = _('Überstundenkonten')
-
-    def finalize(self, hours_for_payment):
-        """Finalisiert die Überstunden für den Monat"""
-        if self.is_finalized:
-            raise ValueError("Überstunden wurden bereits finalisiert")
-        
-        if hours_for_payment > self.total_overtime:
-            raise ValueError("Auszahlungsstunden können nicht größer als Gesamtstunden sein")
-        
-        self.hours_for_payment = hours_for_payment
-        self.hours_for_timecomp = self.total_overtime - hours_for_payment
-        self.is_finalized = True
-        self.finalized_at = timezone.now()
-        self.save()
-
-    @property
-    def available_hours(self):
-        """Verfügbare Stunden für Zeitausgleich"""
-        if not self.is_finalized:
-            return 0
-        return self.hours_for_timecomp
 
 class ClosureDay(models.Model):
     CLOSURE_TYPES = [

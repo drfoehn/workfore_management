@@ -108,7 +108,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         else:
             employees = [self.request.user]
 
-        # 5. Erstelle Liste aller Tage im Monat (nicht nur Werktage)
+        # 5. Erstelle Liste aller Tage im Monat
         workdays = []
         current_day = current_date
         while current_day.month == month:
@@ -130,7 +130,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 template = ScheduleTemplate.objects.filter(
                     employee=employee,
                     weekday=day.weekday(),
-                    valid_from__lte=day  # Wichtig: Prüfe valid_from gegen den aktuellen Tag
+                    valid_from__lte=day
                 ).order_by('-valid_from').first()
                 if template:
                     schedules.append(template)
@@ -139,13 +139,6 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             employee__in=employees,
             start_date__lte=current_date + timedelta(days=31),
             end_date__gte=current_date,
-            status__in=['REQUESTED', 'APPROVED']
-        ).select_related('employee')
-
-        time_comps = TimeCompensation.objects.filter(
-            employee__in=employees,
-            date__year=year,
-            date__month=month,
             status__in=['REQUESTED', 'APPROVED']
         ).select_related('employee')
 
@@ -224,22 +217,18 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     has_vacation = next((v for v in vacations 
                         if v.employee_id == employee.id and 
                         v.start_date <= day <= v.end_date), None)
-                    has_time_comp = next((tc for tc in time_comps 
-                        if tc.employee_id == employee.id and 
-                        tc.date == day), None)
                     has_sick_leave = next((sl for sl in sick_leaves 
                         if sl.employee_id == employee.id and 
                         sl.start_date <= day <= sl.end_date), None)
 
                     # Nur wenn es tatsächlich Einträge gibt oder ein Schedule existiert
-                    if has_working_hours or has_schedule or has_vacation or has_time_comp or has_sick_leave:
+                    if has_working_hours or has_schedule or has_vacation or has_sick_leave:
                         entry = {
                             'date': day,
                             'employee': employee,
                             'working_hours': has_working_hours,
                             'schedule': has_schedule,
                             'vacation': has_vacation,
-                            'time_comp': has_time_comp,
                             'sick_leave': has_sick_leave,
                             'is_weekend': False
                         }
@@ -269,7 +258,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             total_ist += entry['ist_hours']
 
                         entry['difference'] = entry.get('ist_hours', 0) - entry.get('soll_hours', 0)
-                        if not (has_vacation or has_time_comp or has_sick_leave):
+                        if not (has_vacation or has_sick_leave):
                             total_diff += entry['difference']
 
                         day_entries.append(entry)
@@ -294,7 +283,18 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 else:
                     days_data.extend(day_entries)
 
-        # Entferne die doppelte Summenberechnung am Ende
+        # 9. Hole die Gesamtbilanz für jeden Mitarbeiter
+        employee_balances = {}
+        total_balance = Decimal('0')
+        for employee in employees:
+            balance = OvertimeAccount.get_current_balance(
+                employee=employee,
+                year=year,
+                month=month
+            )
+            employee_balances[employee.id] = balance
+            total_balance += balance
+
         context.update({
             'dates': days_data,
             'year': year,
@@ -309,7 +309,9 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             'current_month': month,
             'total_soll': total_soll,
             'total_ist': total_ist,
-            'total_diff': total_diff,
+            'total_diff': total_diff,  # Differenz des aktuellen Monats
+            'employee_balances': employee_balances,  # Einzelbilanzen pro Mitarbeiter
+            'total_balance': total_balance,  # Gesamtbilanz aller gefilterten Mitarbeiter
             'colors': {
                 'primary': '#90BE6D',    # Pistachio
                 'secondary': '#577590',   # Queen Blue
@@ -319,7 +321,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 'danger': '#F94144',      # Red Salsa
                 'orange': '#F3722C',      # Orange Red
                 'yellow': '#F8961E',      # Yellow Orange
-            }
+            },
         })
 
         return context
@@ -430,8 +432,8 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
         year = target_date.year
         month = target_date.month
         
-        # Berechne die Überstunden
-        total_overtime = Decimal(str(calculate_overtime_hours(request.user, year, month)))  # Convert to Decimal
+        # Berechne die aktuelle Balance
+        current_balance = Decimal(str(calculate_overtime_hours(request.user, year, month)))
         
         # Hole oder erstelle das Überstundenkonto
         overtime_account, created = OvertimeAccount.objects.get_or_create(
@@ -439,40 +441,38 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             year=year,
             month=month,
             defaults={
-                'total_overtime': total_overtime
+                'balance': current_balance
             }
         )
         
-        if not created and overtime_account.total_overtime != total_overtime:
-            overtime_account.total_overtime = total_overtime
+        if not created:
+            # Aktualisiere die Balance wenn nötig
+            overtime_account.balance = current_balance
             overtime_account.save()
 
-        # Prüfe ob Übertrag möglich ist
-        can_transfer = (
-            request.user.role in ['ASSISTANT', 'CLEANING'] and
-            not overtime_account.is_finalized and
-            overtime_account.total_overtime > 0 and
-            (
-                (today.day <= 7 and month == (today - relativedelta(months=1)).month) or
-                (today.day > 7 and month == today.month)
-            )
-        )
+        # Hole die vorherige Balance vom letzten Monat
+        prev_month = (target_date - timedelta(days=1)).replace(day=1)
+        prev_account = OvertimeAccount.objects.filter(
+            employee=request.user,
+            year=prev_month.year,
+            month=prev_month.month
+        ).first()
+        
+        if prev_account:
+            overtime_account.balance += prev_account.balance
+            overtime_account.save()
 
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({
-                'overtime_hours': float(overtime_account.total_overtime),
-                'transferred_hours': float(overtime_account.hours_for_timecomp),
-                'payment_hours': float(overtime_account.hours_for_payment),
-                'is_finalized': overtime_account.is_finalized,
-                'can_transfer': can_transfer
+                'balance': float(overtime_account.balance),
+                'hours_for_payment': float(overtime_account.hours_for_payment),
+                'is_paid': overtime_account.overtime_paid
             })
             
         context = {
-            'overtime_hours': overtime_account.total_overtime,
-            'transferred_hours': overtime_account.hours_for_timecomp,
-            'payment_hours': overtime_account.hours_for_payment,
-            'is_finalized': overtime_account.is_finalized,
-            'can_transfer': can_transfer,
+            'balance': overtime_account.balance,
+            'hours_for_payment': overtime_account.hours_for_payment,
+            'is_paid': overtime_account.overtime_paid,
             'month_name': target_date.strftime('%B %Y')
         }
         
@@ -484,7 +484,7 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
                 raise PermissionDenied
             
             data = json.loads(request.body)
-            hours_for_timecomp = Decimal(str(data.get('hours_for_timecomp', 0)))
+            hours_for_payment = Decimal(str(data.get('hours_for_payment', 0)))
             
             today = date.today()
             if today.day <= 7:
@@ -498,24 +498,19 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
                 month=target_date.month
             )
             
-            # Berechne die verfügbaren Stunden
-            available_hours = overtime_account.total_overtime - overtime_account.hours_for_timecomp
-            
-            if hours_for_timecomp > available_hours:
+            if hours_for_payment > overtime_account.balance:
                 return JsonResponse({
                     'success': False,
                     'error': gettext('Nicht genügend Überstunden verfügbar')
                 })
                 
-            # Addiere die neuen Stunden
-            overtime_account.hours_for_timecomp += hours_for_timecomp
-            overtime_account.save()  # Dies setzt automatisch is_finalized = True
+            overtime_account.hours_for_payment = hours_for_payment
+            overtime_account.save()
             
             return JsonResponse({
                 'success': True,
-                'overtime_hours': float(overtime_account.total_overtime),
-                'transferred_hours': float(overtime_account.hours_for_timecomp),
-                'payment_hours': float(overtime_account.hours_for_payment)
+                'balance': float(overtime_account.balance),
+                'hours_for_payment': float(overtime_account.hours_for_payment)
             })
             
         except Exception as e:
@@ -1689,14 +1684,12 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
 @ensure_csrf_cookie
 def api_therapist_calendar_events(request):
     """API-Endpunkt für Kalender-Events"""
-    print("\n=== Debug api_therapist_calendar_events ===")
+
     
     start = request.GET.get('start')
     end = request.GET.get('end')
     therapist_id = request.GET.get('therapist')  # Für Owner-Filter
-    print(f"Requested date range: {start} to {end}")
-    print(f"User role: {request.user.role}")
-    print(f"Selected therapist: {therapist_id}")
+
 
     # Basis-Query für alle Buchungen im Zeitraum
     bookings = TherapistBooking.objects.filter(
@@ -1707,14 +1700,13 @@ def api_therapist_calendar_events(request):
     if request.user.role == 'OWNER' and therapist_id:
         bookings = bookings.filter(therapist_id=therapist_id)
 
-    print(f"Total bookings found: {bookings.count()}")
+
 
     calendar_events = []
     
     if request.user.role == 'THERAPIST':
         # Eigene Buchungen mit vollen Details
         own_bookings = bookings.filter(therapist=request.user)
-        print(f"Own bookings: {own_bookings.count()}")
         
         calendar_events.extend([
             {
@@ -1739,7 +1731,6 @@ def api_therapist_calendar_events(request):
         
         # Andere Buchungen als blockierte Zeiten
         other_bookings = bookings.exclude(therapist=request.user)
-        print(f"Other bookings: {other_bookings.count()}")
         
         calendar_events.extend([
             {
@@ -1755,7 +1746,6 @@ def api_therapist_calendar_events(request):
 
     else:  # OWNER oder ASSISTANT
         # Alle Buchungen mit vollen Details
-        print(f"All bookings for {request.user.role}: {bookings.count()}")
         calendar_events = [
             {
                 'id': str(booking.id),
@@ -1777,7 +1767,6 @@ def api_therapist_calendar_events(request):
             for booking in bookings
         ]
 
-    print(f"Total events returned: {len(calendar_events)}")
     return JsonResponse(calendar_events, safe=False)
 
 @method_decorator(login_required, name='dispatch')
@@ -2012,22 +2001,22 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
                 'allDay': True
             } for v in vacations])
             
-            # Zeitausgleich
-            time_comps = TimeCompensation.objects.filter(
-                date__lte=end_date.date(),
-                date__gte=start_date.date(),
-                status='APPROVED',
-                **employee_filter
-            ).select_related('employee')
+            # # Zeitausgleich
+            # time_comps = TimeCompensation.objects.filter(
+            #     date__lte=end_date.date(),
+            #     date__gte=start_date.date(),
+            #     status='APPROVED',
+            #     **employee_filter
+            # ).select_related('employee')
             
-            events.extend([{
-                'title': f"{tc.employee.get_full_name()} - Zeitausgleich",
-                'start': tc.date.isoformat(),
-                'end': (tc.date + timedelta(days=1)).isoformat(),
-                'className': 'time-comp-event',
-                'type': 'time_comp',
-                'allDay': True
-            } for tc in time_comps])
+            # events.extend([{
+            #     'title': f"{tc.employee.get_full_name()} - Zeitausgleich",
+            #     'start': tc.date.isoformat(),
+            #     'end': (tc.date + timedelta(days=1)).isoformat(),
+            #     'className': 'time-comp-event',
+            #     'type': 'time_comp',
+            #     'allDay': True
+            # } for tc in time_comps])
             
             # Krankenstand - Korrigierte Filterung
             sick_leaves = SickLeave.objects.filter(
@@ -3444,14 +3433,12 @@ def api_get_scheduled_hours(request):
 @login_required
 def api_therapist_booking_get(request, pk):
     """API-Endpunkt zum Abrufen einer Therapeuten-Buchung"""
-    print("\n=== Debug api_therapist_booking_get ===")
-    print(f"Requested booking ID: {pk}")
+
     
     try:
         # Erlaube Zugriff für Owner und den zugewiesenen Therapeuten
         booking = TherapistBooking.objects.get(id=pk)
-        print(f"Found booking: {booking}")
-        print(f"Therapist: {booking.therapist.username}")
+
         
         if not (request.user.role == 'OWNER' or request.user == booking.therapist):
             print("Permission denied")
@@ -3471,7 +3458,7 @@ def api_therapist_booking_get(request, pk):
             'notes': booking.notes or '',
             'therapist_extra_hours_payment_status': booking.therapist_extra_hours_payment_status
         }
-        print(f"Response data: {response_data}")
+
         return JsonResponse(response_data)
         
     except TherapistBooking.DoesNotExist:
@@ -3630,4 +3617,106 @@ def api_mark_salary_as_paid(request):
         logger.error(f"Fehler beim Markieren des Gehalts: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)})
 
+@login_required
+def api_overtime_overview(request):
+    """API für Überstunden-Übersicht und Auszahlungsmarkierung"""
+    try:
+        today = timezone.now().date()
+        year = today.year
+        month = today.month
+
+        if request.method == 'GET':
+            # Hole oder erstelle das aktuelle Überstundenkonto
+            account, created = OvertimeAccount.objects.get_or_create(
+                employee=request.user,
+                year=year,
+                month=month,
+                defaults={'balance': Decimal('0')}
+            )
+
+            if created:
+                # Berechne die aktuelle Balance aus den Arbeitsstunden
+                current_balance = calculate_overtime_hours(request.user, year, month)
+                # Hole die vorherige Balance vom letzten Monat
+                prev_month = (today - timedelta(days=1)).replace(day=1)
+                prev_account = OvertimeAccount.objects.filter(
+                    employee=request.user,
+                    year=prev_month.year,
+                    month=prev_month.month
+                ).first()
+                
+                # Addiere die vorherige Balance zur aktuellen
+                total_balance = Decimal(str(current_balance))
+                if prev_account:
+                    total_balance += prev_account.balance
+                
+                account.balance = total_balance
+                account.save()
+
+            return JsonResponse({
+                'balance': float(account.balance),
+                'hours_for_payment': float(account.hours_for_payment),
+                'is_paid': account.overtime_paid
+            })
+
+        elif request.method == 'POST':
+            data = json.loads(request.body)
+            hours = Decimal(str(data.get('hours_for_payment', 0)))
+
+            if hours < 0:
+                return JsonResponse({
+                    'error': gettext('Negative Stunden können nicht ausgezahlt werden')
+                }, status=400)
+
+            account = OvertimeAccount.objects.get(
+                employee=request.user,
+                year=year,
+                month=month
+            )
+
+            if hours > account.balance:
+                return JsonResponse({
+                    'error': gettext('Nicht genügend Überstunden verfügbar')
+                }, status=400)
+
+            account.hours_for_payment = hours
+            account.save()
+
+            return JsonResponse({
+                'success': True,
+                'balance': float(account.balance),
+                'hours_for_payment': float(account.hours_for_payment)
+            })
+
+    except Exception as e:
+        logger.error(f"Overtime overview error: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def api_get_balance(request):
+    """API-Endpoint für die aktuelle Überstunden-Balance"""
+    try:
+        employee = request.user
+        if request.user.role == 'OWNER':
+            employee_id = request.GET.get('employee')
+            if employee_id:
+                employee = CustomUser.objects.get(id=employee_id)
+
+        year = request.GET.get('year')
+        month = request.GET.get('month')
+        
+        if year and month:
+            year = int(year)
+            month = int(month)
+            balance = OvertimeAccount.get_current_balance(employee, year, month)
+        else:
+            balance = OvertimeAccount.get_current_balance(employee)
+
+        return JsonResponse({
+            'balance': float(balance)
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting balance: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 

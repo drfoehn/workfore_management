@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load wfm_extras %}
 
 {% block title %}{% trans "Arbeitszeiten" %} - {{ block.super }}{% endblock %}
 
@@ -345,8 +346,25 @@
                             </td>
                             <td></td>
                             <td></td>
-                            <td class="text-nowrap {% if total_diff < 0 %}text-danger{% elif total_diff > 0 %}text-success{% endif %}">
-                                {{ total_diff|floatformat:1 }}h
+                            <td class="text-nowrap">
+                                <div>
+                                    {% trans "Monat" %}: 
+                                    <span class="{% if total_diff < 0 %}text-danger{% elif total_diff > 0 %}text-success{% endif %}">
+                                        {{ total_diff|floatformat:1 }}h
+                                    </span>
+                                </div>
+                                <div>
+                                    {% trans "Gesamt" %}: 
+                                    {% if user.role == 'OWNER' %}
+                                        <span class="{% if total_balance < 0 %}text-danger{% elif total_balance > 0 %}text-success{% endif %}">
+                                            {{ total_balance|floatformat:1 }}h
+                                        </span>
+                                    {% else %}
+                                        <span class="{% if employee_balances|get_item:user.id < 0 %}text-danger{% elif employee_balances|get_item:user.id > 0 %}text-success{% endif %}">
+                                            {{ employee_balances|get_item:user.id|floatformat:1 }}h
+                                        </span>
+                                    {% endif %}
+                                </div>
                             </td>
                             <td></td>
                         </tr>
