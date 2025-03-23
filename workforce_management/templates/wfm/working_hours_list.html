@@ -43,11 +43,11 @@
                                 <i class="bi bi-calendar-check"></i> {% trans "Urlaub beantragen" %}
                             </button>
                         </li>
-                        <li>
+                        {% comment %} <li>
                             <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#timeCompModal">
                                 <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich beantragen" %}
                             </button>
-                        </li>
+                        </li> {% endcomment %}
                         <li>
                             <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
                                 <i class="bi bi-thermometer-half"></i> {% trans "Krankenstand melden" %}
@@ -211,16 +211,18 @@
                             <td class="d-none d-md-table-cell text-nowrap">
                                 {% if date_entry.working_hours %}
                                     {{ date_entry.working_hours.start_time|time:"H:i" }} - {{ date_entry.working_hours.end_time|time:"H:i" }}
-                                    ({{ date_entry.ist_hours|floatformat:1 }}h)
+                                    ({% if date_entry.break_minutes %}
+                                    <i class="bi bi-cup-hot" title="{% trans 'Pause' %}"></i> {{ date_entry.break_minutes }}min | 
+                               {% endif %}{{ date_entry.ist_hours|floatformat:1 }}h)
                                 {% endif %}
                             </td>
                             <td>
                                 {% if date_entry.vacation %}
                                     <i class="bi bi-brightness-high text-primary text-warning" title="{% trans 'Urlaub' %}"></i>
                                 {% endif %}
-                                {% if date_entry.time_comp %}
+                                {% comment %} {% if date_entry.time_comp %}
                                     <i class="bi bi-clock-history text-info" title="{% trans 'Zeitausgleich' %}"></i>
-                                {% endif %}
+                                {% endif %} {% endcomment %}
                                 {% if date_entry.sick_leave %}
                                     <i class="bi bi-hospital text-danger" title="{% trans 'Krankenstand' %}"></i>
                                 {% endif %}
@@ -238,14 +240,14 @@
                                             {% trans "Genehmigt" %}
                                         {% endif %}
                                     </span>
-                                {% elif date_entry.time_comp %}
+                                {% comment %} {% elif date_entry.time_comp %}
                                     <span class="badge {% if date_entry.time_comp.status == 'REQUESTED' %}bg-warning{% else %}bg-info{% endif %}">
                                         {% if date_entry.time_comp.status == 'REQUESTED' %}
                                             {% trans "Beantragt" %}
                                         {% else %}
                                             {% trans "Genehmigt" %}
                                         {% endif %}
-                                    </span>
+                                    </span> {% endcomment %}
                                 {% elif date_entry.sick_leave %}
                                     <span class="badge {% if date_entry.sick_leave.status == 'PENDING' %}bg-warning{% else %}bg-danger{% endif %}">
                                         {% if date_entry.sick_leave.status == 'PENDING' %}
@@ -360,7 +362,7 @@
 {% include "wfm/modals/working_hours_modal.html" %}
 {% if show_request_buttons %}
     {% include "wfm/modals/vacation_modal.html" %}
-    {% include "wfm/modals/time_compensation_modal.html" %}
+    {% comment %} {% include "wfm/modals/time_compensation_modal.html" %} {% endcomment %}
     {% include "wfm/modals/sick_leave_modal.html" %}
 {% endif %}
 {% endblock %}

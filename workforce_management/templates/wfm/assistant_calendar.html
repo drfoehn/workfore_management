@@ -130,11 +130,11 @@
                                 <i class="bi bi-calendar-check"></i> {% trans "Urlaub beantragen" %}
                             </button>
                         </li>
-                        <li>
+                        {% comment %} <li>
                             <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#timeCompModal">
                                 <i class="bi bi-clock-history"></i> {% trans "Zeitausgleich beantragen" %}
                             </button>
-                        </li>
+                        </li> {% endcomment %}
                         <li>
                             <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
                                 <i class="bi bi-thermometer-half"></i> {% trans "Krankenstand melden" %}
@@ -165,7 +165,7 @@
 
 {% include "wfm/modals/working_hours_modal.html" %}
 {% include "wfm/modals/vacation_modal.html" %}
-{% include "wfm/modals/time_compensation_modal.html" %}
+{% comment %} {% include "wfm/modals/time_compensation_modal.html" %} {% endcomment %}
 {% include "wfm/modals/sick_leave_modal.html" %}
 {% include "wfm/modals/overtime_modal.html" %}
 {% endblock %}
@@ -221,8 +221,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const classes = [];
             if (arg.event.extendedProps.type === 'vacation') {
                 classes.push('vacation-event');
-            } else if (arg.event.extendedProps.type === 'time_comp') {
-                classes.push('time-comp-event');
             } else if (arg.event.extendedProps.type === 'sick_leave') {
                 classes.push('sick-leave-event');
             }

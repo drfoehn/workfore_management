@@ -230,7 +230,9 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             'schedule': has_schedule,
                             'vacation': has_vacation,
                             'sick_leave': has_sick_leave,
-                            'is_weekend': False
+                            'is_weekend': False,
+                            # Füge break_minutes direkt aus dem working_hours Objekt hinzu
+                            'break_minutes': int(has_working_hours.break_duration.total_seconds() / 60) if has_working_hours and has_working_hours.break_duration else None
                         }
 
                         # Berechne Stunden nur für normale Tage
@@ -806,13 +808,20 @@ def save_working_hours(request, date=None):
         try:
             data = json.loads(request.body.decode('utf-8'))
             
+            # Konvertiere den Datums-String in ein date-Objekt
+            date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+            
+            # Konvertiere die Zeitstrings in time-Objekte
+            start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+            end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+            
             # Erstelle oder aktualisiere den Eintrag
             working_hours, created = WorkingHours.objects.update_or_create(
                 employee=request.user,
-                date=date,  # Datum aus der URL
+                date=date_obj,  # Verwende das konvertierte Datum
                 defaults={
-                    'start_time': data['start_time'],
-                    'end_time': data['end_time'],
+                    'start_time': start_time,
+                    'end_time': end_time,
                     'break_duration': timedelta(minutes=int(data['break_duration'])),
                     'notes': data.get('notes', '')
                 }

@@ -10,8 +10,8 @@
   --asphalt: #d0d0d0;
 
   /* Bootstrap-Variablen überschreiben */
-  /* --bs-primary: var(--queen-blue);
-  --bs-secondary: var(--zomp);
+  --bs-primary: var(--queen-blue);
+  /*--bs-secondary: var(--zomp);
   --bs-success: var(--pistachio);
   --bs-info: var(--queen-blue);
   --bs-warning: var(--maize-crayola);
