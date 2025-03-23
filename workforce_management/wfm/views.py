@@ -2294,8 +2294,15 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 'total_available': total_available,
                 'approved_hours': approved_hours,
                 'pending_hours': pending_hours,
-                'pending_hours_percent': pending_hours / total_available * 100,
-                'remaining_hours': total_available - approved_hours
+                'pending_hours_percent': pending_hours / (total_available - approved_hours) * 100,
+                'remaining_hours': total_available - approved_hours,
+                'remaining_hours_minus_pending': total_available - approved_hours - pending_hours,
+                'approved_percent': (approved_hours / total_available * 100) if total_available > 0 else 0,
+                'pending_percent': (pending_hours / total_available * 100) if total_available > 0 else 0,
+                'remaining_percent': (
+                    ((total_available - approved_hours - pending_hours) / total_available * 100) 
+                    if total_available > 0 else 0
+                ),
             }
 
         context['vacations'] = vacations

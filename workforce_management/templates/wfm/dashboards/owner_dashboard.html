@@ -44,7 +44,7 @@
                 <div class="card-body">
                     <div class="list-group">
                         <a href="{% url 'wfm:absence-management' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-calendar-check"></i> {% trans "Urlaubs- & Zeitausgleichs-Anträge" %}</span>
+                            <span><i class="bi bi-calendar-check"></i> {% trans "Urlaubsanträge" %}</span>
                             {% if pending_vacations %}
                                 <span class="badge bg-primary rounded-pill">{{ pending_vacations }}</span>
                             {% endif %}
@@ -128,9 +128,9 @@
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
                 {% trans "Urlaub beantragen" %}
             </button>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
+            {% comment %} <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
                 {% trans "Zeitausgleich beantragen" %}
-            </button>
+            </button> {% endcomment %}
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
                 {% trans "Krankenstand melden" %}
             </button>
@@ -202,11 +202,11 @@
                                             <span class="badge bg-info">{% trans "Urlaub" %}</span>
                                         {% endif %}
                                     {% endfor %}
-                                    {% for tc in time_comps %}
+                                    {% comment %} {% for tc in time_comps %}
                                         {% if tc.date == date %}
                                             <span class="badge bg-warning">{% trans "Zeitausgleich" %}</span>
                                         {% endif %}
-                                    {% endfor %}
+                                    {% endfor %} {% endcomment %}
                                     {% for sl in sick_leaves %}
                                         {% if date >= sl.start_date and date <= sl.end_date %}
                                             <span class="badge bg-danger">{% trans "Krank" %}</span>
@@ -341,7 +341,7 @@
 {% if user.role in 'ASSISTANT,CLEANING' %}
 {% include "wfm/modals/working_hours_modal.html" %}
 {% include "wfm/modals/vacation_modal.html" %}
-{% include "wfm/modals/time_compensation_modal.html" %}
+{% comment %} {% include "wfm/modals/time_compensation_modal.html" %} {% endcomment %}
 {% include "wfm/modals/sick_leave_modal.html" %}
 {% elif user.role == 'THERAPIST' %}
 {% comment %} {% include "wfm/modals/actual_hours_modal.html" %} {% endcomment %}

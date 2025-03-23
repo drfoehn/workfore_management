@@ -46,9 +46,8 @@
 
                         <div class="card-body text-center">
 
-                            <h6>{% trans "Gesamtanspruch" %}</h6>
+                            <h6>{% trans "Gesamtanspruch" %} {{ vacation_info.year }}</h6>
 
-                            {% widthratio vacation_info.remaining_hours vacation_info.total_available 100 as percent %}
 
                             <h3>{{ vacation_info.total_available|floatformat:1 }}h</h3>
 
@@ -60,73 +59,45 @@
 
                         </div>
 
-                        <div class="progress mb-3" style="height: 25px;">
+                        <div class="mt-3">
+    <div class="progress" style="height: 25px;">
 
-                            {% widthratio vacation_info.remaining_hours vacation_info.total_available 100 as percent %}
-
-                            {% widthratio vacation_info.pending_hours vacation_info.total_available 100 as pending_hours_percent %}
-
-                            <!-- Available hours (minus pending) -->
-
-                            <div class="progress-bar 
-
-                                {% with percent_num=percent|add:"0" %}
-
-                                    {% if percent_num >= 50 %}bg-pistachio
-
-                                    {% elif percent_num >= 25 %}bg-yellow-orange
-
-                                    {% else %}bg-red-salsa{% endif %}
-
-                                {% endwith %}"
-
-                                role="progressbar" 
-
-                                style="width: {{ percent }}%;" 
-
-                                aria-valuenow="{{ vacation_info.remaining_hours }}" 
-
-                                aria-valuemin="0" 
-
-                                aria-valuemax="{{ vacation_info.total_available }}">
-
-                                {{ vacation_info.remaining_hours|default:0|floatformat:1 }}h
-
-                            </div>
-
-                            {%if vacation_info.pending_hours > 0 %}
-
-                            <!-- Pending hours -->
-
-                            <div class="progress-bar-striped 
-
-                            {% with percent_num=percent|add:"0" %}
-
-                                    {% if percent_num >= 50 %}bg-pistachio
-
-                                    {% elif percent_num >= 25 %}bg-yellow-orange
-
-                                    {% else %}bg-red-salsa{% endif %}
-
-                                {% endwith %}"bg-yellow-orange" 
-
-                                 role="progressbar" 
-
-                                 style="width: {{ pending_percent }}%;"
-
-                                 aria-valuenow="{{ vacation_info.pending_hours }}"
-
-                                 aria-valuemin="0" 
-
-                                 aria-valuemax="{{ vacation_info.total_available }}">
-
-                                {{ vacation_info.pending_hours|default:0|floatformat:1 }}h
-
-                            </div>
-
-                            {% endif %}
-
-                        </div>
+        
+        <!-- Verfügbare Stunden (ohne beantragte) -->
+        <div class="progress-bar bg-pistachio" 
+             role="progressbar" 
+             style="width: {{ vacation_info.remaining_percent|floatformat:0 }}%"
+             aria-valuenow="{{ vacation_info.remaining_percent|floatformat:0 }}"
+             aria-valuemin="0"
+             aria-valuemax="100"
+             title="{{ vacation_info.remaining_hours_minus_pending|floatformat:1 }}h">
+            {{ vacation_info.remaining_hours_minus_pending|floatformat:1 }}h
+        </div>
+        
+        <!-- Beantragte Stunden -->
+        <div class="progress-bar-striped bg-pistachio-light" 
+             role="progressbar" 
+             style="width: {{ vacation_info.pending_percent|floatformat:0 }}%"
+             aria-valuenow="{{ vacation_info.pending_percent|floatformat:0 }}"
+             aria-valuemin="0"
+             aria-valuemax="100"
+             title="{{ vacation_info.pending_hours|floatformat:1 }}h">
+            {{ vacation_info.pending_hours|floatformat:1 }}h
+        </div>
+                <!-- Genehmigte Stunden -->
+                <div class="progress-bar bg-asphalt" 
+                role="progressbar" 
+                style="width: {{ vacation_info.approved_percent|floatformat:0 }}%"
+                aria-valuenow="{{ vacation_info.approved_percent|floatformat:0 }}"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                title="{{ vacation_info.approved_hours|floatformat:1 }}h">
+               {{ vacation_info.approved_hours|floatformat:1 }}h
+           </div>
+    </div>
+    
+    
+</div>
 
                     </div>
 
@@ -134,17 +105,17 @@
 
             </div>
 
-            <div class="row">
+            <div class="row" style="margin-top: 20px;">
 
                 <div class="col-md-4">
 
-                    <div class="card border-0">
+                    <div class="card border-5 border-pistachio">
 
                         <div class="card-body text-center">
 
-                            <h6>{% trans "Genommen" %}</h6>
+                            <h6>{% trans "Verfügbar" %}</h6>
 
-                            <h3>{{ vacation_info.approved_hours|floatformat:1 }}h</h3>
+                            <h3>{{ vacation_info.remaining_hours|floatformat:1 }}h</h3>
 
                         </div>
 
@@ -154,7 +125,7 @@
 
                 <div class="col-md-4">
 
-                    <div class="card border-0">
+                    <div class="card border-5 border-pistachio-light">
 
                         <div class="card-body text-center">
 
@@ -168,15 +139,16 @@
 
                 </div>
 
+                
                 <div class="col-md-4">
 
-                    <div class="card border-0">
+                    <div class="card border-5 border-asphalt">
 
                         <div class="card-body text-center">
 
-                            <h6>{% trans "Verbleibend" %}</h6>
+                            <h6>{% trans "Genehmigt" %}</h6>
 
-                            <h3>{{ vacation_info.remaining_hours|floatformat:1 }}h</h3>
+                            <h3>{{ vacation_info.approved_hours|floatformat:1 }}h</h3>
 
                         </div>
 
