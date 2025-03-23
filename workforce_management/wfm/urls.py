@@ -24,15 +24,15 @@ urlpatterns = [
     # Vacation & Time Compensation
     path('vacations/', views.VacationListView.as_view(), name='vacation-list'),
     path('vacation/edit/<int:pk>/', views.VacationUpdateView.as_view(), name='vacation-edit'),
-    path('time-compensations/', views.TimeCompensationListView.as_view(), name='time-compensation-list'),
-    path('time-compensation/add/', views.TimeCompensationCreateView.as_view(), name='time-compensation-add'),
-    path('time-compensation/edit/<int:pk>/', views.TimeCompensationUpdateView.as_view(), name='time-compensation-edit'),
+    # path('time-compensations/', views.TimeCompensationListView.as_view(), name='time-compensation-list'),
+    # path('time-compensation/add/', views.TimeCompensationCreateView.as_view(), name='time-compensation-add'),
+    # path('time-compensation/edit/<int:pk>/', views.TimeCompensationUpdateView.as_view(), name='time-compensation-edit'),
     
     # API Endpoints
     path('api/vacation/request/', views.api_vacation_request, name='api-vacation-request'),
     path('api/vacation/status/', views.api_vacation_status, name='api-vacation-status'),
-    path('api/time-compensation/request/', views.api_time_compensation_request, name='api-time-compensation-request'),
-    path('api/time-compensation/status/', views.api_time_compensation_status, name='api-time-compensation-status'),
+    # path('api/time-compensation/request/', views.api_time_compensation_request, name='api-time-compensation-request'),
+    # path('api/time-compensation/status/', views.api_time_compensation_status, name='api-time-compensation-status'),
     path('api/sick-leave/', views.api_sick_leave, name='api-sick-leave'),
     path('api/scheduled-hours/', views.api_scheduled_hours, name='api-scheduled-hours'),
     path('api/vacation/calculate/', views.api_calculate_vacation_hours, name='api-vacation-calculate'),

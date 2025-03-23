@@ -10,7 +10,7 @@ from .models import (
     VacationEntitlement, 
     SickLeave,
     ScheduleTemplate,
-    TimeCompensation,
+    # TimeCompensation,
     TherapistBooking,
     TherapistScheduleTemplate,
     CustomUser,
@@ -18,7 +18,7 @@ from .models import (
     ClosureDay,
     UserDocument
 )
-from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm, TimeCompensationForm
+from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
 from django.db.models.functions import ExtractMonth, ExtractYear, ExtractHour, ExtractMinute, Coalesce, Concat, ExtractWeekDay
 from datetime import date, datetime, timedelta, time
@@ -182,7 +182,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     'working_hours': None,
                     'schedule': None,
                     'vacation': None,
-                    'time_comp': None,
+                    # 'time_comp': None,
                     'sick_leave': None,
                     'closure': closure,
                     'soll_hours': 0,
@@ -198,7 +198,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     'working_hours': None,
                     'schedule': None,
                     'vacation': None,
-                    'time_comp': None,
+                    # 'time_comp': None,
                     'sick_leave': None,
                     'closure': None,
                     'soll_hours': 0,
@@ -271,7 +271,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                         'working_hours': None,
                         'schedule': None,
                         'vacation': None,
-                        'time_comp': None,
+                        # 'time_comp': None,
                         'sick_leave': None,
                         'closure': None,
                         'soll_hours': 0,
@@ -618,10 +618,10 @@ class MonthlyOverviewView(LoginRequiredMixin, ListView):
             ).first()  # Entferne status='APPROVED' Filter
             
             # Zeitausgleich
-            time_compensation = TimeCompensation.objects.filter(
-                employee=self.request.user,
-                date=date
-            ).first()
+            # time_compensation = TimeCompensation.objects.filter(
+            #     employee=self.request.user,
+            #     date=date
+            # ).first()
             
             # Berechnung der Stunden
             scheduled_hours = sum(
@@ -648,7 +648,7 @@ class MonthlyOverviewView(LoginRequiredMixin, ListView):
                 'actual': actual_total,
                 'difference': round(difference, 2),
                 'vacation': vacation,  # Enthält jetzt auch REQUESTED Urlaube
-                'time_compensation': time_compensation,
+                # 'time_compensation': time_compensation,
                 'schedule': schedule,
             })
         
@@ -690,14 +690,14 @@ class MonthlyOverviewView(LoginRequiredMixin, ListView):
             total_overtime += actual_hours - scheduled_hours
 
         # Bereits genommener Zeitausgleich
-        used_compensation = TimeCompensation.objects.filter(
-            employee=self.request.user
-        ).aggregate(
-            total=Sum('hours')
-        )['total'] or Decimal('0')
+        # used_compensation = TimeCompensation.objects.filter(
+        #     employee=self.request.user
+        # ).aggregate(
+        #     total=Sum('hours')
+        # )['total'] or Decimal('0')
 
         # Verfügbarer Zeitausgleich
-        available_overtime = total_overtime - used_compensation
+        # available_overtime = total_overtime - used_compensation
         
         # Verfügbare Urlaubstage
         vacation_entitlement = VacationEntitlement.objects.filter(
@@ -726,36 +726,36 @@ class MonthlyOverviewView(LoginRequiredMixin, ListView):
         
         return context
 
-class TimeCompensationCreateView(LoginRequiredMixin, CreateView):
-    model = TimeCompensation
-    form_class = TimeCompensationForm
-    template_name = 'wfm/time_compensation_form.html'
-    success_url = reverse_lazy('wfm:monthly-overview')
+# class TimeCompensationCreateView(LoginRequiredMixin, CreateView):
+#     model = TimeCompensation
+#     form_class = TimeCompensationForm
+#     template_name = 'wfm/time_compensation_form.html'
+#     success_url = reverse_lazy('wfm:monthly-overview')
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        date = self.request.GET.get('date')
+#     def get_form_kwargs(self):
+#         kwargs = super().get_form_kwargs()
+#         date = self.request.GET.get('date')
         
-        if date:
-            if 'initial' not in kwargs:
-                kwargs['initial'] = {}
-            kwargs['initial']['date'] = datetime.strptime(date, '%Y-%m-%d').date()
-        return kwargs
+#         if date:
+#             if 'initial' not in kwargs:
+#                 kwargs['initial'] = {}
+#             kwargs['initial']['date'] = datetime.strptime(date, '%Y-%m-%d').date()
+#         return kwargs
 
-    def form_valid(self, form):
-        form.instance.employee = self.request.user
-        if 'selected_date' in self.request.session:
-            del self.request.session['selected_date']
-        return super().form_valid(form)
+#     def form_valid(self, form):
+#         form.instance.employee = self.request.user
+#         if 'selected_date' in self.request.session:
+#             del self.request.session['selected_date']
+#         return super().form_valid(form)
 
-class TimeCompensationUpdateView(LoginRequiredMixin, UpdateView):
-    model = TimeCompensation
-    form_class = TimeCompensationForm
-    template_name = 'wfm/time_compensation_form.html'
-    success_url = reverse_lazy('wfm:monthly-overview')
+# class TimeCompensationUpdateView(LoginRequiredMixin, UpdateView):
+#     model = TimeCompensation
+#     form_class = TimeCompensationForm
+#     template_name = 'wfm/time_compensation_form.html'
+#     success_url = reverse_lazy('wfm:monthly-overview')
 
-    def get_queryset(self):
-        return TimeCompensation.objects.filter(employee=self.request.user)
+#     def get_queryset(self):
+#         return TimeCompensation.objects.filter(employee=self.request.user)
 
 @login_required
 def get_working_hours(request, date):
@@ -902,62 +902,62 @@ def api_vacation_request(request):
         logger.error(f"Vacation request error: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
-@login_required
-def api_time_compensation_request(request):
-    """API-Endpunkt für Zeitausgleichsanträge"""
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
+# @login_required
+# def api_time_compensation_request(request):
+#     """API-Endpunkt für Zeitausgleichsanträge"""
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
             
-            # Validiere die Daten
-            if not data.get('date'):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Bitte Datum angeben'
-                })
+#             # Validiere die Daten
+#             if not data.get('date'):
+#                 return JsonResponse({
+#                     'success': False,
+#                     'error': 'Bitte Datum angeben'
+#                 })
 
-            # Parse date
-            date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+#             # Parse date
+#             date = datetime.strptime(data['date'], '%Y-%m-%d').date()
             
-            # Prüfe verfügbare Stunden
-            current_year = timezone.now().year
-            total_hours = calculate_overtime_hours(request.user, current_year)
+#             # Prüfe verfügbare Stunden
+#             current_year = timezone.now().year
+#             total_hours = calculate_overtime_hours(request.user, current_year)
             
-            used_hours = TimeCompensation.objects.filter(
-                employee=request.user,
-                date__year=current_year,
-                status='APPROVED'
-            ).count() * 8  # 8 Stunden pro Tag
+#             used_hours = TimeCompensation.objects.filter(
+#                 employee=request.user,
+#                 date__year=current_year,
+#                 status='APPROVED'
+#             ).count() * 8  # 8 Stunden pro Tag
             
-            remaining_hours = total_hours - used_hours
+#             remaining_hours = total_hours - used_hours
             
-            if remaining_hours < 8:  # Standard-Arbeitstag
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Nicht genügend Überstunden verfügbar. Verfügbar: {remaining_hours:.1f}h'
-                })
+#             if remaining_hours < 8:  # Standard-Arbeitstag
+#                 return JsonResponse({
+#                     'success': False,
+#                     'error': f'Nicht genügend Überstunden verfügbar. Verfügbar: {remaining_hours:.1f}h'
+#                 })
 
-            # Erstelle den Zeitausgleichsantrag
-            time_comp = TimeCompensation.objects.create(
-                employee=request.user,
-                date=date,
-                notes=data.get('notes', ''),
-                status='REQUESTED'
-            )
+#             # Erstelle den Zeitausgleichsantrag
+#             time_comp = TimeCompensation.objects.create(
+#                 employee=request.user,
+#                 date=date,
+#                 notes=data.get('notes', ''),
+#                 status='REQUESTED'
+#             )
             
-            return JsonResponse({'success': True})
+#             return JsonResponse({'success': True})
             
-        except Exception as e:
-            logger.error(f"Time compensation request error: {str(e)}", exc_info=True)
-            return JsonResponse({
-                'success': False,
-                'error': str(e)
-            })
+#         except Exception as e:
+#             logger.error(f"Time compensation request error: {str(e)}", exc_info=True)
+#             return JsonResponse({
+#                 'success': False,
+#                 'error': str(e)
+#             })
     
-    return JsonResponse({
-        'success': False,
-        'error': 'Ungültige Anfrage'
-    }, status=400)
+#     return JsonResponse({
+#         'success': False,
+#         'error': 'Ungültige Anfrage'
+#     }, status=400)
 
 class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
     template_name = 'wfm/therapist_monthly_overview.html'
@@ -1361,7 +1361,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         if user.role == 'OWNER':
             # Statistiken für Owner Dashboard
             context['pending_vacations'] = Vacation.objects.filter(status='PENDING').count()
-            context['pending_time_compensations'] = TimeCompensation.objects.filter(status='PENDING').count()
+            # context['pending_time_compensations'] = TimeCompensation.objects.filter(status='PENDING').count()
             context['pending_sick_leaves'] = SickLeave.objects.filter(status='PENDING').count()
             context['pending_therapist_bookings'] = TherapistBooking.objects.filter(therapist_extra_hours_payment_status='PENDING').count()
 
@@ -1816,23 +1816,23 @@ class AssistantCalendarEventsView(View):
             'allDay': True
         } for v in vacations])
         
-        # Zeitausgleich
-        time_comps = TimeCompensation.objects.filter(
-            date__lte=end_date.date(),
-            date__gte=start_date.date(),
-            status='APPROVED',
-            **employee_filter
-        ).select_related('employee')
+        # # Zeitausgleich
+        # time_comps = TimeCompensation.objects.filter(
+        #     date__lte=end_date.date(),
+        #     date__gte=start_date.date(),
+        #     status='APPROVED',
+        #     **employee_filter
+        # ).select_related('employee')
         
-        events.extend([{
-            'title': f"{tc.employee.get_full_name()} - Zeitausgleich",
-            'start': tc.date.isoformat(),
-            'end': (tc.date + timedelta(days=1)).isoformat(),
-            'backgroundColor': tc.employee.color,
-            'className': 'time-comp-event',
-            'type': 'time_comp',
-            'allDay': True
-        } for tc in time_comps])
+        # events.extend([{
+        #     'title': f"{tc.employee.get_full_name()} - Zeitausgleich",
+        #     'start': tc.date.isoformat(),
+        #     'end': (tc.date + timedelta(days=1)).isoformat(),
+        #     'backgroundColor': tc.employee.color,
+        #     'className': 'time-comp-event',
+        #     'type': 'time_comp',
+        #     'allDay': True
+        # } for tc in time_comps])
         
         # Krankenstände
         sick_leaves = SickLeave.objects.filter(
@@ -1873,24 +1873,24 @@ class AssistantCalendarEventsView(View):
 
 
 
-class TimeCompensationListView(LoginRequiredMixin, ListView):
-    model = TimeCompensation
-    template_name = 'wfm/time_compensation_list.html'
-    context_object_name = 'time_compensations'
+# class TimeCompensationListView(LoginRequiredMixin, ListView):
+#     model = TimeCompensation
+#     template_name = 'wfm/time_compensation_list.html'
+#     context_object_name = 'time_compensations'
 
-    def get_queryset(self):
-        queryset = TimeCompensation.objects.select_related('employee')
+#     def get_queryset(self):
+#         queryset = TimeCompensation.objects.select_related('employee')
         
-        if self.request.user.role != 'OWNER':
-            queryset = queryset.filter(employee=self.request.user)
+#         if self.request.user.role != 'OWNER':
+#             queryset = queryset.filter(employee=self.request.user)
             
-        return queryset.order_by('-date')
+#         return queryset.order_by('-date')
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if self.request.user.role == 'OWNER':
-            context['employees'] = CustomUser.objects.exclude(role='OWNER')
-        return context
+#     def get_context_data(self, **kwargs):
+#         context = super().get_context_data(**kwargs)
+#         if self.request.user.role == 'OWNER':
+#             context['employees'] = CustomUser.objects.exclude(role='OWNER')
+#         return context
 
 @login_required
 def logout_view(request):
@@ -2294,57 +2294,58 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                 'total_available': total_available,
                 'approved_hours': approved_hours,
                 'pending_hours': pending_hours,
+                'pending_hours_percent': pending_hours / total_available * 100,
                 'remaining_hours': total_available - approved_hours
             }
 
         context['vacations'] = vacations
-        context['time_comps'] = TimeCompensation.objects.filter(employee=user).order_by('-date')
+        # context['time_comps'] = TimeCompensation.objects.filter(employee=user).order_by('-date')
         
-        # Zeitausgleich-Info für Assistenten und Reinigungskräfte
-        if user.role in ['ASSISTANT', 'CLEANING']:
-            context['timecomp_info'] = self.get_timecomp_info(user)
+        # # Zeitausgleich-Info für Assistenten und Reinigungskräfte
+        # if user.role in ['ASSISTANT', 'CLEANING']:
+        #     context['timecomp_info'] = self.get_timecomp_info(user)
 
         # Für das Upload-Modal
         context['users'] = [user]
 
         return context
 
-    def get_timecomp_info(self, user):
-        # Berechne Überstunden für das aktuelle Jahr
-        total_overtime = Decimal('0')
-        for month in range(1, 13):
-            overtime_account = OvertimeAccount.objects.filter(
-                employee=user,
-                year=date.today().year,
-                month=month,
-                is_finalized=True
-            ).first()
-            if overtime_account:
-                total_overtime += overtime_account.hours_for_timecomp
+    # def get_timecomp_info(self, user):
+    #     # Berechne Überstunden für das aktuelle Jahr
+    #     total_overtime = Decimal('0')
+    #     for month in range(1, 13):
+    #         overtime_account = OvertimeAccount.objects.filter(
+    #             employee=user,
+    #             year=date.today().year,
+    #             month=month,
+    #             is_finalized=True
+    #         ).first()
+    #         if overtime_account:
+    #             total_overtime += overtime_account.hours_for_timecomp
 
-        # Bereits genommener Zeitausgleich
-        approved_timecomp = TimeCompensation.objects.filter(
-            employee=user,
-            date__year=date.today().year,
-            status='APPROVED'
-        )
-        approved_timecomp_hours = sum(tc.hours for tc in approved_timecomp)
+    #     # Bereits genommener Zeitausgleich
+    #     approved_timecomp = TimeCompensation.objects.filter(
+    #         employee=user,
+    #         date__year=date.today().year,
+    #         status='APPROVED'
+    #     )
+    #     approved_timecomp_hours = sum(tc.hours for tc in approved_timecomp)
 
-        # Beantragter Zeitausgleich
-        pending_timecomp = TimeCompensation.objects.filter(
-            employee=user,
-            date__year=date.today().year,
-            status='REQUESTED'
-        )
-        pending_timecomp_hours = sum(tc.hours for tc in pending_timecomp)
+    #     # Beantragter Zeitausgleich
+    #     pending_timecomp = TimeCompensation.objects.filter(
+    #         employee=user,
+    #         date__year=date.today().year,
+    #         status='REQUESTED'
+    #     )
+    #     pending_timecomp_hours = sum(tc.hours for tc in pending_timecomp)
 
-        return {
-            'year': date.today().year,
-            'total_hours': total_overtime,
-            'approved_hours': approved_timecomp_hours,
-            'pending_hours': pending_timecomp_hours,
-            'remaining_hours': total_overtime - approved_timecomp_hours
-        }
+    #     return {
+    #         'year': date.today().year,
+    #         'total_hours': total_overtime,
+    #         'approved_hours': approved_timecomp_hours,
+    #         'pending_hours': pending_timecomp_hours,
+    #         'remaining_hours': total_overtime - approved_timecomp_hours
+    #     }
 
 @login_required
 def api_delete_absence(request, type, pk):
@@ -2356,8 +2357,8 @@ def api_delete_absence(request, type, pk):
         # Wähle das richtige Model basierend auf dem Typ
         if type == 'vacation':
             model = Vacation
-        elif type == 'time_comp':
-            model = TimeCompensation
+        # elif type == 'time_comp':
+        #     model = TimeCompensation
         else:
             return JsonResponse({'error': 'Invalid type'}, status=400)
             
@@ -2386,56 +2387,56 @@ def api_delete_absence(request, type, pk):
         logger.error(f"Delete absence error: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
-@login_required
-def api_time_compensation_status(request):
-    """API-Endpunkt für den aktuellen Zeitausgleichsstatus"""
-    try:
-        today = timezone.now().date()
+# @login_required
+# def api_time_compensation_status(request):
+#     """API-Endpunkt für den aktuellen Zeitausgleichsstatus"""
+#     try:
+#         today = timezone.now().date()
         
-        # Hole den relevanten Monat
-        if today.day <= 7:
-            target_date = today - relativedelta(months=1)
-        else:
-            target_date = today
+#         # Hole den relevanten Monat
+#         if today.day <= 7:
+#             target_date = today - relativedelta(months=1)
+#         else:
+#             target_date = today
             
-        # Hole das Überstundenkonto für diesen Monat
-        overtime_account = OvertimeAccount.objects.filter(
-            employee=request.user,
-            year=target_date.year,
-            month=target_date.month
-        ).first()
+#         # Hole das Überstundenkonto für diesen Monat
+#         overtime_account = OvertimeAccount.objects.filter(
+#             employee=request.user,
+#             year=target_date.year,
+#             month=target_date.month
+#         ).first()
         
-        if overtime_account:
-            total_hours = overtime_account.hours_for_timecomp
-        else:
-            total_hours = 0
+#         if overtime_account:
+#             total_hours = overtime_account.hours_for_timecomp
+#         else:
+#             total_hours = 0
         
-        # Hole genehmigte und beantragte Zeitausgleiche
-        approved_time_comps = TimeCompensation.objects.filter(
-            employee=request.user,
-            status='APPROVED'
-        )
+#         # Hole genehmigte und beantragte Zeitausgleiche
+#         approved_time_comps = TimeCompensation.objects.filter(
+#             employee=request.user,
+#             status='APPROVED'
+#         )
         
-        pending_time_comps = TimeCompensation.objects.filter(
-            employee=request.user,
-            status='REQUESTED'
-        )
+#         pending_time_comps = TimeCompensation.objects.filter(
+#             employee=request.user,
+#             status='REQUESTED'
+#         )
         
-        # Berechne die Stunden
-        used_hours = sum(tc.hours for tc in approved_time_comps)
-        pending_hours = sum(tc.hours for tc in pending_time_comps)
-        remaining_hours = total_hours - used_hours
+#         # Berechne die Stunden
+#         used_hours = sum(tc.hours for tc in approved_time_comps)
+#         pending_hours = sum(tc.hours for tc in pending_time_comps)
+#         remaining_hours = total_hours - used_hours
         
-        return JsonResponse({
-            'total_hours': float(total_hours),
-            'used_hours': float(used_hours),
-            'pending_hours': float(pending_hours),
-            'remaining_hours': float(remaining_hours)
-        })
+#         return JsonResponse({
+#             'total_hours': float(total_hours),
+#             'used_hours': float(used_hours),
+#             'pending_hours': float(pending_hours),
+#             'remaining_hours': float(remaining_hours)
+#         })
         
-    except Exception as e:
-        logger.error(f"Time compensation status error: {str(e)}", exc_info=True)
-        return JsonResponse({'error': str(e)}, status=500)
+#     except Exception as e:
+#         logger.error(f"Time compensation status error: {str(e)}", exc_info=True)
+#         return JsonResponse({'error': str(e)}, status=500)
 
 def calculate_overtime_hours(user, year, month=None):
     """Berechnet die Überstunden für einen Benutzer in einem Jahr/Monat"""
@@ -2529,9 +2530,9 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
             status='REQUESTED'
         ).select_related('employee').order_by('start_date')
         
-        time_comps = TimeCompensation.objects.filter(
-            status='REQUESTED'
-        ).select_related('employee').order_by('date')
+        # time_comps = TimeCompensation.objects.filter(
+        #     status='REQUESTED'
+        # ).select_related('employee').order_by('date')
     
         
         # Kombiniere die Anträge in eine Liste
@@ -2548,17 +2549,17 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
                 'is_vacation': True
             })
             
-        for time_comp in time_comps:
-            absences.append({
-                'id': time_comp.id,
-                'type': 'time_comp',
-                'employee': time_comp.employee,
-                'start_date': time_comp.date,
-                'end_date': time_comp.date,
-                'status': time_comp.status,
-                'notes': time_comp.notes,
-                'is_vacation': False
-            })
+        # for time_comp in time_comps:
+        #     absences.append({
+        #         'id': time_comp.id,
+        #         'type': 'time_comp',
+        #         'employee': time_comp.employee,
+        #         'start_date': time_comp.date,
+        #         'end_date': time_comp.date,
+        #         'status': time_comp.status,
+        #         'notes': time_comp.notes,
+        #         'is_vacation': False
+        #     })
             
         # Sortiere nach Datum und Mitarbeiter
         return sorted(absences, key=lambda x: (x['start_date'], x['employee'].username))
@@ -2571,8 +2572,8 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
             
             if absence_type == 'vacation':
                 absence = Vacation.objects.get(id=absence_id)
-            else:
-                absence = TimeCompensation.objects.get(id=absence_id)
+            # else:
+            #     absence = TimeCompensation.objects.get(id=absence_id)
                 
             if action == 'approve':
                 absence.status = 'APPROVED'
@@ -2890,24 +2891,24 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
                 therapist=employee
             ).order_by('-date')[:5]
 
-        # Berechne verfügbare Zeitausgleichstage
-        overtime_total = OvertimeAccount.objects.filter(
-            employee=employee,
-            year=current_year,
-            is_finalized=True
-        ).aggregate(
-            total=Sum('hours_for_timecomp')
-        )['total'] or 0
+        # # Berechne verfügbare Zeitausgleichstage
+        # overtime_total = OvertimeAccount.objects.filter(
+        #     employee=employee,
+        #     year=current_year,
+        #     is_finalized=True
+        # ).aggregate(
+        #     total=Sum('hours_for_timecomp')
+        # )['total'] or 0
 
-        used_timecomp = TimeCompensation.objects.filter(
-            employee=employee,
-            date__year=current_year,
-            status='APPROVED'
-        ).count() * 8  # 8 Stunden pro Tag
+        # used_timecomp = TimeCompensation.objects.filter(
+        #     employee=employee,
+        #     date__year=current_year,
+        #     status='APPROVED'
+        # ).count() * 8  # 8 Stunden pro Tag
 
-        available_timecomp_hours = max(0, overtime_total - used_timecomp)
-        context['available_timecomp_days'] = available_timecomp_hours / 8
-        context['available_timecomp_hours'] = available_timecomp_hours
+        # available_timecomp_hours = max(0, overtime_total - used_timecomp)
+        # context['available_timecomp_days'] = available_timecomp_hours / 8
+        # context['available_timecomp_hours'] = available_timecomp_hours
 
         # Hole Wochenarbeitszeiten
         weekdays = range(0, 7)  # 0 = Montag, 6 = Sonntag
@@ -2952,21 +2953,21 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
             context['future_vacations'] = future_vacations
 
         # Hole zukünftige Zeitausgleiche
-        future_timecomps = TimeCompensation.objects.filter(
-            employee=employee,
-            date__gte=today
-        ).select_related(
-            'employee'  # Falls wir employee-Informationen brauchen
-        ).order_by('date')
+        # future_timecomps = TimeCompensation.objects.filter(
+        #     employee=employee,
+        #     date__gte=today
+        # ).select_related(
+        #     'employee'  # Falls wir employee-Informationen brauchen
+        # ).order_by('date')
 
-        all_timecomps = TimeCompensation.objects.filter(employee=employee).order_by('-date') #Sortiere nach Datum, neuste zuerst
-        context['all_timecomps'] = all_timecomps
-        context['future_timecomps'] = future_timecomps
+        # all_timecomps = TimeCompensation.objects.filter(employee=employee).order_by('-date') #Sortiere nach Datum, neuste zuerst
+        # context['all_timecomps'] = all_timecomps
+        # context['future_timecomps'] = future_timecomps
 
-        # Füge die Status-Display-Methode hinzu
-        for timecomp in future_timecomps:
-            timecomp.get_status_display = dict(TimeCompensation.STATUS_CHOICES)[timecomp.status]
-            timecomp.total_hours = timecomp.hours
+        # # Füge die Status-Display-Methode hinzu
+        # for timecomp in future_timecomps:
+        #     timecomp.get_status_display = dict(TimeCompensation.STATUS_CHOICES)[timecomp.status]
+        #     timecomp.total_hours = timecomp.hours
 
         # Hole alle Arbeitszeitpläne (nicht nur den aktuellsten)
         weekdays = range(0, 7)

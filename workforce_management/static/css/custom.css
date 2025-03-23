@@ -4,6 +4,7 @@
   --yellow-orange: #f8961e;
   --maize-crayola: #f9c74f;
   --pistachio: #90be6d;
+  --pistachio-light: #cbdfbf;
   --zomp: #43aa8b;
   --queen-blue: #577590;
 
@@ -201,6 +202,11 @@ a:hover {
   color: white !important;
 }
 
+.bg-pistachio-light {
+  background-color: var(--pistachio-light) !important;
+  color: var(--queen-blue) !important;
+}
+
 .bg-zomp {
   background-color: var(--zomp) !important;
   color: white !important;
@@ -215,8 +221,6 @@ a:hover {
   background-color: var(--red-salsa) !important;
   color: white !important;
 }
-
-
 
 .bg-yellow-orange {
   background-color: var(--yellow-orange) !important;
@@ -246,8 +250,6 @@ a:hover {
   border-color: var(--pistachio) !important;
   color: var(--pistachio) !important;
 }
-
-
 
 /* Focus States */
 .btn:focus, 
@@ -288,4 +290,11 @@ a:hover {
 .table-sum {
   background-color: darkgray !important;
   color: white !important;
+}
+
+.fc-event-notes {
+    font-size: 0.8em;
+    opacity: 0.8;
+    margin-top: 2px;
+    white-space: pre-wrap;
 }

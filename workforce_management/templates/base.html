@@ -66,7 +66,7 @@
     {% block extra_js %}{% endblock %}
     
     {% if user.role in 'ASSISTANT,CLEANING' %}
-        {% include "wfm/modals/time_compensation_modal.html" %}
+        {% comment %} {% include "wfm/modals/time_compensation_modal.html" %} {% endcomment %}
         {% include "wfm/modals/overtime_modal.html" %}
         {% include "wfm/modals/vacation_modal.html" %}
         {% include "wfm/modals/sick_leave_modal.html" %}
