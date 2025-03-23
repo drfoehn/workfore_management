@@ -763,6 +763,7 @@ class OvertimeAccount(models.Model):
     )
     overtime_paid = models.BooleanField(default=False)
     overtime_paid_date = models.DateTimeField(null=True, blank=True)
+    last_update = models.DateField(null=True, blank=True)  # Neues Feld für das letzte Update
 
     def save(self, *args, **kwargs):
         # Wenn Überstunden als bezahlt markiert werden
@@ -854,43 +855,62 @@ class OvertimeAccount(models.Model):
         return total_diff.quantize(Decimal('.01'))
 
     @classmethod
+    def update_all_balances(cls):
+        """Aktualisiert die Überstundenkonten aller Mitarbeiter für die letzten 12 Monate"""
+        today = timezone.now().date()
+        employees = CustomUser.objects.filter(role__in=['ASSISTANT', 'CLEANING'])
+
+        for employee in employees:
+            # Berechne die Balance für den aktuellen Monat
+            current_month_diff = cls.calculate_overtime_hours(employee, today.year, today.month)
+            total_balance = current_month_diff
+            
+            # Berechne die letzten 11 Monate
+            current_date = today.replace(day=1)
+            for _ in range(11):
+                current_date = (current_date - timedelta(days=1)).replace(day=1)
+                month_diff = cls.calculate_overtime_hours(
+                    employee, 
+                    current_date.year, 
+                    current_date.month
+                )
+                total_balance += month_diff
+
+            # Aktualisiere oder erstelle das Konto
+            account, _ = cls.objects.update_or_create(
+                employee=employee,
+                year=today.year,
+                month=today.month,
+                defaults={'balance': total_balance}
+            )
+
+    @classmethod
     def get_current_balance(cls, employee, year=None, month=None):
-        """Berechnet die aktuelle Gesamtbilanz für einen Mitarbeiter (letzte 12 Monate)"""
+        """Holt die gespeicherte Balance aus dem Konto"""
         if year is None or month is None:
             today = timezone.now().date()
             year = today.year
             month = today.month
 
-        # Hole oder erstelle das aktuelle Konto
-        account, created = cls.objects.get_or_create(
+        account = cls.objects.filter(
             employee=employee,
             year=year,
-            month=month,
-            defaults={'balance': Decimal('0')}
-        )
+            month=month
+        ).first()
 
-        # Berechne die Balance für den aktuellen Monat
-        current_month_diff = cls.calculate_overtime_hours(employee, year, month)
-        total_balance = current_month_diff
-        
-        # Berechne die letzten 12 Monate
-        current_date = date(year, month, 1)
-        months_back = 0
-        
-        while months_back < 11:  # 11 weil der aktuelle Monat schon berechnet wurde
-            current_date = (current_date - timedelta(days=1)).replace(day=1)
-            prev_diff = cls.calculate_overtime_hours(
-                employee, 
-                current_date.year, 
-                current_date.month
-            )
-            total_balance += prev_diff
-            months_back += 1
+        return account.balance if account else Decimal('0')
 
-        # Aktualisiere das Konto
-        account.balance = total_balance
-        account.save()
-        return account.balance
+    @classmethod
+    def check_and_update_balances(cls):
+        """Prüft ob heute schon aktualisiert wurde und führt ggf. ein Update durch"""
+        today = timezone.now().date()
+        
+        # Prüfe ob heute schon aktualisiert wurde
+        last_update = cls.objects.filter(last_update=today).first()
+        if not last_update:
+            cls.update_all_balances()
+            # Setze last_update für alle aktualisierten Konten
+            cls.objects.all().update(last_update=today)
 
     class Meta:
         unique_together = ['employee', 'year', 'month']
