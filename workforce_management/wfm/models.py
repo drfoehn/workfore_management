@@ -125,12 +125,10 @@ class ScheduleTemplate(models.Model):
         return f"{self.employee.username} - {self.get_weekday_display()} (ab {self.valid_from})"
 
     def save(self, *args, **kwargs):
+        is_new = self.pk is None  # Prüfe ob es ein neues Template ist
         
         # Speichere zuerst das aktuelle Template
         super().save(*args, **kwargs)
-        
-        # Hole das aktuelle Datum
-        today = timezone.now().date()
         
         # Hole alle Templates für diesen Mitarbeiter und Wochentag
         all_templates = ScheduleTemplate.objects.filter(
@@ -141,7 +139,6 @@ class ScheduleTemplate(models.Model):
         # Manuell die Templates mit späterem Datum filtern
         future_templates = []
         for template in all_templates:
-            # Vergleiche die Datumsobjekte direkt
             if template.valid_from >= self.valid_from:
                 future_templates.append(template)
         
@@ -151,23 +148,63 @@ class ScheduleTemplate(models.Model):
             template.end_time = self.end_time
             template.save(update_fields=['start_time', 'end_time'])
         
-        # Aktualisiere WorkingHours nur für zukünftige Tage
-        current_date = max(self.valid_from, today)  # Starte ab heute oder valid_from
-        end_date = current_date + timedelta(days=365)
+        # Aktualisiere WorkingHours ab valid_from für ein Jahr
+        current_date = self.valid_from
+        end_date = current_date + timedelta(days=2*365)
         
+        # Hole alle existierenden WorkingHours für diesen Zeitraum und Wochentag
+        existing_hours = WorkingHours.objects.filter(
+            employee=self.employee,
+            date__range=(current_date, end_date),
+            date__week_day=self.weekday + 1  # Django verwendet 1-7 für Wochentage
+        )
+        
+        # Lösche nur die WorkingHours, die keine manuellen Änderungen haben
+        for hours in existing_hours:
+            if hours.ist_hours == hours.soll_hours:  # Keine manuelle Änderung
+                hours.delete()
+        
+        # Erstelle neue WorkingHours für den gesamten Zeitraum
         while current_date <= end_date:
             if current_date.weekday() == self.weekday:
-                WorkingHours.objects.update_or_create(
+                # Prüfe ob es einen Urlaub gibt
+                has_vacation = Vacation.objects.filter(
                     employee=self.employee,
-                    date=current_date,
-                    defaults={
-                        'start_time': self.start_time,
-                        'end_time': self.end_time,
-                        'soll_hours': self.hours,
-                        'ist_hours': self.hours,
-                        'break_duration': self.break_duration
-                    }
-                )
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
+                    status='APPROVED'
+                ).exists()
+                
+                # Prüfe ob es einen Feiertag gibt
+                has_holiday = ClosureDay.objects.filter(
+                    date=current_date
+                ).exists()
+                
+                # Prüfe ob es einen Krankenstand gibt
+                has_sick_leave = SickLeave.objects.filter(
+                    employee=self.employee,
+                    start_date__lte=current_date,
+                    end_date__gte=current_date
+                ).exists()
+                
+                # Erstelle WorkingHours nur wenn kein Urlaub/Krankenstand/Feiertag
+                if not (has_vacation or has_sick_leave or has_holiday):
+                    # Prüfe ob bereits ein Eintrag existiert
+                    existing = WorkingHours.objects.filter(
+                        employee=self.employee,
+                        date=current_date
+                    ).first()
+                    
+                    if not existing:  # Erstelle nur wenn kein Eintrag existiert
+                        WorkingHours.objects.create(
+                            employee=self.employee,
+                            date=current_date,
+                            start_time=self.start_time,
+                            end_time=self.end_time,
+                            soll_hours=self.hours,
+                            ist_hours=self.hours,
+                            break_duration=self.break_duration
+                        )
             current_date += timedelta(days=1)
 
     def clean(self):
@@ -271,6 +308,12 @@ class Vacation(models.Model):
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     start_date = models.DateField()
     end_date = models.DateField()
+    hours = models.DecimalField(  # Hinzufügen des Feldes mit Default-Wert
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text=_("Berechnete Urlaubsstunden")
+    )
     status = models.CharField(
         max_length=10,
         choices=[
@@ -281,7 +324,7 @@ class Vacation(models.Model):
         default='REQUESTED'
     )
     notes = models.TextField(blank=True)
-    
+
     def calculate_vacation_hours(self):
         """Berechnet die Urlaubsstunden basierend auf den Soll-Arbeitszeiten"""
         total_hours = Decimal('0')
@@ -349,6 +392,8 @@ class Vacation(models.Model):
             raise ValidationError(_('Nicht genügend Urlaubsstunden verfügbar'))
 
     def save(self, *args, **kwargs):
+        # Berechne die Stunden vor dem Speichern
+        self.hours = self.calculate_vacation_hours()
         # Prüfe ob es eine Statusänderung von REQUESTED/PENDING zu APPROVED gibt
         if self.pk:  # Wenn es ein existierender Eintrag ist
             old_instance = Vacation.objects.get(pk=self.pk)

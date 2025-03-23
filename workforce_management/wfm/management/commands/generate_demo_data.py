@@ -4,13 +4,14 @@ from django.utils import timezone
 from wfm.models import (
     WorkingHours, Vacation, VacationEntitlement, 
     TimeCompensation, TherapistBooking, ScheduleTemplate,
-    TherapistScheduleTemplate, SickLeave, OvertimeAccount  
+    TherapistScheduleTemplate, SickLeave, OvertimeAccount, UserDocument
 )
 from datetime import date, time, timedelta
 from decimal import Decimal
 import random
 from dateutil.relativedelta import relativedelta
 from django.db.utils import IntegrityError
+from django.db import transaction
 
 User = get_user_model()
 
@@ -20,19 +21,38 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write('Generiere Demo-Daten...')
         
-        # Lösche bestehende Daten
-        User.objects.filter(is_superuser=False).delete()
-        WorkingHours.objects.all().delete()
-        Vacation.objects.all().delete()
-        VacationEntitlement.objects.all().delete()
-        TimeCompensation.objects.all().delete()
-        TherapistBooking.objects.all().delete()
-        ScheduleTemplate.objects.all().delete()
-        TherapistScheduleTemplate.objects.all().delete()
-        SickLeave.objects.all().delete()
-        OvertimeAccount.objects.all().delete()
-
+        # Hole alle zu löschenden User
+        users_to_delete = User.objects.filter(is_superuser=False)
         
+        for user in users_to_delete:
+            # 1. Lösche zuerst WorkingHours, da es auf Vacation, TimeComp und SickLeave verweist
+            WorkingHours.objects.filter(employee=user).delete()
+            
+            # 2. Lösche SickLeave und verknüpfte Dokumente
+            for sick_leave in SickLeave.objects.filter(employee=user):
+                if sick_leave.document:
+                    sick_leave.document.delete()
+                sick_leave.delete()
+            
+            # 3. Lösche andere Dokumente
+            UserDocument.objects.filter(user=user).delete()
+            
+            # 4. Lösche Abwesenheiten
+            Vacation.objects.filter(employee=user).delete()
+            TimeCompensation.objects.filter(employee=user).delete()
+            
+            # 5. Lösche Buchungen und Templates
+            TherapistBooking.objects.filter(therapist=user).delete()
+            ScheduleTemplate.objects.filter(employee=user).delete()
+            TherapistScheduleTemplate.objects.filter(therapist=user).delete()
+            
+            # 6. Lösche Berechtigungen und Konten
+            VacationEntitlement.objects.filter(employee=user).delete()
+            OvertimeAccount.objects.filter(employee=user).delete()
+            
+            # 7. Lösche den User selbst
+            user.delete()
+
         today = date.today()
         
         # Erstelle Owner mit Details
@@ -178,33 +198,36 @@ class Command(BaseCommand):
         # Vergangener Urlaub für erste Assistenz
         past_start = today - timedelta(days=45)
         past_end = past_start + timedelta(days=4)
-        Vacation.objects.create(
+        vacation = Vacation(
             employee=assistants[0],
             start_date=past_start,
             end_date=past_end,
             status='APPROVED',
             notes='Sommerurlaub'
         )
+        vacation.save()
 
         # Zukünftiger Urlaub für erste Assistenz
         future_start = today + timedelta(days=14)
         future_end = future_start + timedelta(days=4)
-        Vacation.objects.create(
+        vacation = Vacation(
             employee=assistants[0],
             start_date=future_start,
             end_date=future_end,
             status='APPROVED',
             notes='Herbsturlaub'
         )
+        vacation.save()
 
         # Anstehender Urlaub für zweite Assistenz
-        Vacation.objects.create(
+        vacation = Vacation(
             employee=assistants[1],
             start_date=today + timedelta(days=30),
             end_date=today + timedelta(days=35),
             status='REQUESTED',
             notes='Winterurlaub'
         )
+        vacation.save()
 
         # Zeitausgleiche
         # Vergangene Zeitausgleiche
@@ -262,6 +285,13 @@ class Command(BaseCommand):
                 notes='Erkältung, Attest folgt'
             )
 
+        # Aktualisiere die Überstundenkonten am Ende
+        self.stdout.write('Aktualisiere Überstundenkonten...')
+        OvertimeAccount.update_all_balances()
+        OvertimeAccount.objects.all().update(last_update=today)
+
+        self.stdout.write(self.style.SUCCESS('Demo-Daten erfolgreich generiert!'))
+
     def create_therapist_schedule(self, therapist):
         """Erstellt einen Wochenplan für einen Therapeuten"""
         # Zufällige Arbeitszeiten für jeden Wochentag (Mo-Fr)
@@ -278,5 +308,3 @@ class Command(BaseCommand):
                 end_time=time(end_hour, 0),
                 valid_from=timezone.now().date()
             )
-
-            self.stdout.write(self.style.SUCCESS('Demo-Daten erfolgreich generiert!'))
