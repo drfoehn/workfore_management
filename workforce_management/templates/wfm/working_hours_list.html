@@ -6,11 +6,19 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>{% trans "Arbeitszeiten" %}</h1>
-    <a href="{% url 'wfm:assistant-calendar' %}" class="btn btn-primary">
-        <i class="bi bi-calendar"></i> {% trans "Kalenderansicht" %}
-    </a>
+    <h1>{% trans "Arbeitszeiterfassung" %}</h1>
+    <div class="d-flex align-items-center gap-3">
+        
+        
+        <!-- Buttons -->
+        <a href="{% url 'wfm:assistant-calendar' %}" class="btn btn-primary">
+            <i class="bi bi-calendar"></i> {% trans "Kalenderansicht" %}
+        </a>
+        
+    </div>
 </div>
+
+
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         {% if user.role == 'ASSISTANT' or user.role == 'CLEANING' %}
@@ -61,49 +69,8 @@
         </div>
     </div>
 
-    {% if show_request_buttons %}
-    <!-- Status-Anzeige für laufende Anträge/Krankmeldungen -->
-    <div class="row g-4 mb-4">
-        {% if pending_vacations %}
-        <div class="col-md-4">
-            <div class="alert alert-info">
-                <h6>{% trans "Offene Urlaubsanträge" %}</h6>
-                <ul class="list-unstyled mb-0">
-                    {% for vacation in pending_vacations %}
-                    <li>{{ vacation.start_date|date:"d.m.Y" }} - {{ vacation.end_date|date:"d.m.Y" }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
+   
 
-        {% if pending_time_comps %}
-        <div class="col-md-4">
-            <div class="alert alert-warning">
-                <h6>{% trans "Offene Zeitausgleichsanträge" %}</h6>
-                <ul class="list-unstyled mb-0">
-                    {% for tc in pending_time_comps %}
-                    <li>{{ tc.date|date:"d.m.Y" }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if active_sick_leaves %}
-        <div class="col-md-4">
-            <div class="alert alert-danger">
-                <h6>{% trans "Aktuelle Krankmeldungen" %}</h6>
-                <ul class="list-unstyled mb-0">
-                    {% for sl in active_sick_leaves %}
-                    <li>{{ sl.start_date|date:"d.m.Y" }} - {{ sl.end_date|date:"d.m.Y" }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-    {% endif %}
 
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -326,53 +293,67 @@
                                 </td>
                             </tr>
                         {% endfor %}
-                        
+                        </tbody>
+                        <tfoot>
                         <!-- Summenzeile -->
                         <tr class="table-secondary fw-bold">
-                            <td class="text-nowrap">{% trans "Summe" %}</td>
-                            {% if user.role == 'OWNER' %}
-                                <td></td>
-                            {% endif %}
-                            <td class="d-none d-md-table-cell text-nowrap">
-                                {{ total_soll|floatformat:1 }}h
-                            </td>
-                            <td class="d-none d-md-table-cell text-nowrap">
-                                {{ total_ist|floatformat:1 }}h
-                            </td>
-                            <!-- Mobile: Nur Stunden anzeigen -->
-                            <td class="text-nowrap d-md-none">
-                                <div>{{ total_soll|floatformat:1 }}h</div>
-                                <div>{{ total_ist|floatformat:1 }}h</div>
+                            <td>{% trans "Summe" %}</td>
+                            
+                            <td >{{ total_soll|floatformat:2 }}</td>
+                            <td >{{ total_ist|floatformat:2 }}</td>
+                            <td >{% trans "Stundenbilanz im" %} {{ month_name }}: 
+                                <span class="{% if total_diff > 0 %}text-success{% elif total_diff < 0 %}text-danger{% endif %}">
+                                    {{ total_diff|floatformat:2 }}
+                                </span>
                             </td>
                             <td></td>
-                            <td></td>
-                            <td class="text-nowrap">
-                                <div>
-                                    {% trans "Monat" %}: 
-                                    <span class="{% if total_diff < 0 %}text-danger{% elif total_diff > 0 %}text-success{% endif %}">
-                                        {{ total_diff|floatformat:1 }}h
-                                    </span>
-                                </div>
-                                <div>
-                                    {% trans "Gesamt" %}: 
-                                    {% if user.role == 'OWNER' %}
-                                        <span class="{% if total_balance < 0 %}text-danger{% elif total_balance > 0 %}text-success{% endif %}">
-                                            {{ total_balance|floatformat:1 }}h
-                                        </span>
-                                    {% else %}
-                                        <span class="{% if employee_balances|get_item:user.id < 0 %}text-danger{% elif employee_balances|get_item:user.id > 0 %}text-success{% endif %}">
-                                            {{ employee_balances|get_item:user.id|floatformat:1 }}h
-                                        </span>
-                                    {% endif %}
-                                </div>
+                            <td>
+                                
                             </td>
                             <td></td>
                         </tr>
-                    </tbody>
+                        </tfoot>
+                   
                 </table>
             </div>
         </div>
     </div>
+    <div class="card " style="margin-top: 20px;">
+        <div class="card-header d-flex justify-content-between align-items-center bg-pistachio">
+            <h4 class="mb-0">{% trans "Stundenbilanz" %}</h4>
+            <a href="{% url 'wfm:calculate_balances' %}" class="btn btn-primary">
+                <i class="fas fa-calculator"></i> 
+                {% if user.role == 'OWNER' %}
+                    {% trans "Alle Überstunden berechnen" %}
+                {% else %}
+                    {% trans "Meine Überstunden berechnen" %}
+                {% endif %}
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-nowrap">{% trans "Mitarbeiter" %}</th>
+                            <th class="text-nowrap">{% trans "Bilanz" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for employee_id, balance in employee_balances.items %}
+                            <tr>
+                                <td>{{ employees|get_item:employee_id }}</td>
+                                <td>
+                                    <span class="{% if balance > 0 %}text-success{% elif balance < 0 %}text-danger{% endif %}">
+                                        {{ balance|floatformat:2 }}h
+                                    </span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
 </div>
 
 <!-- Modals einbinden -->

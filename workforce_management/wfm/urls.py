@@ -84,6 +84,7 @@ urlpatterns = [
 
 
     path('api/sick-leave/<int:sick_leave_id>/upload-document/', views.api_upload_sick_leave_document, name='api-upload-sick-leave-document'),
+    path('calculate-balances/', views.calculate_balances, name='calculate_balances'),
 ]
 
 

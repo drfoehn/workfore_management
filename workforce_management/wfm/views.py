@@ -58,20 +58,17 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
     model = WorkingHours
 
     def get_context_data(self, **kwargs):
-        # Aktualisiere Balances wenn nötig
-        OvertimeAccount.check_and_update_balances()
-        
         context = super().get_context_data(**kwargs)
         
         # 1. Hole Jahr und Monat aus URL oder nutze aktuelles Datum
         today = timezone.now().date()
-        year = int(self.request.GET.get('year', date.today().year))
-        month = int(self.request.GET.get('month', date.today().month))
+        year = int(self.request.GET.get('year', today.year))
+        month = int(self.request.GET.get('month', today.month))
         
         # 2. Erstelle Datum für Navigation
         current_date = date(year, month, 1)
-        prev_month_date = current_date - timedelta(days=1)
-        next_month_date = current_date + timedelta(days=32)
+        prev_month_date = (current_date - timedelta(days=1)).replace(day=1)
+        next_month_date = (current_date + timedelta(days=32)).replace(day=1)
 
         # 3. Filter-Logik für Owner
         if self.request.user.role == 'OWNER':
@@ -289,14 +286,21 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         # 9. Hole die Gesamtbilanz für jeden Mitarbeiter
         employee_balances = {}
         total_balance = Decimal('0')
-        for employee in employees:
-            balance = OvertimeAccount.get_current_balance(
-                employee=employee,
-                year=year,
-                month=month
-            )
-            employee_balances[employee.id] = balance
-            total_balance += balance
+        
+        # Erstelle ein Dictionary mit allen Mitarbeitern für das Template
+        employees_dict = {str(emp.id): emp for emp in employees}
+        context['employees'] = employees_dict  # Füge das Dictionary zum Context hinzu
+        
+        if self.request.user.role == 'OWNER':
+            for employee in employees:
+                if employee.role == 'ASSISTANT' or employee.role == 'CLEANING':
+                    balance = OvertimeAccount.get_current_balance(employee)
+                    employee_balances[str(employee.id)] = balance
+            total_balance = sum(employee_balances.values())
+        else:
+            # Für normale Nutzer nur die eigene Balance
+            total_balance = OvertimeAccount.get_current_balance(self.request.user)
+            employee_balances[str(self.request.user.id)] = total_balance
 
         context.update({
             'dates': days_data,
@@ -3722,4 +3726,36 @@ def api_get_balance(request):
     except Exception as e:
         logger.error(f"Error getting balance: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def calculate_balances(request):
+    """View für die manuelle Berechnung der Überstunden-Balances"""
+    try:
+        if request.user.role == 'OWNER':
+            # Für Owner: Berechne für alle Mitarbeiter
+            OvertimeAccount.update_all_balances()
+            messages.success(request, 'Überstunden für alle Mitarbeiter aktualisiert.')
+        else:
+            # Für andere: Nur eigene Balance berechnen
+            today = timezone.now().date()
+            
+            # Benutze die bestehende Methode zur Berechnung der Balance
+            OvertimeAccount.update_all_balances()
+            
+            # Hole die aktuelle Balance
+            account = OvertimeAccount.objects.get(
+                employee=request.user,
+                year=today.year,
+                month=today.month
+            )
+            
+            messages.success(
+                request, 
+                f'Ihre Überstunden wurden aktualisiert. Aktuelle Bilanz: {account.balance:+.2f} Stunden'
+            )
+
+    except Exception as e:
+        messages.error(request, f'Fehler bei der Berechnung: {str(e)}')
+
+    return redirect(request.META.get('HTTP_REFERER', 'wfm:working_hours_list'))
 
