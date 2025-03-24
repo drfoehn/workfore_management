@@ -1624,7 +1624,7 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
             # Eigene Buchungen mit vollen Details
             own_bookings = [
                 {
-                    'id': str(booking.id),  # Nur die ID als String
+                    'id': str(booking.id),
                     'title': f"{booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')}",
                     'start': f"{booking.date}T{booking.start_time}",
                     'end': f"{booking.date}T{booking.end_time}",
@@ -1634,8 +1634,8 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
                             'id': booking.therapist.id,
                             'name': booking.therapist.get_full_name()
                         },
-                        'hours': booking.hours,
-                        'actual_hours': booking.actual_hours,
+                        'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
+                        'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
                         'notes': booking.notes
                     }
                 }
@@ -1659,7 +1659,7 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
         else:  # OWNER und ASSISTANT sieht alle Details
             calendar_events = [
                 {
-                    'id': str(booking.id),  # Nur die ID als String
+                    'id': str(booking.id),
                     'title': f"{booking.therapist.get_full_name()} ({booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')})",
                     'start': f"{booking.date}T{booking.start_time}",
                     'end': f"{booking.date}T{booking.end_time}",
@@ -1669,8 +1669,8 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
                             'id': booking.therapist.id,
                             'name': booking.therapist.get_full_name()
                         },
-                        'hours': booking.hours,
-                        'actual_hours': booking.actual_hours,
+                        'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
+                        'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
                         'notes': booking.notes
                     }
                 }
@@ -1698,16 +1698,16 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
                 extra_costs += booking.difference_hours * booking.therapist.room_rate
 
         context.update({
-            'calendar_events': calendar_events,
+            'calendar_events': calendar_events,  # Nicht json.dumps() verwenden
             'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
             'prev_month': (current_date - relativedelta(months=1)),
             'next_month': (current_date + relativedelta(months=1)),
             'totals': {
-                'total_actual_hours': total_actual_hours,
-                'total_extra_hours': total_extra_hours,
-                'total_sum': total_booked_amount,
-                'extra_costs': extra_costs
+                'total_actual_hours': float(total_actual_hours),  # Konvertiere zu float
+                'total_extra_hours': float(total_extra_hours),  # Konvertiere zu float
+                'total_sum': float(total_booked_amount),  # Konvertiere zu float
+                'extra_costs': float(extra_costs)  # Konvertiere zu float
             }
         })
 
@@ -1762,8 +1762,8 @@ def api_therapist_calendar_events(request):
                         'id': booking.therapist.id,
                         'name': booking.therapist.get_full_name()
                     },
-                    'hours': booking.hours,
-                    'actual_hours': booking.actual_hours,
+                    'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
+                    'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
                     'notes': booking.notes
                 }
             }
@@ -1800,8 +1800,8 @@ def api_therapist_calendar_events(request):
                         'id': booking.therapist.id,
                         'name': booking.therapist.get_full_name()
                     },
-                    'hours': booking.hours,
-                    'actual_hours': booking.actual_hours,
+                    'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
+                    'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
                     'notes': booking.notes
                 }
             }
@@ -3510,48 +3510,6 @@ def api_get_scheduled_hours(request):
     })
 
 @login_required
-def api_therapist_booking_get(request, pk):
-    """API-Endpunkt zum Abrufen einer Therapeuten-Buchung"""
-
-    
-    try:
-        # Erlaube Zugriff für Owner und den zugewiesenen Therapeuten
-        booking = TherapistBooking.objects.get(id=pk)
-
-        
-        if not (request.user.role == 'OWNER' or request.user == booking.therapist):
-            print("Permission denied")
-            return JsonResponse({'error': 'Permission denied'}, status=403)
-        
-        response_data = {
-            'id': booking.id,
-            'therapist': {
-                'id': booking.therapist.id,
-                'name': booking.therapist.get_full_name() or booking.therapist.username
-            },
-            'date': booking.date.strftime('%Y-%m-%d'),
-            'start_time': booking.start_time.strftime('%H:%M'),
-            'end_time': booking.end_time.strftime('%H:%M'),
-            'hours': float(booking.hours) if booking.hours else None,
-            'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
-            'notes': booking.notes or '',
-            'therapist_extra_hours_payment_status': booking.therapist_extra_hours_payment_status
-        }
-
-        return JsonResponse(response_data)
-        
-    except TherapistBooking.DoesNotExist:
-        print(f"Booking not found: {pk}")
-        return JsonResponse({
-            'error': 'Buchung nicht gefunden'
-        }, status=404)
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return JsonResponse({
-            'error': str(e)
-        }, status=500)
-
-@login_required
 @ensure_csrf_cookie
 @require_http_methods(["POST"])
 def api_mark_therapist_extra_hours_as_paid(request):
@@ -3856,6 +3814,104 @@ class WorkingHoursDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView
     def test_func(self):
         obj = self.get_object()
         return self.request.user.role == 'OWNER' or obj.employee == self.request.user
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            self.object = self.get_object()
+            self.object.delete()
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=400)
+
+class TherapistBookingCreateView(LoginRequiredMixin, CreateView):
+    model = TherapistBooking
+    fields = ['start_time', 'end_time', 'notes', 'client']
+    template_name = 'wfm/modals/therapist_booking_modal_add.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        return context
+    
+    def form_valid(self, form):
+        form.instance.therapist = self.request.user
+        form.instance.date = datetime.strptime(self.kwargs['date'], '%Y-%m-%d').date()
+        
+        # Speichere das Objekt ohne redirect
+        self.object = form.save()
+        
+        return JsonResponse({
+            'success': True,
+            'id': self.object.id,
+            'therapist_id': self.object.therapist.id
+        })
+    
+    def form_invalid(self, form):
+        return JsonResponse({
+            'success': False,
+            'error': form.errors
+        })
+
+class TherapistBookingUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = TherapistBooking
+    fields = ['start_time', 'end_time', 'notes', 'actual_hours']  # client entfernt
+    template_name = 'wfm/modals/therapist_booking_modal_edit.html'
+    
+    def test_func(self):
+        # Prüfe ob der User ein Owner ist oder der Therapeut selbst
+        return (self.request.user.role == 'OWNER' or 
+                self.get_object().therapist == self.request.user)
+    
+    def form_valid(self, form):
+        # Speichere das Objekt ohne redirect
+        self.object = form.save()
+        
+        return JsonResponse({
+            'success': True,
+            'id': self.object.id,
+            'therapist_id': self.object.therapist.id
+        })
+    
+    def form_invalid(self, form):
+        return JsonResponse({
+            'success': False,
+            'error': form.errors
+        })
+
+class TherapistBookingDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    model = TherapistBooking
+    
+    def test_func(self):
+        # Prüfe ob der User ein Owner ist oder der Therapeut selbst
+        return (self.request.user.role == 'OWNER' or 
+                self.get_object().therapist == self.request.user)
+    
+    def render_to_response(self, context):
+        obj = context['object']
+        return JsonResponse({
+            'id': obj.id,
+            'therapist': {
+                'id': obj.therapist.id,
+                'name': obj.therapist.get_full_name()
+            },
+            'date': obj.date.strftime('%Y-%m-%d'),
+            'start_time': obj.start_time.strftime('%H:%M') if obj.start_time else '',
+            'end_time': obj.end_time.strftime('%H:%M') if obj.end_time else '',
+            'hours': float(obj.hours) if obj.hours else None,
+            'actual_hours': float(obj.actual_hours) if obj.actual_hours else None,
+            'notes': obj.notes or '',
+            'therapist_extra_hours_payment_status': obj.therapist_extra_hours_payment_status
+        })
+
+class TherapistBookingDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
+    model = TherapistBooking
+    
+    def test_func(self):
+        # Prüfe ob der User ein Owner ist oder der Therapeut selbst
+        return (self.request.user.role == 'OWNER' or 
+                self.get_object().therapist == self.request.user)
     
     def post(self, request, *args, **kwargs):
         try:

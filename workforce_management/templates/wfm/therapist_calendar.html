@@ -17,52 +17,17 @@
 {% endblock %}
 
 {% block content %}
-{% csrf_token %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h2 class="mb-0">{% trans "Therapeuten-Kalender" %}</h2>
-        <div class="d-flex gap-2">
-            <!-- View Buttons -->
-            <div class="btn-group" role="group">
-                <button type="button" class="btn btn-outline-primary" onclick="calendar.changeView('dayGridMonth')">
-                    <i class="bi bi-calendar-month"></i> {% trans "Monat" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary" onclick="calendar.changeView('timeGridWeek')">
-                    <i class="bi bi-calendar-week"></i> {% trans "Woche" %}
-                </button>
-                <a href="{% url 'wfm:therapist-booking-list' %}{% if selected_therapist %}?therapist={{ selected_therapist.id }}{% endif %}" 
-                   class="btn btn-outline-primary">
-                    <i class="bi bi-list"></i> {% trans "Liste" %}
-                </a>
-            </div>
-
-            {% if user.role == 'OWNER' %}
-            <!-- Therapeuten Filter -->
-            <div class="dropdown">
-                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    {% if selected_therapist %}
-                        {{ selected_therapist.get_full_name|default:selected_therapist.username }}
-                    {% else %}
-                        {% trans "Alle Therapeuten" %}
-                    {% endif %}
-                </button>
-                <ul class="dropdown-menu">
-                    <li>
-                        <a class="dropdown-item" href="?">
-                            {% trans "Alle anzeigen" %}
-                        </a>
-                    </li>
-                    <li><h6 class="dropdown-header">{% trans "Therapeuten" %}</h6></li>
-                    {% for therapist in therapists %}
-                        <li>
-                            <a class="dropdown-item" href="?therapist={{ therapist.id }}">
-                                {{ therapist.get_full_name|default:therapist.username }}
-                            </a>
-                        </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2>{% trans "Terminkalender" %}</h2>
+            
+            <!-- Add Button -->
+            <button class="btn btn-primary" 
+                    data-bs-toggle="modal" 
+                    data-bs-target="#addBookingModal">
+                <i class="bi bi-plus-circle"></i> {% trans "Neuer Termin" %}
+            </button>
         </div>
     </div>
     <div class="card-body">
@@ -70,19 +35,43 @@
     </div>
 </div>
 
-{% include "wfm/modals/booking_modal.html" %}
-{% endblock %}
-
-{% block extra_js %}
-{% include "wfm/modals/booking_modal_js.html" %}
-<!-- FullCalendar 6.x -->
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js'></script>
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales/de.global.js'></script>
+{% include 'wfm/modals/therapist_booking_modal_add.html' %}
+{% include 'wfm/modals/therapist_booking_modal_edit.html' %}
 
 <script>
+// Funktion zum Öffnen des Edit-Modals
+function openBookingModal(bookingId) {
+    fetch(`/api/therapist-booking/${bookingId}/`)
+        .then(response => {
+            if (!response.ok) throw new Error('{% trans "Keine Berechtigung" %}');
+            return response.json();
+        })
+        .then(data => {
+            // Fülle das Modal mit den Daten
+            document.getElementById('editTherapistName').value = data.therapist.name;
+            document.getElementById('editDate').value = data.date;
+            document.getElementById('editStartTime').value = data.start_time;
+            document.getElementById('editEndTime').value = data.end_time;
+            document.getElementById('editHours').value = data.hours || '';
+            document.getElementById('editActualHours').value = data.actual_hours || data.hours || '';
+            document.getElementById('editNotes').value = data.notes || '';
+            
+            // Setze die action URL für das Formular
+            document.getElementById('editBookingForm').action = 
+                `/api/therapist-booking/${bookingId}/update/`;
+            
+            // Öffne das Modal
+            const modal = new bootstrap.Modal(document.getElementById('editBookingModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('{% trans "Fehler beim Laden der Daten" %}');
+        });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    var calendarEl = document.getElementById('calendar');
-    var calendar = new FullCalendar.Calendar(calendarEl, {
+    var calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         locale: 'de',
         initialView: 'dayGridMonth',
         headerToolbar: {
@@ -100,89 +89,59 @@ document.addEventListener('DOMContentLoaded', function() {
             startTime: '08:00',
             endTime: '20:00',
         },
-        eventTimeFormat: {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        },
-        events: function(info, successCallback, failureCallback) {
-            console.log('Fetching events for:', info.startStr, 'to', info.endStr);
-            
-            var url = '/api/therapist-calendar/events/?start=' + info.startStr + '&end=' + info.endStr;
-            {% if selected_therapist %}
-            url += '&therapist={{ selected_therapist.id }}';
-            {% endif %}
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Received raw events:', data);
-                    
-                    const events = data.map(event => {
-                        const mappedEvent = {
-                            id: event.id,
-                            title: event.title,
-                            start: event.start,
-                            end: event.end,
-                            backgroundColor: event.backgroundColor,
-                            borderColor: event.backgroundColor,
-                            display: 'block',  // Wichtig für die Anzeige
-                            allDay: false      // Wichtig für die korrekte Zeitdarstellung
-                        };
-                        
-                        // Nur für nicht-blockierte Events
-                        if (!event.className?.includes('blocked-time')) {
-                            mappedEvent.extendedProps = {
-                                therapist: event.extendedProps.therapist,
-                                hours: event.extendedProps.hours,
-                                actual_hours: event.extendedProps.actual_hours,
-                                notes: event.extendedProps.notes
-                            };
-                        }
-                        
-                        if (event.className) {
-                            mappedEvent.className = event.className;
-                        }
-                        
-                        return mappedEvent;
-                    });
-                    
-                    console.log('Mapped events:', events);
-                    successCallback(events);
-                })
-                .catch(error => {
-                    console.error('Error fetching events:', error);
-                    failureCallback(error);
-                });
-        },
-        eventDidMount: function(info) {
-            // Tooltip nur für nicht-blockierte Events
-            if (!info.event.classNames.includes('blocked-time')) {
-                new bootstrap.Tooltip(info.el, {
-                    title: function() {
-                        let content = info.event.title;
-                        const props = info.event.extendedProps;
-                        if (props?.hours) content += `<br>Gebucht: ${props.hours} Std`;
-                        if (props?.actual_hours) content += `<br>Verwendet: ${props.actual_hours} Std`;
-                        if (props?.notes) content += `<br>Notizen: ${props.notes}`;
-                        return content;
-                    },
-                    html: true,
-                    placement: 'top',
-                    trigger: 'hover',
-                    container: 'body'
-                });
-            }
-        },
+        events: {{ calendar_events|safe }},
+        
         eventClick: function(info) {
-            if (!info.event.classNames.includes('blocked-time')) {
-                openBookingModal(info.event.id);
+            // Öffne das Edit-Modal mit der ID aus dem Event
+            openBookingModal(info.event.id);
+        },
+        
+        dateClick: function(info) {
+            // Öffne das Add-Modal
+            const modal = new bootstrap.Modal(document.getElementById('addBookingModal'));
+            
+            // Setze das Datum im Modal
+            document.getElementById('addDate').value = info.dateStr;
+            
+            modal.show();
+        },
+        
+        eventDidMount: function(info) {
+            // Tooltip mit Details
+            const event = info.event;
+            const props = event.extendedProps;
+            const therapist = props.therapist;  // Angepasst an die Datenstruktur
+            
+            let content = `
+                <strong>${therapist ? therapist.name : event.title}</strong><br>
+                ${event.start.toLocaleTimeString()} - ${event.end.toLocaleTimeString()}<br>
+                Gebucht: ${props.hours} Std
+            `;
+            
+            if (props.actual_hours) {
+                content += `<br>Verwendet: ${props.actual_hours} Std`;
             }
+            if (props.notes) {
+                content += `<br>Notizen: ${props.notes}`;
+            }
+            
+            new bootstrap.Tooltip(info.el, {
+                title: content,
+                html: true,
+                placement: 'top',
+                container: 'body'
+            });
         }
     });
     
     calendar.render();
-    window.calendar = calendar;
 });
 </script>
+
+{% block extra_js %}
+<!-- FullCalendar JS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/de.js'></script>
+{% endblock %}
+
 {% endblock %} 

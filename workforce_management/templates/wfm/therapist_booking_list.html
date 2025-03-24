@@ -96,9 +96,13 @@
                             <td>{{ booking.notes|default:"-" }}</td>
                             <td>
                                 <div class="btn-group">
-                                    <button type="button"
+                                    <button class="btn btn-sm btn-outline-primary" 
                                             onclick="openBookingModal({{ booking.id }})"
-                                            class="btn btn-sm btn-outline-primary"
+                                            title="{% trans 'Buchung hinzufügen' %}">
+                                        <i class="bi bi-plus"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" 
+                                            onclick="openBookingModal({{ booking.id }})"
                                             title="{% trans 'Bearbeiten' %}">
                                         <i class="bi bi-pencil"></i>
                                     </button>
@@ -164,11 +168,60 @@
     </div>
 </div>
 
-{# Wichtig: Modal einbinden #}
-{% include "wfm/modals/booking_modal.html" %}
+<!-- Modals einbinden -->
+{% include 'wfm/modals/therapist_booking_modal_add.html' %}
+{% include 'wfm/modals/therapist_booking_modal_edit.html' %}
 
-{% endblock %}
+<script>
+function openBookingModal(bookingId) {
+    // Hole die Modal-Instanz
+    const modal = new bootstrap.Modal(document.getElementById('editBookingModal'));
+    
+    fetch(`/api/therapist-booking/${bookingId}/`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('{% trans "Keine Berechtigung" %}');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Setze die action URL für das Formular
+            document.getElementById('editBookingForm').action = 
+                `/api/therapist-booking/${bookingId}/update/`;
+            
+            // Fülle das Modal mit den Daten
+            fillEditModal(data);
+            
+            // Öffne das Modal
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('{% trans "Fehler beim Laden der Daten" %}');
+        });
+}
 
-{% block extra_js %}
-{% include "wfm/modals/booking_modal_js.html" %}
+function deleteBooking(id) {
+    if (confirm('{% trans "Termin wirklich löschen?" %}')) {
+        fetch(`/api/therapist-booking/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('{% trans "Ein Fehler ist aufgetreten" %}');
+        });
+    }
+}
+</script>
 {% endblock %} 

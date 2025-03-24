@@ -1,0 +1,123 @@
+{% load i18n %}
+
+<div class="modal fade" id="editBookingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-queen-blue">
+                <h5 class="modal-title">{% trans "Termin bearbeiten" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editBookingForm" method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Therapeut" %}</label>
+                        <input type="text" class="form-control" id="editTherapistName" readonly>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Datum" %}</label>
+                        <input type="date" class="form-control" id="editDate" {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label for="editStartTime" class="form-label">{% trans "Von" %}</label>
+                            <input type="time" class="form-control" id="editStartTime" name="start_time" required {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                        <div class="col">
+                            <label for="editEndTime" class="form-label">{% trans "Bis" %}</label>
+                            <input type="time" class="form-control" id="editEndTime" name="end_time" required {% if not user.role == 'OWNER' %}readonly{% endif %}>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label for="editHours" class="form-label">{% trans "Gebucht (Std)" %}</label>
+                            <input type="number" class="form-control" id="editHours" readonly>
+                        </div>
+                        <div class="col">
+                            <label for="editActualHours" class="form-label">{% trans "Verwendet (Std)" %}</label>
+                            <input type="number" class="form-control" id="editActualHours" name="actual_hours" step="0.25" min="0">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editNotes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="editNotes" name="notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                {% if user.role == 'OWNER' %}
+                    <button type="button" class="btn btn-danger" onclick="deleteBooking()">{% trans "Löschen" %}</button>
+                {% endif %}
+                <button type="submit" form="editBookingForm" class="btn btn-primary">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function fillEditModal(data) {
+    document.getElementById('editTherapistName').value = data.therapist.name;
+    document.getElementById('editDate').value = data.date;
+    document.getElementById('editStartTime').value = data.start_time;
+    document.getElementById('editEndTime').value = data.end_time;
+    document.getElementById('editHours').value = data.hours || '';
+    document.getElementById('editActualHours').value = data.actual_hours || data.hours || '';
+    document.getElementById('editNotes').value = data.notes;
+}
+
+// Event-Handler für das Formular
+document.getElementById('editBookingForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch(this.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editBookingModal'));
+            modal.hide();
+            location.reload();
+        } else {
+            alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('{% trans "Ein Fehler ist aufgetreten" %}');
+    });
+});
+
+// Validierung der tatsächlichen Stunden
+document.getElementById('editActualHours').addEventListener('input', function() {
+    const hours = parseFloat(document.getElementById('editHours').value);
+    let actualHours = parseFloat(this.value);
+    
+    if (isNaN(actualHours)) {
+        this.value = hours;
+        return;
+    }
+    
+    actualHours = Math.round(actualHours * 4) / 4;
+    
+    if (actualHours < hours) {
+        alert('{% trans "Die tatsächlichen Stunden können nicht kleiner als die gebuchten Stunden sein." %}');
+        this.value = hours;
+        return;
+    }
+    
+    this.value = actualHours;
+});
+</script> 

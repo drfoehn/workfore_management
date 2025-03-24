@@ -1,0 +1,72 @@
+{% load i18n %}
+
+<div class="modal fade" id="addBookingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-queen-blue">
+                <h5 class="modal-title">{% trans "Neuen Termin erstellen" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addBookingForm" method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="client" class="form-label">{% trans "Therapeut" %}</label>
+                        <input type="text" class="form-control" id="client" name="client" required>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label for="start_time" class="form-label">{% trans "Von" %}</label>
+                            <input type="time" class="form-control" id="start_time" name="start_time" required>
+                        </div>
+                        <div class="col">
+                            <label for="end_time" class="form-label">{% trans "Bis" %}</label>
+                            <input type="time" class="form-control" id="end_time" name="end_time" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Abbrechen" %}</button>
+                <button type="submit" form="addBookingForm" class="btn btn-primary">{% trans "Speichern" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('addBookingForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch(this.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addBookingModal'));
+            modal.hide();
+            location.reload();
+        } else {
+            alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('{% trans "Ein Fehler ist aufgetreten" %}');
+    });
+});
+</script> 
