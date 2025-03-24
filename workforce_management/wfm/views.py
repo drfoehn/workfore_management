@@ -2084,8 +2084,8 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
             return self.get_regular_events(request, start_date, end_date)
 
 class TherapistBookingListView(LoginRequiredMixin, ListView):
-    model = TherapistBooking
     template_name = 'wfm/therapist_booking_list.html'
+    model = TherapistBooking
     context_object_name = 'bookings'
 
     def get_queryset(self):
@@ -2175,8 +2175,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
 
         # Füge Therapeuten für Filter hinzu (nur für Owner)
         if self.request.user.role == 'OWNER':
-            context['therapists'] = CustomUser.objects.filter(role='THERAPIST')
-            context['selected_therapist'] = getattr(self, 'selected_therapist', None)
+            context['therapists'] = CustomUser.objects.filter(role='THERAPIST').order_by('first_name', 'last_name')
 
         return context
 
@@ -3828,7 +3827,7 @@ class WorkingHoursDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView
 
 class TherapistBookingCreateView(LoginRequiredMixin, CreateView):
     model = TherapistBooking
-    fields = ['start_time', 'end_time', 'notes', 'client']
+    fields = ['start_time', 'end_time', 'notes']  
     template_name = 'wfm/modals/therapist_booking_modal_add.html'
     
     def get_context_data(self, **kwargs):
@@ -3836,23 +3835,39 @@ class TherapistBookingCreateView(LoginRequiredMixin, CreateView):
         return context
     
     def form_valid(self, form):
-        form.instance.therapist = self.request.user
-        form.instance.date = datetime.strptime(self.kwargs['date'], '%Y-%m-%d').date()
+        # Setze den Therapeuten basierend auf der Rolle
+        if self.request.user.role == 'OWNER':
+            therapist_id = self.request.POST.get('therapist_id')
+            if not therapist_id:
+                return JsonResponse({
+                    'success': False,
+                    'error': gettext('Bitte wählen Sie einen Therapeuten aus.')
+                })
+            form.instance.therapist_id = therapist_id
+        else:
+            form.instance.therapist = self.request.user
         
-        # Speichere das Objekt ohne redirect
-        self.object = form.save()
+        # Setze das Datum aus dem Formular
+        date = self.request.POST.get('date')
+        if not date:
+            return JsonResponse({
+                'success': False,
+                'error': gettext('Bitte wählen Sie ein Datum aus.')
+            })
+        form.instance.date = date
         
-        return JsonResponse({
-            'success': True,
-            'id': self.object.id,
-            'therapist_id': self.object.therapist.id
-        })
-    
-    def form_invalid(self, form):
-        return JsonResponse({
-            'success': False,
-            'error': form.errors
-        })
+        try:
+            self.object = form.save()
+            return JsonResponse({
+                'success': True,
+                'id': self.object.id,
+                'therapist_id': self.object.therapist.id
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
 
 class TherapistBookingUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = TherapistBooking

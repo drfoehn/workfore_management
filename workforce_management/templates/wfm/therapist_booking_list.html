@@ -51,7 +51,16 @@
                     </ul>
                 </div>
                 {% endif %}
-                
+                <div class="btn-group">
+                    <!-- Neuer Button für neue Buchungen -->
+                    <button class="btn bg-white-outline" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#addBookingModal">
+                        <i class="bi bi-plus-circle"></i> {% trans "Neue Buchung" %}
+                    </button>
+                    
+                   
+                </div>
                 <!-- Kalender-Button -->
                 <a href="{% url 'wfm:therapist-calendar' %}" 
                    class="btn bg-white-outline">
@@ -96,11 +105,6 @@
                             <td>{{ booking.notes|default:"-" }}</td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-outline-primary" 
-                                            onclick="openBookingModal({{ booking.id }})"
-                                            title="{% trans 'Buchung hinzufügen' %}">
-                                        <i class="bi bi-plus"></i>
-                                    </button>
                                     <button class="btn btn-sm btn-outline-secondary" 
                                             onclick="openBookingModal({{ booking.id }})"
                                             title="{% trans 'Bearbeiten' %}">
@@ -137,15 +141,15 @@
         <table class="table">
             <tr>
                 <th>{% trans "Verwendete Stunden" %}</th>
-                <th>{% trans "Kosten" %}</th>
-                <th>{% trans "Mehrstunden" %}</th>
+                <th>{% trans "Davon Mehrstunden" %}</th>
                 <th>{% trans "Zusätzliche Kosten" %}</th>
                 <th>{% trans "Zahlungsstatus" %}</th>
-                <th>{% trans "Gesamtkosten" %}</th>
+                <th></th>
+                <th></th>
             </tr>
             <tr>
                 <td>{{ totals.total_actual_hours|floatformat:2 }}</td>
-                <td>{{ totals.total_booked_amount|floatformat:2 }} €</td>
+                
                 <td>{{ totals.total_extra_hours|floatformat:2 }}</td> 
                 <td>{{ totals.extra_costs|floatformat:2 }} €</td> 
                 <td>
@@ -162,7 +166,8 @@
                 
             
        
-                <td>{{ totals.total_sum|floatformat:2 }} €</td>
+                <td></td>
+                <td></td>
             </tr>
         </table>
     </div>

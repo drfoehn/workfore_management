@@ -15,13 +15,13 @@
                 <div class="card-body">
                     <div class="list-group">
                         <a href="{% url 'wfm:therapist-calendar' %}" class="list-group-item list-group-item-action">
-                            {% trans "Mein Kalender" %}
+                            <i class="bi bi-calendar-week"> </i>{% trans "Buchungskalender" %}
                         </a>
                         <a href="{% url 'wfm:therapist-booking-list' %}" class="list-group-item list-group-item-action">
-                            {% trans "Meine Buchungen" %}
+                            <i class="bi bi-list-ul"> </i>{% trans "Meine Buchungen - Liste" %}
                         </a>
                         <a href="{% url 'wfm:therapist-monthly-overview' %}" class="list-group-item list-group-item-action">
-                            {% trans "Monatsübersicht" %}
+                            <i class="bi bi-graph-up"> </i>{% trans "Meine Monatsübersicht" %}
                         </a>
                     </div>
                 </div>

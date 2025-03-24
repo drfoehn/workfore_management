@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="container py-4">
-    {% if user.role == 'OWNER' %}
+
     <!-- Owner Dashboard -->
     <h1 class="mb-4">{% trans "Dashboard" %}</h1>
     <div class="row g-4">
@@ -44,7 +44,7 @@
                 <div class="card-body">
                     <div class="list-group">
                         <a href="{% url 'wfm:absence-management' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-calendar-check"></i> {% trans "Urlaubsanträge" %}</span>
+                            <span><i class="bi bi-brightness-high"></i> {% trans "Urlaubsanträge" %}</span>
                             {% if pending_vacations %}
                                 <span class="badge bg-primary rounded-pill">{{ pending_vacations }}</span>
                             {% endif %}
@@ -107,7 +107,7 @@
                             <i class="bi bi-calendar-week"></i> {% trans "Therapeuten-Kalender" %}
                         </a>
                         <a href="{% url 'wfm:therapist-monthly-overview' %}" class="list-group-item list-group-item-action">
-                            <i class="bi bi-calendar-range"></i> {% trans "Therapeuten-Jahresüberblick" %}
+                            <i class="bi bi-graph-up"></i> {% trans "Therapeuten-Jahresüberblick" %}
                         </a>
                     </div>
                 </div>
@@ -117,224 +117,9 @@
         
     </div>
 
-    {% elif user.role == 'ASSISTANT' or user.role == 'CLEANING' %}
-    <!-- Assistenten/Cleaner Dashboard -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>{% trans "Meine Übersicht" %}</h1>
-        <div class="btn-group">
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#workingHoursModal">
-                {% trans "Arbeitszeit eintragen" %}
-            </button>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vacationModal">
-                {% trans "Urlaub beantragen" %}
-            </button>
-            {% comment %} <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#timeCompModal">
-                {% trans "Zeitausgleich beantragen" %}
-            </button> {% endcomment %}
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sickLeaveModal">
-                {% trans "Krankenstand melden" %}
-            </button>
-        </div>
-    </div>
+    
 
-    <!-- Im Dashboard, vor der Wochenübersicht -->
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center gap-3">
-                <h5 class="card-title mb-0">{% trans "Übersicht" %}</h5>
-                <div class="btn-group" role="group">
-                    <input type="radio" class="btn-check" name="viewType" id="weekView" value="week" 
-                           {% if view_type != 'month' %}checked{% endif %} onchange="changeViewType('week')">
-                    <label class="btn btn-outline-primary" for="weekView">
-                        <i class="bi bi-calendar-week"></i> {% trans "Woche" %}
-                    </label>
-                    
-                    <input type="radio" class="btn-check" name="viewType" id="monthView" value="month"
-                           {% if view_type == 'month' %}checked{% endif %} onchange="changeViewType('month')">
-                    <label class="btn btn-outline-primary" for="monthView">
-                        <i class="bi bi-calendar-month"></i> {% trans "Monat" %}
-                    </label>
-                </div>
-            </div>
-            <div class="btn-group">
-                <button type="button" class="btn btn-outline-primary" onclick="changePeriod(-1)">
-                    <i class="bi bi-chevron-left"></i>
-                </button>
-                <button type="button" class="btn btn-outline-primary" onclick="resetToCurrent()">
-                    {% trans "Heute" %}
-                </button>
-                <button type="button" class="btn btn-outline-primary" onclick="changePeriod(1)">
-                    <i class="bi bi-chevron-right"></i>
-                </button>
-            </div>
-        </div>
-        <div class="card-body">
-            <!-- Wochenansicht -->
-            <div id="weekView" {% if view_type == 'month' %}style="display: none;"{% endif %}>
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>{% trans "Datum" %}</th>
-                                <th>{% trans "Geplante Zeit" %}</th>
-                                <th>{% trans "Tatsächliche Zeit" %}</th>
-                                <th>{% trans "Status" %}</th>
-                                <th>{% trans "Aktionen" %}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for date in week_dates %}
-                            <tr>
-                                <td>{{ date|date:"D, d.m.Y" }}</td>
-                                <td>
-                                    {% for wh in working_hours %}
-                                        {% if wh.date == date %}
-                                            {{ wh.start_time|time:"H:i" }} - {{ wh.end_time|time:"H:i" }}
-                                        {% endif %}
-                                    {% endfor %}
-                                </td>
-                                <td>
-                                    <!-- Tatsächliche Arbeitszeit -->
-                                </td>
-                                <td>
-                                    {% for vacation in vacations %}
-                                        {% if date >= vacation.start_date and date <= vacation.end_date %}
-                                            <span class="badge bg-info">{% trans "Urlaub" %}</span>
-                                        {% endif %}
-                                    {% endfor %}
-                                    {% comment %} {% for tc in time_comps %}
-                                        {% if tc.date == date %}
-                                            <span class="badge bg-warning">{% trans "Zeitausgleich" %}</span>
-                                        {% endif %}
-                                    {% endfor %} {% endcomment %}
-                                    {% for sl in sick_leaves %}
-                                        {% if date >= sl.start_date and date <= sl.end_date %}
-                                            <span class="badge bg-danger">{% trans "Krank" %}</span>
-                                        {% endif %}
-                                    {% endfor %}
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary" 
-                                            onclick="editWorkingHours('{{ date|date:"Y-m-d" }}')">
-                                        {% trans "Bearbeiten" %}
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            <!-- Monatsansicht -->
-            <div id="monthView" {% if view_type != 'month' %}style="display: none;"{% endif %}>
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>{% trans "Datum" %}</th>
-                                <th>{% trans "Geplante Zeit" %}</th>
-                                <th>{% trans "Tatsächliche Zeit" %}</th>
-                                <th>{% trans "Status" %}</th>
-                                <th>{% trans "Aktionen" %}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for date in month_dates %}
-                            <tr>
-                                <td>{{ date|date:"D, d.m.Y" }}</td>
-                                <!-- Rest der Tabelle wie in der Wochenansicht... -->
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {% elif user.role == 'THERAPIST' %}
-    <!-- Therapeuten Dashboard -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>{% trans "Meine Übersicht" %}</h1>
-        <div class="btn-group">
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#absenceModal">
-                {% trans "Abwesenheit melden" %}
-            </button>
-        </div>
-    </div>
-
-    <!-- Wochenübersicht -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0">{% trans "Diese Woche" %}</h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>{% trans "Datum" %}</th>
-                            <th>{% trans "Gebuchte Zeit" %}</th>
-                            <th>{% trans "Tatsächliche Zeit" %}</th>
-                            <th>{% trans "Raum" %}</th>
-                            <th>{% trans "Status" %}</th>
-                            <th>{% trans "Aktionen" %}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for date in week_dates %}
-                        <tr>
-                            <td>{{ date|date:"D, d.m.Y" }}</td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        {{ booking.start_time|time:"H:i" }} - {{ booking.end_time|time:"H:i" }}
-                                        ({{ booking.hours }}h)
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date and booking.actual_hours %}
-                                        {{ booking.actual_hours }}h
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        {{ booking.room }}
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        <span class="badge bg-{{ booking.status|lower }}">
-                                            {{ booking.get_status_display }}
-                                        </span>
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                            <td>
-                                {% for booking in bookings %}
-                                    {% if booking.date == date %}
-                                        <button class="btn btn-sm btn-outline-primary"
-                                                onclick="editActualHours('{{ booking.id }}')">
-                                            {% trans "Zeit eintragen" %}
-                                        </button>
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+   
 </div>
 
 <!-- Modals -->
