@@ -1613,10 +1613,14 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
         
         current_date = date(int(year), int(month), 1)
         
-        # Hole alle Buchungen für den Monat
+        # Hole alle Buchungen für den Monat, aber nur mit hours > 0
         bookings = TherapistBooking.objects.filter(
             date__year=int(year),
             date__month=int(month)
+        ).exclude(
+            hours=None
+        ).exclude(
+            hours=Decimal('0.00')
         ).select_related('therapist')
 
         # Wenn Therapeut eingeloggt, zeige nur eigene Details

@@ -37,6 +37,13 @@
 
 {% include 'wfm/modals/therapist_booking_modal_add.html' %}
 {% include 'wfm/modals/therapist_booking_modal_edit.html' %}
+{% include 'wfm/modals/therapist_used_hours_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<!-- FullCalendar JS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/de.js'></script>
 
 <script>
 // Funktion zum Öffnen des Edit-Modals
@@ -137,11 +144,4 @@ document.addEventListener('DOMContentLoaded', function() {
     calendar.render();
 });
 </script>
-
-{% block extra_js %}
-<!-- FullCalendar JS -->
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.js'></script>
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/de.js'></script>
-{% endblock %}
-
 {% endblock %} 
