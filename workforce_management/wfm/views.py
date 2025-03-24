@@ -3827,42 +3827,72 @@ class WorkingHoursDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView
 
 class TherapistBookingCreateView(LoginRequiredMixin, CreateView):
     model = TherapistBooking
-    fields = ['start_time', 'end_time', 'notes']  
+    fields = ['start_time', 'end_time', 'notes', 'actual_hours']
     template_name = 'wfm/modals/therapist_booking_modal_add.html'
     
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        return context
-    
-    def form_valid(self, form):
-        # Setze den Therapeuten basierend auf der Rolle
-        if self.request.user.role == 'OWNER':
-            therapist_id = self.request.POST.get('therapist_id')
-            if not therapist_id:
+    def post(self, request, *args, **kwargs):
+        try:
+            # Setze den Therapeuten basierend auf der Rolle
+            if request.user.role == 'OWNER':
+                therapist_id = request.POST.get('therapist_id')
+                if not therapist_id:
+                    return JsonResponse({
+                        'success': False,
+                        'error': gettext('Bitte wählen Sie einen Therapeuten aus.')
+                    })
+                therapist = CustomUser.objects.get(id=therapist_id)
+            else:
+                therapist = request.user
+            
+            # Prüfe ob bereits eine Buchung für diesen Tag existiert
+            booking_date = request.POST.get('date')
+            existing_booking = TherapistBooking.objects.filter(
+                therapist=therapist,
+                date=booking_date
+            ).first()
+            
+            if existing_booking and request.user.role == 'THERAPIST':
                 return JsonResponse({
                     'success': False,
-                    'error': gettext('Bitte wählen Sie einen Therapeuten aus.')
+                    'error': gettext('Für diesen Tag existiert bereits eine Buchung. '
+                                   'Bitte bearbeiten Sie die bestehende Buchung.'),
+                    'existing_booking_id': existing_booking.id
                 })
-            form.instance.therapist_id = therapist_id
-        else:
-            form.instance.therapist = self.request.user
-        
-        # Setze das Datum aus dem Formular
-        date = self.request.POST.get('date')
-        if not date:
-            return JsonResponse({
-                'success': False,
-                'error': gettext('Bitte wählen Sie ein Datum aus.')
-            })
-        form.instance.date = date
-        
-        try:
-            self.object = form.save()
+            
+            # Konvertiere Strings zu time-Objekten
+            start_time = datetime.strptime(request.POST.get('start_time', '00:00'), '%H:%M').time()
+            end_time = datetime.strptime(request.POST.get('end_time', '00:00'), '%H:%M').time()
+            
+            # Konvertiere actual_hours zu Decimal
+            actual_hours = request.POST.get('actual_hours')
+            if actual_hours:
+                actual_hours = Decimal(str(actual_hours))
+            
+            # Erstelle die Buchung
+            booking = TherapistBooking.objects.create(
+                therapist=therapist,
+                date=booking_date,
+                start_time=start_time,
+                end_time=end_time,
+                hours=Decimal('0.00') if request.user.role == 'THERAPIST' else None,
+                actual_hours=actual_hours,
+                notes=request.POST.get('notes', '')
+            )
+            
+            # Berechne die Differenz für Mehrstunden
+            if request.user.role == 'THERAPIST' and actual_hours:
+                # Wenn keine gebuchten Stunden vorliegen (hours=0), 
+                # sind die kompletten actual_hours Mehrstunden
+                booking.difference_hours = actual_hours
+                booking.therapist_extra_hours_payment_status = 'PENDING'
+                booking.save()
+            
             return JsonResponse({
                 'success': True,
-                'id': self.object.id,
-                'therapist_id': self.object.therapist.id
+                'id': booking.id,
+                'therapist_id': booking.therapist.id
             })
+            
         except Exception as e:
             return JsonResponse({
                 'success': False,

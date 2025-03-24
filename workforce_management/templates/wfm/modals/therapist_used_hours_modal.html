@@ -1,0 +1,102 @@
+{% load i18n %}
+
+<div class="modal fade" id="addUsedHoursModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-queen-blue">
+                <h5 class="modal-title">{% trans "Verwendete Stunden eintragen" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUsedHoursForm" method="post" action="{% url 'wfm:therapist-booking-create' %}">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Datum" %}</label>
+                        <input type="date" class="form-control" id="addDate" name="date" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{% trans "Verwendete Stunden" %}</label>
+                        <input type="number" class="form-control" id="addActualHours" name="actual_hours" 
+                               step="0.25" min="0" max="24" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="addNotes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="addNotes" name="notes" rows="3"></textarea>
+                    </div>
+
+                    <!-- Hidden fields -->
+                    <input type="hidden" name="hours" value="0">
+                    <input type="hidden" name="start_time" value="00:00">
+                    <input type="hidden" name="end_time" value="00:00">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    {% trans "Abbrechen" %}
+                </button>
+                <button type="submit" form="addUsedHoursForm" class="btn btn-primary">
+                    {% trans "Speichern" %}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const addForm = document.getElementById('addUsedHoursForm');
+    
+    addForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        // Konvertiere actual_hours in eine Dezimalzahl
+        const actualHours = formData.get('actual_hours');
+        if (actualHours) {
+            formData.set('actual_hours', parseFloat(actualHours));
+        }
+        
+        fetch(this.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Server Error');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addUsedHoursModal'));
+                modal.hide();
+                location.reload();
+            } else {
+                // Wenn eine existierende Buchung gefunden wurde
+                if (data.existing_booking_id) {
+                    if (confirm('{% trans "Für diesen Tag existiert bereits eine Buchung. Möchten Sie diese bearbeiten?" %}')) {
+                        // Schließe das Add-Modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('addUsedHoursModal'));
+                        modal.hide();
+                        // Öffne das Edit-Modal für die existierende Buchung
+                        openBookingModal(data.existing_booking_id);
+                    }
+                } else {
+                    alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('{% trans "Ein Fehler ist aufgetreten" %}');
+        });
+    });
+});
+</script> 

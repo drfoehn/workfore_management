@@ -53,13 +53,20 @@
                 {% endif %}
                 <div class="btn-group">
                     <!-- Neuer Button für neue Buchungen -->
-                    <button class="btn bg-white-outline" 
-                            data-bs-toggle="modal" 
-                            data-bs-target="#addBookingModal">
-                        <i class="bi bi-plus-circle"></i> {% trans "Neue Buchung" %}
-                    </button>
-                    
-                   
+                    {% if user.role == 'OWNER' %}
+                        <button class="btn bg-white-outline" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#addBookingModal">
+                            <i class="bi bi-plus-circle"></i> {% trans "Neue Buchung" %}
+                        </button>
+                    {% else %}
+                        <!-- Therapeuten sehen stattdessen "Verwendete Stunden eintragen" -->
+                        <button class="btn bg-white-outline" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#addUsedHoursModal">
+                            <i class="bi bi-clock"></i> {% trans "Verwendete Stunden eintragen" %}
+                        </button>
+                    {% endif %}
                 </div>
                 <!-- Kalender-Button -->
                 <a href="{% url 'wfm:therapist-calendar' %}" 
@@ -174,7 +181,11 @@
 </div>
 
 <!-- Modals einbinden -->
-{% include 'wfm/modals/therapist_booking_modal_add.html' %}
+{% if user.role == 'OWNER' %}
+    {% include 'wfm/modals/therapist_booking_modal_add.html' %}
+{% else %}
+    {% include 'wfm/modals/therapist_used_hours_modal.html' %}
+{% endif %}
 {% include 'wfm/modals/therapist_booking_modal_edit.html' %}
 
 <script>

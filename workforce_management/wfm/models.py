@@ -601,11 +601,18 @@ class TherapistBooking(models.Model):
         if self.actual_hours is None and self.hours:
             self.actual_hours = self.hours
 
-        # Berechne die Differenz (NUR wenn actual_hours > hours)
-        if self.actual_hours and self.hours and self.actual_hours > self.hours:
-            self.difference_hours = self.actual_hours - self.hours
-        else:
-            self.difference_hours = None  # Keine Differenz wenn actual_hours <= hours
+        # Berechne die Differenz
+        if self.actual_hours is not None:
+            if self.hours is None or self.hours == Decimal('0.00'):
+                # Wenn keine Stunden gebucht wurden, sind alle verwendeten Stunden Mehrstunden
+                self.difference_hours = self.actual_hours
+                self.therapist_extra_hours_payment_status = 'PENDING'
+            elif self.actual_hours > self.hours:
+                # Wenn mehr Stunden verwendet als gebucht wurden
+                self.difference_hours = self.actual_hours - self.hours
+                self.therapist_extra_hours_payment_status = 'PENDING'
+            else:
+                self.difference_hours = None  # Keine Differenz wenn actual_hours <= hours
 
         super().save(*args, **kwargs)
 
