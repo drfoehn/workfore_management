@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.views.generic import ListView, DetailView, CreateView, UpdateView, View, TemplateView
+from django.views.generic import ListView, DetailView, CreateView, UpdateView, View, TemplateView, DeleteView
 from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext_lazy as gettext  # Umbenennen zu gettext statt _
 from .models import (
@@ -95,7 +95,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             current_params['role'] = 'CLEANING'
             context['cleaning_url'] = f"?{current_params.urlencode()}"
 
-        # Füge die Mitarbeiterliste für das Modal hinzu (für Owner)
+        # Füge die Mitarbeiterliste für das Add-Modal hinzu (für Owner)
         if self.request.user.role == 'OWNER':
             context['modal_employees'] = CustomUser.objects.filter(
                 role__in=['ASSISTANT', 'CLEANING']
@@ -367,70 +367,102 @@ class WorkingHoursCreateOrUpdateView(LoginRequiredMixin, View):
 
 class WorkingHoursCreateView(LoginRequiredMixin, CreateView):
     model = WorkingHours
-    form_class = WorkingHoursForm
-    template_name = 'wfm/working_hours_form.html'
-    success_url = reverse_lazy('wfm:monthly-overview')
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs['user'] = self.request.user
-
-        # Hole das Datum aus der URL
-        date_str = self.request.GET.get('date')
-        if date_str:
-            try:
-                date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                # Setze initial für beide Felder
-                if 'initial' not in kwargs:
-                    kwargs['initial'] = {}
-                kwargs['initial']['date'] = date
-                # Setze auch das Display-Datum
-                kwargs['initial']['display_date'] = date.strftime('%d.%m.%Y')
-            except ValueError:
-                pass
-
-        return kwargs
-
-    def get_form(self, form_class=None):
-        form = super().get_form(form_class)
-        # Stelle sicher, dass die Soll-Stunden auch für neue Einträge berechnet werden
-        if 'date' in form.initial:
-            date = form.initial['date']
-            schedule = ScheduleTemplate.objects.filter(
-                employee=self.request.user,
-                weekday=date.weekday()
-            )
-            scheduled_hours = sum(
-                (t.end_time.hour + t.end_time.minute/60) - 
-                (t.start_time.hour + t.start_time.minute/60)
-                for t in schedule
-            )
-            form.fields['scheduled_hours'].initial = round(scheduled_hours, 2)
-        return form
-
+    fields = ['start_time', 'end_time', 'break_duration', 'notes']
+    template_name = 'wfm/modals/working_hours_modal_add.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        # Prüfe ob bereits ein Eintrag für diesen Tag existiert
+        date_str = self.kwargs['date']
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        
+        existing_entry = WorkingHours.objects.filter(
+            employee=request.user,
+            date=date_obj
+        ).exists()
+        
+        if existing_entry and request.user.role != 'OWNER':
+            return JsonResponse({
+                'success': False,
+                'error': 'Für diesen Tag existiert bereits ein Eintrag'
+            }, status=403)
+            
+        return super().dispatch(request, *args, **kwargs)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.user.role == 'OWNER':
+            context['modal_employees'] = CustomUser.objects.filter(
+                role__in=['ASSISTANT', 'CLEANING']
+            ).order_by('first_name', 'last_name')
+        return context
+    
     def form_valid(self, form):
-        form.instance.employee = self.request.user
-        return super().form_valid(form)
+        # Setze den Mitarbeiter
+        if self.request.user.role == 'OWNER' and 'employee' in self.request.POST:
+            form.instance.employee = get_object_or_404(
+                CustomUser, 
+                id=self.request.POST['employee']
+            )
+        else:
+            form.instance.employee = self.request.user
+            
+        # Konvertiere das Datum aus der URL in ein date-Objekt
+        date_str = self.kwargs['date']
+        form.instance.date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        
+        # Speichere das Objekt ohne redirect
+        self.object = form.save()
+        
+        return JsonResponse({
+            'success': True,
+            'id': self.object.id,
+            'employee_id': self.object.employee.id
+        })
+    
+    def form_invalid(self, form):
+        return JsonResponse({
+            'success': False,
+            'error': form.errors
+        })
 
-class WorkingHoursUpdateView(LoginRequiredMixin, UpdateView):
+class WorkingHoursUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = WorkingHours
-    form_class = WorkingHoursForm
-    template_name = 'wfm/working_hours_form.html'
-    success_url = reverse_lazy('wfm:monthly-overview')
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs['user'] = self.request.user
-        # Bei Update kommt das Datum aus der Instanz
-        return kwargs
-
-    def get_queryset(self):
-        return WorkingHours.objects.filter(employee=self.request.user)
-
+    fields = ['start_time', 'end_time', 'break_duration', 'notes']
+    template_name = 'wfm/modals/working_hours_modal_edit.html'
+    
+    def test_func(self):
+        obj = self.get_object()
+        return self.request.user.role == 'OWNER' or obj.employee == self.request.user
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.user.role == 'OWNER':
+            context['modal_employees'] = CustomUser.objects.filter(
+                role__in=['ASSISTANT', 'CLEANING']
+            ).order_by('first_name', 'last_name')
+        return context
+    
     def form_valid(self, form):
-        if 'selected_date' in self.request.session:
-            del self.request.session['selected_date']
-        return super().form_valid(form)
+        if self.request.user.role == 'OWNER' and 'employee' in self.request.POST:
+            form.instance.employee = get_object_or_404(
+                CustomUser, 
+                id=self.request.POST['employee']
+            )
+        
+        # Speichere das Objekt ohne redirect
+        self.object = form.save()
+        
+        return JsonResponse({
+            'success': True,
+            'id': self.object.id,
+            'employee_id': self.object.employee.id
+        })
+    
+    def form_invalid(self, form):
+        return JsonResponse({
+            'success': False,
+            'error': form.errors
+        })
 
 class OvertimeOverviewView(LoginRequiredMixin, View):
     template_name = 'wfm/overtime_overview.html'
@@ -809,7 +841,8 @@ def get_working_hours(request, date):
 
 @login_required
 @ensure_csrf_cookie  # Stellt sicher, dass der CSRF-Token verfügbar ist
-def save_working_hours(request, date=None):
+def add_working_hours(request, date=None):
+    """API-Endpoint zum Hinzufügen neuer Arbeitszeiten"""
     if request.method == 'POST':
         try:
             data = json.loads(request.body.decode('utf-8'))
@@ -821,19 +854,27 @@ def save_working_hours(request, date=None):
             start_time = datetime.strptime(data['start_time'], '%H:%M').time()
             end_time = datetime.strptime(data['end_time'], '%H:%M').time()
             
-            # Erstelle oder aktualisiere den Eintrag
-            working_hours, created = WorkingHours.objects.update_or_create(
-                employee=request.user,
-                date=date_obj,  # Verwende das konvertierte Datum
-                defaults={
-                    'start_time': start_time,
-                    'end_time': end_time,
-                    'break_duration': timedelta(minutes=int(data['break_duration'])),
-                    'notes': data.get('notes', '')
-                }
+            # Bestimme den Mitarbeiter
+            if request.user.role == 'OWNER' and 'employee' in data:
+                employee = get_object_or_404(CustomUser, id=data['employee'])
+            else:
+                employee = request.user
+            
+            # Erstelle den Eintrag
+            working_hours = WorkingHours.objects.create(
+                employee=employee,
+                date=date_obj,
+                start_time=start_time,
+                end_time=end_time,
+                break_duration=timedelta(minutes=int(data['break_duration'])),
+                notes=data.get('notes', '')
             )
             
-            return JsonResponse({'success': True})
+            return JsonResponse({
+                'success': True,
+                'id': working_hours.id,
+                'employee_id': employee.id
+            })
             
         except Exception as e:
             print("Error:", str(e))
@@ -1458,28 +1499,6 @@ def api_working_hours_detail(request, id=None):
             })
     
     return JsonResponse({'error': 'Invalid request'}, status=400)
-
-@login_required
-def api_working_hours_update(request, id):
-    """API für das Aktualisieren von Arbeitszeiten"""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Invalid method'}, status=405)
-        
-    working_hours = get_object_or_404(WorkingHours, pk=id)
-    if request.user.role != 'OWNER' and working_hours.employee != request.user:
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-        
-    try:
-        data = json.loads(request.body)
-        working_hours.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-        working_hours.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-        working_hours.break_duration = timedelta(minutes=int(data['break_duration']))
-        working_hours.notes = data.get('notes', '')
-        working_hours.save()
-        
-        return JsonResponse({'success': True})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
 
 @login_required
 def api_vacation_status(request):
@@ -3781,4 +3800,41 @@ def calculate_balances(request):
         messages.error(request, f'Fehler bei der Berechnung: {str(e)}')
 
     return redirect(request.META.get('HTTP_REFERER', 'wfm:working_hours_list'))
+
+class WorkingHoursDetailView(LoginRequiredMixin, DetailView):
+    model = WorkingHours
+    
+    def test_func(self):
+        obj = self.get_object()
+        return self.request.user.role == 'OWNER' or obj.employee == self.request.user
+    
+    def render_to_response(self, context):
+        obj = context['object']
+        return JsonResponse({
+            'id': obj.id,
+            'employee_id': obj.employee.id,
+            'date': obj.date.strftime('%Y-%m-%d'),
+            'start_time': obj.start_time.strftime('%H:%M'),
+            'end_time': obj.end_time.strftime('%H:%M'),
+            'break_duration': obj.break_duration.seconds // 60,
+            'notes': obj.notes or ''
+        })
+
+class WorkingHoursDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
+    model = WorkingHours
+    
+    def test_func(self):
+        obj = self.get_object()
+        return self.request.user.role == 'OWNER' or obj.employee == self.request.user
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            self.object = self.get_object()
+            self.object.delete()
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=400)
 

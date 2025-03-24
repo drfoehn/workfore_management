@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load i18n %}
 {% load wfm_extras %}
+{% load static %}
 
 {% block title %}{% trans "Arbeitszeiten" %} - {{ block.super }}{% endblock %}
 
@@ -264,29 +265,27 @@
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                {% if user.role == 'OWNER' %}
-                                    <!-- Add Button für Owner -->
+                                {% if user.role == 'OWNER' or not date_entry.working_hours %}
+                                    <!-- Add Button - nur für Owner oder wenn noch kein Eintrag existiert -->
                                     <button class="btn btn-sm btn-outline-primary" 
                                             data-bs-toggle="modal" 
-                                            data-bs-target="#workingHoursModal"
+                                            data-bs-target="#addWorkingHoursModal"
                                             data-date="{{ date_entry.date|date:'Y-m-d' }}"
-                                            data-action="add"
                                             title="{% trans 'Arbeitszeit hinzufügen' %}">
                                         <i class="bi bi-plus-circle"></i>
                                     </button>
                                 {% endif %}
                                 
                                 {% if date_entry.working_hours %}
-                                    <!-- Edit Button -->
+                                    <!-- Edit Button - für alle wenn ein Eintrag existiert -->
                                     <button class="btn btn-sm btn-outline-secondary" 
                                             data-bs-toggle="modal" 
-                                            data-bs-target="#workingHoursModal"
+                                            data-bs-target="#editWorkingHoursModal"
                                             data-id="{{ date_entry.working_hours.id }}"
-                                            data-action="edit"
                                             title="{% trans 'Bearbeiten' %}">
                                         <i class="bi bi-pencil"></i>
                                     </button>
-                                    <!-- Delete Button -->
+                                    <!-- Delete Button - für alle wenn ein Eintrag existiert -->
                                     <button class="btn btn-sm btn-outline-danger" 
                                             onclick="deleteWorkingHours({{ date_entry.working_hours.id }})"
                                             title="{% trans 'Löschen' %}">
@@ -372,7 +371,8 @@
 </div>
 
 <!-- Modals einbinden -->
-{% include "wfm/modals/working_hours_modal.html" %}
+{% include "wfm/modals/working_hours_modal_add.html" %}
+{% include "wfm/modals/working_hours_modal_edit.html" %}
 {% if show_request_buttons %}
     {% include "wfm/modals/vacation_modal.html" %}
     {% comment %} {% include "wfm/modals/time_compensation_modal.html" %} {% endcomment %}

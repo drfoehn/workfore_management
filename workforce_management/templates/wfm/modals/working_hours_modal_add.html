@@ -1,0 +1,96 @@
+{% load i18n %}
+<div class="modal fade" id="addWorkingHoursModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-queen-blue">
+                <h5 class="modal-title">{% trans "Neue Arbeitszeit eintragen" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addWorkingHoursForm" method="post">
+                    {% csrf_token %}
+                    
+                    {% if user.role == 'OWNER' %}
+                    <div class="mb-3">
+                        <label for="employee" class="form-label">{% trans "Mitarbeiter" %}</label>
+                        <select class="form-control" id="employee" name="employee" required>
+                            <option value="">{% trans "Bitte wählen..." %}</option>
+                            {% for employee in modal_employees %}
+                                <option value="{{ employee.id }}">{{ employee.get_full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="start_time" class="form-label">{% trans "Von" %}</label>
+                        <input type="time" class="form-control" id="start_time" name="start_time" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="end_time" class="form-label">{% trans "Bis" %}</label>
+                        <input type="time" class="form-control" id="end_time" name="end_time" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="break_duration" class="form-label">{% trans "Pause (Minuten)" %}</label>
+                        <input type="number" class="form-control" id="break_duration" name="break_duration" 
+                               min="0" max="120" value="30" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">{% trans "Notizen" %}</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn bg-queen-blue" data-bs-dismiss="modal">
+                            {% trans "Abbrechen" %}
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            {% trans "Speichern" %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('addWorkingHoursModal');
+    const form = document.getElementById('addWorkingHoursForm');
+
+    modal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const date = button.getAttribute('data-date');
+        form.action = `/api/working-hours/${date}/add/`;
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        fetch(this.action, {
+            method: 'POST',
+            body: new FormData(this),
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                bootstrap.Modal.getInstance(modal).hide();
+                location.reload();
+            } else {
+                alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('{% trans "Ein Fehler ist aufgetreten" %}');
+        });
+    });
+});
+</script> 
