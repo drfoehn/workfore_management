@@ -12,6 +12,17 @@
                     {% csrf_token %}
                     <input type="hidden" id="workingHoursId" name="id">
                     
+                    {% if user.role == 'OWNER' %}
+                    <div class="mb-3">
+                        <label for="employee" class="form-label">{% trans "Mitarbeiter" %}</label>
+                        <select class="form-control" id="employee" name="employee" required>
+                            <option value="">{% trans "Bitte wählen..." %}</option>
+                            {% for employee in modal_employees %}
+                                <option value="{{ employee.id }}">{{ employee.get_full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                     <div class="mb-3">
                         <label for="workDate" class="form-label">{% trans "Datum" %}</label>
                         <input type="date" class="form-control" id="workDate" name="date" required>

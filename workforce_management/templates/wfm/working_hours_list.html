@@ -263,27 +263,35 @@
                                     {{ date_entry.difference|floatformat:1 }}h
                                 {% endif %}
                             </td>
-                            <td class="text-center">
-                                {% if not date_entry.closure and not date_entry.is_weekend %}
-                                    <div class="btn-group">
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-primary"
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#workingHoursModal"
-                                                data-id="{{ date_entry.working_hours.id|default:'' }}"
-                                                data-date="{{ date_entry.date|date:'Y-m-d' }}"
-                                                title="{% trans 'Bearbeiten' %}">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-                                        {% if date_entry.working_hours and user.role == 'OWNER' %}
-                                            <button type="button" 
-                                                    class="btn btn-sm btn-outline-danger"
-                                                    onclick="deleteWorkingHours('{{ date_entry.working_hours.id }}')"
-                                                    title="{% trans 'Löschen' %}">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        {% endif %}
-                                    </div>
+                            <td class="text-end">
+                                {% if user.role == 'OWNER' %}
+                                    <!-- Add Button für Owner -->
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#workingHoursModal"
+                                            data-date="{{ date_entry.date|date:'Y-m-d' }}"
+                                            data-action="add"
+                                            title="{% trans 'Arbeitszeit hinzufügen' %}">
+                                        <i class="bi bi-plus-circle"></i>
+                                    </button>
+                                {% endif %}
+                                
+                                {% if date_entry.working_hours %}
+                                    <!-- Edit Button -->
+                                    <button class="btn btn-sm btn-outline-secondary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#workingHoursModal"
+                                            data-id="{{ date_entry.working_hours.id }}"
+                                            data-action="edit"
+                                            title="{% trans 'Bearbeiten' %}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <!-- Delete Button -->
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="deleteWorkingHours({{ date_entry.working_hours.id }})"
+                                            title="{% trans 'Löschen' %}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 {% endif %}
                             </td>
                         </tr>
@@ -301,17 +309,16 @@
                         <tr class="table-secondary fw-bold">
                             <td>{% trans "Summe" %}</td>
                             
-                            <td >{{ total_soll|floatformat:2 }}</td>
-                            <td >{{ total_ist|floatformat:2 }}</td>
+                            <td >{% trans "Soll" %}: {{ total_soll|floatformat:2 }}</td>
+                            <td >{% trans "Ist" %}: {{ total_ist|floatformat:2 }}</td>
                             <td >{% trans "Stundenbilanz im" %} {{ month_name }}: 
                                 <span class="{% if total_diff > 0 %}text-success{% elif total_diff < 0 %}text-danger{% endif %}">
                                     {{ total_diff|floatformat:2 }}
                                 </span>
                             </td>
                             <td></td>
-                            <td>
-                                
-                            </td>
+                            <td></td>
+                            <td></td>
                             <td></td>
                         </tr>
                         </tfoot>
@@ -346,8 +353,14 @@
                             <tr>
                                 <td>{{ employees|get_item:employee_id }}</td>
                                 <td>
-                                    <span class="{% if balance > 0 %}text-success{% elif balance < 0 %}text-danger{% endif %}">
-                                        {{ balance|floatformat:2 }}h
+                                    <span class="{% if balance > 0 %}badge bg-pistachio{% elif balance < 0 %}badge bg-red-salsa{% elif balance == 0 %}badge bg-asphalt{% endif %}">
+                                        {% if balance > 0 %}
+                                            + {{ balance|floatformat:2 }}h
+                                        {% elif balance < 0 %}
+                                            - {{ balance|floatformat:2 }}h
+                                        {% else %}
+                                            {{ balance|floatformat:2 }}h
+                                        {% endif %}
                                     </span>
                                 </td>
                             </tr>

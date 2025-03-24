@@ -95,6 +95,12 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             current_params['role'] = 'CLEANING'
             context['cleaning_url'] = f"?{current_params.urlencode()}"
 
+        # Füge die Mitarbeiterliste für das Modal hinzu (für Owner)
+        if self.request.user.role == 'OWNER':
+            context['modal_employees'] = CustomUser.objects.filter(
+                role__in=['ASSISTANT', 'CLEANING']
+            ).order_by('first_name', 'last_name')
+
         # 4. Hole die Mitarbeiter
         if self.request.user.role == 'OWNER':
             role = self.request.GET.get('role')
