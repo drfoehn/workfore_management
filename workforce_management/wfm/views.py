@@ -2783,6 +2783,11 @@ def upload_document(request):
             notes = request.POST.get('notes')
             sick_leave_id = request.POST.get('sick_leave_id')
             
+            # Überprüfe Berechtigungen
+            if request.user.role != 'OWNER' and str(request.user.id) != user_id:
+                messages.error(request, gettext('Keine Berechtigung'))
+                return redirect('wfm:user-documents')
+            
             # Erstelle das Dokument
             document = UserDocument.objects.create(
                 user_id=user_id,
@@ -2791,27 +2796,49 @@ def upload_document(request):
                 notes=notes
             )
 
-            # Wenn eine sick_leave_id vorhanden ist, verknüpfe das Dokument
+            # Bestimme die Redirect-URL basierend auf Dokumenttyp und Benutzerrolle
             if sick_leave_id:
                 try:
                     sick_leave = SickLeave.objects.get(id=sick_leave_id)
+                    # Prüfe ob der Benutzer Zugriff auf diesen Krankenstand hat
+                    if request.user.role != 'OWNER' and request.user != sick_leave.employee:
+                        document.delete()
+                        messages.error(request, gettext('Keine Berechtigung'))
+                        return redirect('wfm:absence-list')
+                        
                     sick_leave.document = document
                     sick_leave.status = 'SUBMITTED'
                     sick_leave.save()
+                    
+                    # Redirect basierend auf Rolle bei Krankmeldungen
+                    if request.user.role == 'OWNER':
+                        redirect_url = 'wfm:sick-leave-management'
+                    else:
+                        redirect_url = 'wfm:absence-list'
+                        
                 except SickLeave.DoesNotExist:
                     document.delete()
                     messages.error(request, gettext('Krankenstand nicht gefunden'))
-                    return redirect('wfm:user-documents')
+                    return redirect('wfm:absence-list')
+            else:
+                # Wenn es keine Krankmeldung ist, nur Owner dürfen zur Dokumentenliste
+                redirect_url = 'wfm:user-documents' if request.user.role == 'OWNER' else 'wfm:absence-list'
 
             messages.success(request, gettext('Dokument erfolgreich hochgeladen'))
-            return redirect('wfm:user-documents')
+            return redirect(redirect_url)
 
         except Exception as e:
             logger.error(f"Fehler beim Hochladen: {str(e)}", exc_info=True)
             messages.error(request, gettext('Fehler beim Hochladen des Dokuments'))
-            return redirect('wfm:user-documents')
+            # Bei Fehler zur gleichen URL zurück wie bei Erfolg
+            if sick_leave_id:
+                if request.user.role == 'OWNER':
+                    return redirect('wfm:sick-leave-management')
+                return redirect('wfm:absence-list')
+            return redirect('wfm:user-documents' if request.user.role == 'OWNER' else 'wfm:absence-list')
 
-    return redirect('wfm:user-documents')
+    # GET-Request
+    return redirect('wfm:user-documents' if request.user.role == 'OWNER' else 'wfm:absence-list')
 
 @login_required
 def api_document_update(request, pk):
