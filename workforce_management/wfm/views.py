@@ -1899,8 +1899,11 @@ class AssistantCalendarEventsView(View):
                 'end': f"{wh.date}T{wh.end_time}" if wh.end_time else wh.date.isoformat(),
                 'backgroundColor': wh.employee.color,
                 'className': 'working-hours-event',
-                'type': 'working_hours',
-                'allDay': not (wh.start_time and wh.end_time)
+                'extendedProps': {  # Füge extendedProps hinzu
+                    'type': 'working_hours',
+                    'employee_id': wh.employee.id,
+                    'allDay': not (wh.start_time and wh.end_time)
+                }
             } for wh in working_hours])
 
         return JsonResponse(events, safe=False)

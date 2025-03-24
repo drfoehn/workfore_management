@@ -163,7 +163,7 @@
     </div>
 </div>
 
-{% include "wfm/modals/working_hours_modal.html" %}
+
 {% include "wfm/modals/vacation_modal.html" %}
 {% comment %} {% include "wfm/modals/time_compensation_modal.html" %} {% endcomment %}
 {% include "wfm/modals/sick_leave_modal.html" %}
@@ -179,8 +179,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var calendarEl = document.getElementById('calendar');
-    var calendar = new FullCalendar.Calendar(calendarEl, {
+    var calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         locale: 'de',  // Nur einmal setzen
         initialView: 'timeGridWeek',
         headerToolbar: {
@@ -233,14 +232,48 @@ document.addEventListener('DOMContentLoaded', function() {
             if (info.event.id.startsWith('work_')) {
                 const workingHoursId = info.event.id.replace('work_', '');
                 
-                // Öffne das Modal mit den Daten des Events
-                const modal = new bootstrap.Modal(document.getElementById('workingHoursModal'));
+                // Prüfe ob der Eintrag dem aktuellen User gehört oder User ein Owner ist
+                const eventEmployeeId = info.event.extendedProps.employee_id;
+                const currentUserId = parseInt('{{ user.id }}');  // Parse als Integer
+                const isOwner = '{{ user.role }}' === 'OWNER';
+                
+                // Debug-Ausgabe
+                console.log('Event Employee:', eventEmployeeId);
+                console.log('Current User:', currentUserId);
+                console.log('Is Owner:', isOwner);
+                
+                if (!isOwner && eventEmployeeId !== currentUserId) {
+                    alert('{% trans "Keine Berechtigung zum Bearbeiten dieses Eintrags" %}');
+                    return;
+                }
+                
+                // Öffne das Edit-Modal mit den Daten des Events
+                const modal = new bootstrap.Modal(document.getElementById('editWorkingHoursModal'));
                 
                 // Lade die Daten und zeige das Modal
                 fetch(`/api/working-hours/${workingHoursId}/`)
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('{% trans "Keine Berechtigung" %}');
+                        }
+                        return response.json();
+                    })
                     .then(data => {
-                        fillWorkingHoursModal(data);
+                        // Setze die action URL für das Formular
+                        document.getElementById('editWorkingHoursForm').action = 
+                            `/api/working-hours/${workingHoursId}/update/`;
+                            
+                        // Fülle das Formular
+                        document.querySelector('#editWorkingHoursForm #start_time').value = data.start_time;
+                        document.querySelector('#editWorkingHoursForm #end_time').value = data.end_time;
+                        document.querySelector('#editWorkingHoursForm #break_duration').value = data.break_duration;
+                        document.querySelector('#editWorkingHoursForm #notes').value = data.notes;
+                        
+                        const employeeSelect = document.querySelector('#editWorkingHoursForm #employee');
+                        if (employeeSelect && data.employee_id) {
+                            employeeSelect.value = data.employee_id;
+                        }
+                        
                         modal.show();
                     })
                     .catch(error => {
@@ -248,6 +281,30 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert('{% trans "Keine Berechtigung zum Laden dieser Daten" %}');
                     });
             }
+        },
+        
+        dateClick: function(info) {
+            // Prüfe ob bereits ein Eintrag für diesen Tag existiert
+            fetch(`/api/working-hours/${info.dateStr}/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.exists || '{{ user.role }}' === 'OWNER') {
+                        // Öffne das Add-Modal
+                        const modal = new bootstrap.Modal(document.getElementById('addWorkingHoursModal'));
+                        
+                        // Setze die action URL für das Formular
+                        document.getElementById('addWorkingHoursForm').action = 
+                            `/api/working-hours/${info.dateStr}/add/`;
+                            
+                        modal.show();
+                    } else {
+                        alert('{% trans "Für diesen Tag existiert bereits ein Eintrag" %}');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('{% trans "Ein Fehler ist aufgetreten" %}');
+                });
         }
     });
     
