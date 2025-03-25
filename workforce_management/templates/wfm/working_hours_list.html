@@ -261,7 +261,9 @@
                             </td>
                             <td>
                                 {% if date_entry.schedule or date_entry.working_hours %}
-                                    {{ date_entry.difference|floatformat:1 }}h
+                                    {% if not date_entry.vacation and not date_entry.sick_leave %}
+                                        {{ date_entry.difference|floatformat:1 }}h
+                                    {% endif %}
                                 {% endif %}
                             </td>
                             <td class="text-end">
@@ -306,19 +308,20 @@
                         <tfoot>
                         <!-- Summenzeile -->
                         <tr class="table-secondary fw-bold">
-                            <td>{% trans "Summe" %}</td>
-                            
-                            <td >{% trans "Soll" %}: {{ total_soll|floatformat:2 }}</td>
-                            <td >{% trans "Ist" %}: {{ total_ist|floatformat:2 }}</td>
-                            <td >{% trans "Stundenbilanz im" %} {{ month_name }}: 
-                                <span class="{% if total_diff > 0 %}text-success{% elif total_diff < 0 %}text-danger{% endif %}">
-                                    {{ total_diff|floatformat:2 }}
-                                </span>
+                            <td class="bg-queen-blue">{% trans "Summe" %}</td>
+                            <td class="bg-queen-blue">{% trans "Soll" %}: {{ total_soll|floatformat:2 }}</td>
+                            <td class="bg-queen-blue">{% trans "Ist" %}: {{ total_ist|floatformat:2 }}</td>
+                            <td class="bg-queen-blue"></td>
+                            <td class="bg-queen-blue">
+                                
+                                    {% trans "Monatliches Gehalt" %}: {{ total_soll_wage|floatformat:2 }} €
+               
                             </td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
+                            <td class="bg-queen-blue"   ></td>
+                            <td class="bg-queen-blue"></td>
+                            {% if user.role == 'OWNER' %}
+                                <td class="bg-queen-blue"></td>
+                            {% endif %}
                         </tr>
                         </tfoot>
                    
@@ -344,13 +347,25 @@
                     <thead class="table-light">
                         <tr>
                             <th class="text-nowrap">{% trans "Mitarbeiter" %}</th>
-                            <th class="text-nowrap">{% trans "Bilanz" %}</th>
+                            <th class="text-nowrap">{% trans "Bilanz im" %} {{ month_name }}</th>
+                            <th class="text-nowrap">{% trans "Bilanz gesamt" %}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for employee_id, balance in employee_balances.items %}
                             <tr>
                                 <td>{{ employees|get_item:employee_id }}</td>
+                                <td>
+                                    <span class="{% if total_diff > 0 %}badge bg-pistachio{% elif total_diff < 0 %}badge bg-red-salsa{% elif total_diff == 0 %}badge bg-asphalt{% endif %}">
+                                        {% if total_diff > 0 %}
+                                            + {{ total_diff|floatformat:2 }}h
+                                        {% elif total_diff < 0 %}
+                                            - {{ total_diff|floatformat:2 }}h
+                                        {% else %}
+                                            {{ total_diff|floatformat:2 }}h
+                                        {% endif %}
+                                    </span>
+                                </td>
                                 <td>
                                     <span class="{% if balance > 0 %}badge bg-pistachio{% elif balance < 0 %}badge bg-red-salsa{% elif balance == 0 %}badge bg-asphalt{% endif %}">
                                         {% if balance > 0 %}

@@ -23,11 +23,13 @@
             <h2>{% trans "Terminkalender" %}</h2>
             
             <!-- Add Button -->
+            {% if user.role == 'OWNER' %}
             <button class="btn btn-primary" 
                     data-bs-toggle="modal" 
                     data-bs-target="#addBookingModal">
                 <i class="bi bi-plus-circle"></i> {% trans "Neuer Termin" %}
             </button>
+            {% endif %}
         </div>
     </div>
     <div class="card-body">

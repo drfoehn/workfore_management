@@ -129,45 +129,24 @@ class ScheduleTemplate(models.Model):
         
         # Speichere zuerst das aktuelle Template
         super().save(*args, **kwargs)
+
+        # Berechne die Zeitspanne
+        start_date = self.valid_from
+        end_date = start_date + timedelta(days=3*365)  # 3 Jahre in die Zukunft
         
-        # Hole alle Templates für diesen Mitarbeiter und Wochentag
-        all_templates = ScheduleTemplate.objects.filter(
+        # 1. Lösche existierende WorkingHours ab valid_from für diesen Mitarbeiter und Wochentag
+        WorkingHours.objects.filter(
             employee=self.employee,
-            weekday=self.weekday
-        ).exclude(pk=self.pk)
-        
-        # Manuell die Templates mit späterem Datum filtern
-        future_templates = []
-        for template in all_templates:
-            if template.valid_from >= self.valid_from:
-                future_templates.append(template)
-        
-        # Aktualisiere jedes Template einzeln
-        for template in future_templates:
-            template.start_time = self.start_time
-            template.end_time = self.end_time
-            template.save(update_fields=['start_time', 'end_time'])
-        
-        # Aktualisiere WorkingHours ab valid_from für ein Jahr
-        current_date = self.valid_from
-        end_date = current_date + timedelta(days=2*365)
-        
-        # Hole alle existierenden WorkingHours für diesen Zeitraum und Wochentag
-        existing_hours = WorkingHours.objects.filter(
-            employee=self.employee,
-            date__range=(current_date, end_date),
+            date__gte=start_date,
+            date__lte=end_date,
             date__week_day=self.weekday + 1  # Django verwendet 1-7 für Wochentage
-        )
+        ).delete()
         
-        # Lösche nur die WorkingHours, die keine manuellen Änderungen haben
-        for hours in existing_hours:
-            if hours.ist_hours == hours.soll_hours:  # Keine manuelle Änderung
-                hours.delete()
-        
-        # Erstelle neue WorkingHours für den gesamten Zeitraum
+        # 2. Erstelle neue WorkingHours für jeden passenden Tag
+        current_date = start_date
         while current_date <= end_date:
             if current_date.weekday() == self.weekday:
-                # Prüfe ob es einen Urlaub gibt
+                # Prüfe ob es einen Urlaub/Krankenstand/Feiertag gibt
                 has_vacation = Vacation.objects.filter(
                     employee=self.employee,
                     start_date__lte=current_date,
@@ -175,36 +154,37 @@ class ScheduleTemplate(models.Model):
                     status='APPROVED'
                 ).exists()
                 
-                # Prüfe ob es einen Feiertag gibt
-                has_holiday = ClosureDay.objects.filter(
-                    date=current_date
-                ).exists()
-                
-                # Prüfe ob es einen Krankenstand gibt
                 has_sick_leave = SickLeave.objects.filter(
                     employee=self.employee,
                     start_date__lte=current_date,
                     end_date__gte=current_date
                 ).exists()
                 
+                is_closure_day = ClosureDay.objects.filter(
+                    date=current_date
+                ).exists()
+                
                 # Erstelle WorkingHours nur wenn kein Urlaub/Krankenstand/Feiertag
-                if not (has_vacation or has_sick_leave or has_holiday):
-                    # Prüfe ob bereits ein Eintrag existiert
-                    existing = WorkingHours.objects.filter(
+                if not (has_vacation or has_sick_leave or is_closure_day):
+                    # Berechne die Stunden aus dem Template
+                    start = datetime.combine(date.min, self.start_time)
+                    end = datetime.combine(date.min, self.end_time)
+                    duration = end - start
+                    if self.break_duration:
+                        duration -= self.break_duration
+                    hours = Decimal(str(duration.total_seconds() / 3600))
+
+                    # Erstelle den WorkingHours Eintrag
+                    WorkingHours.objects.create(
                         employee=self.employee,
-                        date=current_date
-                    ).first()
-                    
-                    if not existing:  # Erstelle nur wenn kein Eintrag existiert
-                        WorkingHours.objects.create(
-                            employee=self.employee,
-                            date=current_date,
-                            start_time=self.start_time,
-                            end_time=self.end_time,
-                            soll_hours=self.hours,
-                            ist_hours=self.hours,
-                            break_duration=self.break_duration
-                        )
+                        date=current_date,
+                        start_time=self.start_time,
+                        end_time=self.end_time,
+                        break_duration=self.break_duration,
+                        soll_hours=hours,
+                        ist_hours=hours  # Ist = Soll zu Beginn
+                    )
+            
             current_date += timedelta(days=1)
 
     def clean(self):
