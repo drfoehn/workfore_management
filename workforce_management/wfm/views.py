@@ -2838,10 +2838,14 @@ def upload_document(request):
                 if request.user.role == 'OWNER':
                     return redirect('wfm:sick-leave-management')
                 return redirect('wfm:absence-list')
-            return redirect('wfm:user-documents' if request.user.role == 'OWNER' else 'wfm:absence-list')
+            return redirect(referer) if referer else redirect('wfm:user-documents' if request.user.role == 'OWNER' else 'wfm:absence-list')
+
+                
 
     # GET-Request
-    return redirect('wfm:user-documents' if request.user.role == 'OWNER' else 'wfm:absence-list')
+    referer = request.META.get('HTTP_REFERER')
+    return redirect(referer) if referer else redirect('wfm:user-documents' if request.user.role == 'OWNER' else 'wfm:absence-list')
+
 
 @login_required
 def api_document_update(request, pk):

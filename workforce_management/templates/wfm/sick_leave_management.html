@@ -35,8 +35,8 @@
                                 {{ sick_leave.end_date|date:"d.m.Y" }}
                             </td>
                             <td data-status="{{ sick_leave.status }}">
-                                <span class="badge {% if sick_leave.status == 'SUBMITTED' %}bg-warning
-                                                  {% else %}bg-secondary{% endif %}">
+                                <span class="badge {% if sick_leave.status == 'SUBMITTED' %}bg-pistachio
+                                                  {% else %}bg-yellow-orange{% endif %}">
                                     {{ sick_leave.get_status_display }}
                                 </span>
                             </td>
