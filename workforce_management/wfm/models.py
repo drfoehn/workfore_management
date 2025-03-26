@@ -12,6 +12,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 import decimal
+from django.db.models.functions import Extract
 
 
 class CustomUser(AbstractUser):
@@ -125,22 +126,27 @@ class ScheduleTemplate(models.Model):
         return f"{self.employee.username} - {self.get_weekday_display()} (ab {self.valid_from})"
 
     def save(self, *args, **kwargs):
-        is_new = self.pk is None  # Prüfe ob es ein neues Template ist
+        is_new = self.pk is None
         
-        # Speichere zuerst das aktuelle Template
-        super().save(*args, **kwargs)
 
-        # Berechne die Zeitspanne
-        start_date = self.valid_from
-        end_date = start_date + timedelta(days=3*365)  # 3 Jahre in die Zukunft
         
-        # 1. Lösche existierende WorkingHours ab valid_from für diesen Mitarbeiter und Wochentag
-        WorkingHours.objects.filter(
+        # 2. Speichere das aktuelle Template
+        super().save(*args, **kwargs)
+        
+        # 3. Lösche alle WorkingHours für diesen Wochentag ab valid_from
+        workinghours_to_delete = WorkingHours.objects.filter(
             employee=self.employee,
-            date__gte=start_date,
-            date__lte=end_date,
-            date__week_day=self.weekday + 1  # Django verwendet 1-7 für Wochentage
-        ).delete()
+            date__gte=self.valid_from
+        ).filter(
+            # Filtere manuell nach Wochentag
+            date__week_day=(self.weekday + 2 if self.weekday < 6 else 1)
+        )
+        
+        workinghours_to_delete.delete()
+        
+        # 4. Erstelle neue WorkingHours
+        start_date = self.valid_from
+        end_date = start_date + timedelta(days=3*365)
         
         # 2. Erstelle neue WorkingHours für jeden passenden Tag
         current_date = start_date
@@ -583,11 +589,7 @@ class TherapistBooking(models.Model):
 
         # Berechne die Differenz
         if self.actual_hours is not None:
-            if self.hours is None or self.hours == Decimal('0.00'):
-                # Wenn keine Stunden gebucht wurden, sind alle verwendeten Stunden Mehrstunden
-                self.difference_hours = self.actual_hours
-                self.therapist_extra_hours_payment_status = 'PENDING'
-            elif self.actual_hours > self.hours:
+            if self.actual_hours > self.hours:
                 # Wenn mehr Stunden verwendet als gebucht wurden
                 self.difference_hours = self.actual_hours - self.hours
                 self.therapist_extra_hours_payment_status = 'PENDING'
