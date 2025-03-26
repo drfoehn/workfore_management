@@ -2574,8 +2574,9 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
     def get_queryset(self):
         # Hole alle offenen Urlaubs- und ZA-Anträge
         vacations = Vacation.objects.filter(
-            status='REQUESTED'
-        ).select_related('employee').order_by('start_date')
+        ).select_related('employee')
+        
+
         
         # time_comps = TimeCompensation.objects.filter(
         #     status='REQUESTED'
@@ -2609,7 +2610,7 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
         #     })
             
         # Sortiere nach Datum und Mitarbeiter
-        return sorted(absences, key=lambda x: (x['start_date'], x['employee'].username))
+        return sorted(absences, key=lambda x: (x['start_date']), reverse=True)
 
     def post(self, request, *args, **kwargs):
         try:
@@ -2635,6 +2636,10 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
             
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
+# TODO: Abgelehnte Anträge anzeigen in Liste und Kalender
+# TODO: BEi ABlehnung Begründung einfügen
+# TODO: Check og abgelehnte Abwesenheiten eh nicht bei den Tagen weggezählt werden
 
 @login_required
 def api_calculate_vacation_hours(request):
@@ -2760,9 +2765,7 @@ def api_upload_sick_leave_document(request, sick_leave_id):
         logger.error(f"Error uploading sick leave document: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
-# TODO: Abgelehnte Anträge anzeigen in Liste und Kalender
-# TODO: BEi ABlehnung Begründung einfügen
-# TODO: Check og abgelehnte Abwesenheiten eh nicht bei den Tagen weggezählt werden
+
 
 
 

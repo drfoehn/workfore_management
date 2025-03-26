@@ -31,14 +31,20 @@
                                 <td class="text-nowrap">{{ absence.start_date|date:"d.m.Y" }}</td>
                                 <td class="text-nowrap">{{ absence.end_date|date:"d.m.Y" }}</td>
                                 <td>
-                                    {% if absence.is_vacation %}
+                                    {% comment %} {% if absence.is_vacation %} {% endcomment %}
                                         <span class="badge bg-primary">{% trans "Urlaub" %}</span>
-                                    {% else %}
-                                        <span class="badge bg-info">{% trans "Zeitausgleich" %}</span>
-                                    {% endif %}
+                                    {% comment %} {% else %}
+                                        <span class="badge bg-info">{% trans "Zeitausgleich" %}</span> {% endcomment %}
+                                    {% comment %} {% endif %} {% endcomment %}
                                 </td>
                                 <td>
-                                    <span class="badge bg-warning">{% trans "Beantragt" %}</span>
+                                    {% if absence.status == 'REQUESTED' %}
+                                        <span class="badge bg-yellow-orange">{% trans "Beantragt" %}</span>
+                                    {% elif absence.status == 'APPROVED' %}
+                                        <span class="badge bg-pistachio">{% trans "Genehmigt" %}</span>
+                                    {% elif absence.status == 'REJECTED' %}
+                                        <span class="badge bg-red-salsa">{% trans "Abgelehnt" %}</span>
+                                    {% endif %}
                                 </td>
                                 <td class="text-nowrap">
                                     {% if absence.notes %}
