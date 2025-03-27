@@ -247,22 +247,28 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             entry['schedule'] = has_schedule
                             start = datetime.combine(date.min, has_schedule.start_time)
                             end = datetime.combine(date.min, has_schedule.end_time)
+                            duration = end - start  # Berechne duration hier
+                            
                             if has_schedule.break_duration:
                                 entry['break_minutes'] = int(has_schedule.break_duration.total_seconds() / 60)
+                                duration = duration - has_schedule.break_duration  # Ziehe Pause von duration ab
+
                             else:
                                 entry['break_minutes'] = None
-                            duration = end - start
                             if has_schedule.break_duration:
                                 duration = duration - has_schedule.break_duration
-                            entry['soll_hours'] = (duration).total_seconds() / 3600
+                            entry['soll_hours'] = duration.total_seconds() / 3600
                             total_soll += entry['soll_hours']
+
 
                         if has_working_hours:
                             start = datetime.combine(date.min, has_working_hours.start_time)
                             end = datetime.combine(date.min, has_working_hours.end_time)
                             entry['ist_hours'] = (end - start).total_seconds() / 3600
+                            
                             if has_working_hours.break_duration:
                                 entry['ist_hours'] -= has_working_hours.break_duration.total_seconds() / 3600
+                            
                             total_ist += entry['ist_hours']
 
                         day_entries.append(entry)

@@ -202,7 +202,9 @@
                                     {{ date_entry.schedule.start_time|time:"H:i" }} - {{ date_entry.schedule.end_time|time:"H:i" }}
                                     {% if date_entry.break_minutes %}
                                          (<i class="bi bi-cup-hot" title="{% trans 'Pause' %}"></i> {{ date_entry.break_minutes }}min)
+                                         
                                     {% endif %}
+                                    ({{ date_entry.soll_hours|floatformat:1 }}h)
                                 {% elif date_entry.closure %}
                                     <em class="text-muted">{% trans "Geschlossen" %}</em>
                                 {% elif date_entry.is_weekend %}
