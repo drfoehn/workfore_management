@@ -1,0 +1,75 @@
+{% load i18n %}
+
+<div class="modal fade" id="rejectionReasonModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-queen-blue">
+                <h5 class="modal-title">{% trans "Begründung der Ablehnung" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="rejectionForm">
+                    <input type="hidden" id="rejection_absence_id">
+                    <input type="hidden" id="rejection_absence_type">
+                    
+                    <div class="mb-3">
+                        <label for="rejection_notes" class="form-label">{% trans "Begründung" %}</label>
+                        <textarea class="form-control" id="rejection_notes" rows="3" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn bg-queen-blue" data-bs-dismiss="modal">
+                    {% trans "Abbrechen" %}
+                </button>
+                <button type="button" class="btn bg-red-salsa" onclick="confirmRejection()">
+                    {% trans "Ablehnen" %}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showRejectionModal(absenceId, absenceType) {
+    document.getElementById('rejection_absence_id').value = absenceId;
+    document.getElementById('rejection_absence_type').value = absenceType;
+    const modal = new bootstrap.Modal(document.getElementById('rejectionReasonModal'));
+    modal.show();
+}
+
+function confirmRejection() {
+    const absenceId = document.getElementById('rejection_absence_id').value;
+    const absenceType = document.getElementById('rejection_absence_type').value;
+    const notes = document.getElementById('rejection_notes').value;
+    
+    if (!notes.trim()) {
+        alert('{% trans "Bitte geben Sie eine Begründung ein" %}');
+        return;
+    }
+    
+    // Sende AJAX Request
+    const formData = new FormData();
+    formData.append('id', absenceId);
+    formData.append('type', absenceType);
+    formData.append('action', 'reject');
+    formData.append('notes', notes);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch('{% url "wfm:absence-management" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            throw new Error(data.error);
+        }
+    })
+    .catch(error => {
+        alert(error.message);
+    });
+}
+</script> 

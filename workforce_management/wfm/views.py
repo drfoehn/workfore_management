@@ -42,6 +42,7 @@ from django.views.decorators.http import require_http_methods
 from calendar import monthrange
 from datetime import datetime, date as datetime_date  # Umbenennen des date imports
 import re
+from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -1870,12 +1871,12 @@ class AssistantCalendarEventsView(View):
         vacations = Vacation.objects.filter(
             start_date__lte=end_date.date(),
             end_date__gte=start_date.date(),
-            status='APPROVED',
+            status__in=['APPROVED', 'REQUESTED'],
             **employee_filter
         ).select_related('employee')
-        
+
         events.extend([{
-            'title': f"{v.employee.get_full_name()} - Urlaub",
+            'title': f"{v.employee.get_full_name()} - Urlaub {gettext('(Beantragt)') if v.status == 'REQUESTED' else ''}",
             'start': v.start_date.isoformat(),
             'end': (v.end_date + timedelta(days=1)).isoformat(),
             'backgroundColor': v.employee.color,
@@ -1884,6 +1885,8 @@ class AssistantCalendarEventsView(View):
             'allDay': True
         } for v in vacations])
         
+
+            
         # # Zeitausgleich
         # time_comps = TimeCompensation.objects.filter(
         #     date__lte=end_date.date(),
@@ -2039,47 +2042,78 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
             context['assistants'] = CustomUser.objects.filter(role='ASSISTANT')
             context['cleaners'] = CustomUser.objects.filter(role='CLEANING')
         
+        # Hole nur genehmigte oder beantragte Urlaube für den Kalender
+        vacations = Vacation.objects.filter(
+            status__in=['APPROVED', 'REQUESTED']
+        ).select_related('employee')
+        
+        context['vacations'] = vacations
+
+        # # Formatiere die Urlaube für den Kalender
+        # vacation_events = []
+        # for vacation in vacations:
+        #     status_text = gettext("Beantragt") if vacation.status == 'REQUESTED' else ""
+        #     vacation_events.append({
+        #         'id': f'vacation_{vacation.id}',
+        #         'title': f'{vacation.employee.get_full_name()} {status_text}',
+        #         'start': vacation.start_date.isoformat(),
+        #         'end': (vacation.end_date + timedelta(days=1)).isoformat(),
+        #         'className': 'bg-warning' if vacation.status == 'REQUESTED' else 'bg-success',
+        #         'type': 'vacation'
+        #     })
+            
+        # context['events'] = vacation_events
+
+        # # Hole genehmigte und beantragte Urlaube
+        # vacations = Vacation.objects.filter(
+        #     status__in=['APPROVED', 'REQUESTED']
+        # ).select_related('employee')
+        
+        # # Formatiere die Urlaube für den Kalender
+        # events = []
+        # for vacation in vacations:
+        #     status_text = gettext("Beantragt") if vacation.status == 'REQUESTED' else ""
+        #     events.append({
+        #         'id': f'vacation_{vacation.id}',
+        #         'title': f"{vacation.employee.get_full_name()} - Urlaub {status_text}",
+        #         'start': vacation.start_date.isoformat(),
+        #         'end': (vacation.end_date + timedelta(days=1)).isoformat(),
+        #         'className': 'bg-warning' if vacation.status == 'REQUESTED' else 'bg-success',
+        #         'type': 'vacation',
+        #         'allDay': True
+        #     })
+        
+        # context['events'] = events
         return context
 
-    def get_events(self, request):
-        # Parse start und end dates aus den Request-Parametern
+    def get_events(self, request, *args, **kwargs):
+        # Debug prints
+        print("\nDEBUG: AssistantCalendarView.get_events called")
+        print("DEBUG: Request path:", request.path)
+        print("DEBUG: Request GET params:", request.GET)
+        
         start_date = parse_datetime(request.GET.get('start'))
         end_date = parse_datetime(request.GET.get('end'))
         show_absences_only = request.GET.get('absences') == '1'
         
-        # Hole employee und role Filter
+        print(f"DEBUG: Parsed dates - start: {start_date}, end: {end_date}")
+        
         employee_id = request.GET.get('employee')
         role = request.GET.get('role')
         
-        # Basis-Filter für Mitarbeiter
         employee_filter = {}
         if employee_id:
             employee_filter['employee_id'] = employee_id
         if role:
             employee_filter['employee__role'] = role
 
+        # Debug: Print filter
+        print("DEBUG: Employee filter:", employee_filter)
+
         if show_absences_only:
-            # Nur Abwesenheiten zurückgeben
             events = []
             
-            # Urlaub
-            vacations = Vacation.objects.filter(
-                start_date__lte=end_date.date(),
-                end_date__gte=start_date.date(),
-                status='APPROVED',
-                **employee_filter
-            ).select_related('employee')
-            
-            events.extend([{
-                'title': f"{v.employee.get_full_name()} - Urlaub",
-                'start': v.start_date.isoformat(),
-                'end': (v.end_date + timedelta(days=1)).isoformat(),
-                'className': 'vacation-event',
-                'type': 'vacation',
-                'allDay': True
-            } for v in vacations])
-            
-            # # Zeitausgleich
+             # # Zeitausgleich
             # time_comps = TimeCompensation.objects.filter(
             #     date__lte=end_date.date(),
             #     date__gte=start_date.date(),
@@ -2095,7 +2129,41 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
             #     'type': 'time_comp',
             #     'allDay': True
             # } for tc in time_comps])
+
+            # Debug: Print query parameters
+            print("DEBUG: Vacation query params:", {
+                'start_date__lte': end_date.date(),
+                'end_date__gte': start_date.date(),
+                'status__in': ['APPROVED', 'REQUESTED'],
+                **employee_filter
+            })
             
+            # Urlaube (genehmigte und beantragte)
+            vacations = Vacation.objects.filter(
+                start_date__lte=end_date.date(),
+                end_date__gte=start_date.date(),
+                status__in=['APPROVED', 'REQUESTED'],
+                **employee_filter
+            ).select_related('employee')
+            
+            # Debug: Print found vacations
+            print("DEBUG: Found vacations:", list(vacations.values('id', 'employee__username', 'start_date', 'end_date', 'status')))
+
+            for vacation in vacations:
+                status_text = gettext("Beantragt") if vacation.status == 'REQUESTED' else ""
+                event = {
+                    'id': f'vacation_{vacation.id}',
+                    'title': f"{vacation.employee.get_full_name()} - Urlaub {status_text}",
+                    'start': vacation.start_date.isoformat(),
+                    'end': (vacation.end_date + timedelta(days=1)).isoformat(),
+                    'className': 'bg-warning' if vacation.status == 'REQUESTED' else 'bg-success',
+                    'type': 'vacation',
+                    'allDay': True
+                }
+                events.append(event)
+                # Debug: Print created event
+                print("DEBUG: Created event:", event)
+
             # Krankenstand - Korrigierte Filterung
             sick_leaves = SickLeave.objects.filter(
                 start_date__lte=end_date.date(),
@@ -2111,10 +2179,13 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
                 'type': 'sick_leave',
                 'allDay': True
             } for sl in sick_leaves])
+                        # Debug: Print final events list
+            print("DEBUG: Final events list:", events)
             
             return JsonResponse(events, safe=False)
         else:
-            # Normaler Event-Code
+            # Debug: Print branch taken
+            print("DEBUG: Taking regular events branch")
             return self.get_regular_events(request, start_date, end_date)
 
 class TherapistBookingListView(LoginRequiredMixin, ListView):
@@ -2602,16 +2673,8 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
     context_object_name = 'absences'
 
     def get_queryset(self):
-        # Hole alle offenen Urlaubs- und ZA-Anträge
-        vacations = Vacation.objects.filter(
-        ).select_related('employee')
-        
-
-        
-        # time_comps = TimeCompensation.objects.filter(
-        #     status='REQUESTED'
-        # ).select_related('employee').order_by('date')
-    
+        # Hole alle Urlaubsanträge (auch abgelehnte)
+        vacations = Vacation.objects.all().select_related('employee')
         
         # Kombiniere die Anträge in eine Liste
         absences = []
@@ -2624,7 +2687,8 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
                 'end_date': vacation.end_date,
                 'status': vacation.status,
                 'notes': vacation.notes,
-                'is_vacation': True
+                'is_vacation': True,
+                'rejection_reason': vacation.notes if vacation.status == 'REJECTED' else None
             })
             
         # for time_comp in time_comps:
@@ -2647,6 +2711,7 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
             absence_type = request.POST.get('type')
             absence_id = request.POST.get('id')
             action = request.POST.get('action')
+            notes = request.POST.get('notes')
             
             if absence_type == 'vacation':
                 absence = Vacation.objects.get(id=absence_id)
@@ -2657,13 +2722,20 @@ class AbsenceManagementView(OwnerRequiredMixin, ListView):
                 absence.status = 'APPROVED'
                 messages.success(request, gettext('Antrag wurde genehmigt'))
             else:
+                if not notes:
+                    return JsonResponse({
+                        'error': gettext('Bei Ablehnung muss eine Begründung angegeben werden')
+                    }, status=400)
                 absence.status = 'REJECTED'
+                absence.notes = notes
                 messages.success(request, gettext('Antrag wurde abgelehnt'))
                 
             absence.save()
             
             return JsonResponse({'success': True})
             
+        except ValidationError as e:
+            return JsonResponse({'error': str(e)}, status=400)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 

@@ -61,7 +61,7 @@
                                         </button>
                                         <button type="button" 
                                                 class="btn btn-sm bg-red-salsa"
-                                                onclick="updateAbsenceStatus('{{ absence.type }}', {{ absence.id }}, 'reject')"
+                                                onclick="showRejectionModal('{{ absence.id }}', '{{ absence.type }}')"
                                                 title="{% trans 'Ablehnen' %}">
                                             <i class="bi bi-x-lg"></i>
                                         </button>
@@ -82,6 +82,9 @@
         </div>
     </div>
 </div>
+
+<!-- Füge das Modal ein -->
+{% include "wfm/modals/rejection_reason_modal.html" %}
 
 <script>
 function updateAbsenceStatus(type, id, action) {

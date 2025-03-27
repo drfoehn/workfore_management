@@ -342,6 +342,59 @@ class WorkingHours(models.Model):
                 }
             )
 
+    @classmethod
+    def get_working_hours_for_date(cls, employee, date):
+        """Holt oder berechnet die Arbeitszeiten für einen bestimmten Tag"""
+        # Prüfe auf existierende Einträge
+        existing = cls.objects.filter(employee=employee, date=date).first()
+        if existing:
+            return existing
+
+        # Prüfe auf genehmigte Urlaube
+        has_vacation = Vacation.objects.filter(
+            employee=employee,
+            start_date__lte=date,
+            end_date__gte=date,
+            status='APPROVED'  # Nur genehmigte Urlaube berücksichtigen
+        ).exists()
+        
+        if has_vacation:
+            return None
+
+        # Prüfe auf Krankenstand
+        has_sick_leave = SickLeave.objects.filter(
+            employee=employee,
+            start_date__lte=date,
+            end_date__gte=date
+        ).exists()
+        
+        if has_sick_leave:
+            return None
+
+        # Prüfe auf Schließtage
+        is_closure_day = ClosureDay.is_closure_day(date)
+        if is_closure_day:
+            return None
+
+        # Hole Template für diesen Wochentag
+        template = ScheduleTemplate.objects.filter(
+            employee=employee,
+            weekday=date.weekday(),
+            valid_from__lte=date
+        ).order_by('-valid_from').first()
+
+        if not template:
+            return None
+
+        # Erstelle WorkingHours aus Template
+        return cls.objects.create(
+            employee=employee,
+            date=date,
+            start_time=template.start_time,
+            end_time=template.end_time,
+            break_duration=template.break_duration
+        )
+
 class Vacation(models.Model):
     """Urlaubsverwaltung"""
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -431,10 +484,17 @@ class Vacation(models.Model):
             raise ValidationError(_('Nicht genügend Urlaubsstunden verfügbar'))
 
     def save(self, *args, **kwargs):
+        # Prüfe ob es eine Statusänderung zu REJECTED gibt und notes leer ist
+        if self.pk:
+            old_instance = Vacation.objects.get(pk=self.pk)
+            if old_instance.status != 'REJECTED' and self.status == 'REJECTED' and not self.notes:
+                raise ValidationError(_('Bei Ablehnung muss eine Begründung angegeben werden'))
+
         # Berechne die Stunden vor dem Speichern
         self.hours = self.calculate_vacation_hours()
-        # Prüfe ob es eine Statusänderung von REQUESTED/PENDING zu APPROVED gibt
-        if self.pk:  # Wenn es ein existierender Eintrag ist
+        
+        # Lösche/Erstelle WorkingHours nur bei APPROVED Status
+        if self.pk:
             old_instance = Vacation.objects.get(pk=self.pk)
             if (old_instance.status in ['REQUESTED', 'PENDING'] and 
                 self.status == 'APPROVED'):
