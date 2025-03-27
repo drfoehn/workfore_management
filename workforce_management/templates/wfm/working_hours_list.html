@@ -359,8 +359,7 @@
                                     <span class="{% if total_diff > 0 %}badge bg-pistachio{% elif total_diff < 0 %}badge bg-red-salsa{% elif total_diff == 0 %}badge bg-asphalt{% endif %}">
                                         {% if total_diff > 0 %}
                                             + {{ total_diff|floatformat:2 }}h
-                                        {% elif total_diff < 0 %}
-                                            - {{ total_diff|floatformat:2 }}h
+                                    
                                         {% else %}
                                             {{ total_diff|floatformat:2 }}h
                                         {% endif %}

@@ -16,7 +16,8 @@ from .models import (
     CustomUser,
     OvertimeAccount,
     ClosureDay,
-    UserDocument
+    UserDocument,
+    OvertimeEntry
 )
 from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
@@ -155,9 +156,9 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         ).select_related('employee')
 
         # Initialisiere die Summen vor der Schleife
-        total_soll = 0
-        total_ist = 0
-        total_diff = 0
+        total_soll = 0  # Diese werden noch für die Tagesansicht benötigt
+        total_ist = 0   # Diese werden noch für die Tagesansicht benötigt
+        # total_diff = 0  # Diese Variable können wir löschen
 
         # 7. Erstelle Lookup-Dictionaries
         working_hours_dict = {(wh.date, wh.employee_id): wh for wh in working_hours}
@@ -237,16 +238,14 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             'vacation': has_vacation,
                             'sick_leave': has_sick_leave,
                             'is_weekend': False,
-                            # Füge break_minutes direkt aus dem working_hours Objekt hinzu
                             'break_minutes': int(has_working_hours.break_duration.total_seconds() / 60) if has_working_hours and has_working_hours.break_duration else None
                         }
 
-                        # Berechne Stunden nur für normale Tage
+                        # Berechne Stunden nur für die Tagesansicht
                         if has_schedule:
                             entry['schedule'] = has_schedule
                             start = datetime.combine(date.min, has_schedule.start_time)
                             end = datetime.combine(date.min, has_schedule.end_time)
-                            # Füge break_minutes zum entry hinzu
                             if has_schedule.break_duration:
                                 entry['break_minutes'] = int(has_schedule.break_duration.total_seconds() / 60)
                             else:
@@ -264,10 +263,6 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             if has_working_hours.break_duration:
                                 entry['ist_hours'] -= has_working_hours.break_duration.total_seconds() / 3600
                             total_ist += entry['ist_hours']
-
-                        entry['difference'] = entry.get('ist_hours', 0) - entry.get('soll_hours', 0)
-                        if not (has_vacation or has_sick_leave):
-                            total_diff += entry['difference']
 
                         day_entries.append(entry)
 
@@ -310,6 +305,17 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             total_balance = OvertimeAccount.get_current_balance(self.request.user)
             employee_balances[str(self.request.user.id)] = total_balance
 
+        # Hole die Überstunden für den angezeigten Monat
+        total_monthly_overtime = Decimal('0')
+        for employee in employees:
+            # Summiere die Überstunden des Monats
+            monthly_entries = OvertimeEntry.objects.filter(
+                employee=employee,
+                date__year=year,
+                date__month=month
+            ).aggregate(total=models.Sum('hours'))['total'] or Decimal('0')
+            total_monthly_overtime += monthly_entries
+
         context.update({
             'dates': days_data,
             'year': year,
@@ -322,9 +328,9 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             'show_request_buttons': self.request.user.role in ['ASSISTANT', 'CLEANING'],
             'current_year': year,
             'current_month': month,
-            'total_soll': total_soll,
-            'total_ist': total_ist,
-            'total_diff': total_diff,  # Differenz des aktuellen Monats
+            'total_soll': total_soll,  # Wird noch für die Tagesansicht benötigt
+            'total_ist': total_ist,    # Wird noch für die Tagesansicht benötigt
+            'total_diff': total_monthly_overtime,  # Jetzt aus OvertimeEntries
             'employee_balances': employee_balances,  # Einzelbilanzen pro Mitarbeiter
             'total_balance': total_balance,  # Gesamtbilanz aller gefilterten Mitarbeiter
             'colors': {
@@ -338,6 +344,30 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 'yellow': '#F8961E',      # Yellow Orange
             },
         })
+
+        # Debug-Ausgaben
+        print("\n=== Überstundenberechnung Debug ===")
+        print(f"Berechne für Jahr: {year}, Monat: {month}")
+        for employee_id, balance in employee_balances.items():
+            employee = employees_dict[employee_id]
+            print(f"\nMitarbeiter: {employee.get_full_name()}")
+            print(f"Gesamtbilanz: {balance:+.2f}h")
+            
+            # Zeige monatliche Überstunden
+            monthly = OvertimeEntry.objects.filter(
+                employee=employee,
+                date__year=year,
+                date__month=month
+            ).aggregate(total=models.Sum('hours'))['total'] or Decimal('0')
+            print(f"Monatliche Überstunden: {monthly:+.2f}h")
+            
+            # Zeige gesperrte/zur Auszahlung markierte Stunden
+            locked = OvertimeEntry.objects.filter(
+                employee=employee,
+                is_locked=True
+            ).aggregate(total=models.Sum('hours'))['total'] or Decimal('0')
+            print(f"Gesperrte Stunden: {locked:+.2f}h")
+        print("=== Ende Debug ===\n")
 
         return context
 

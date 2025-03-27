@@ -14,7 +14,8 @@ from .models import (
     MonthlyReport,
     OvertimeAccount,
     UserDocument,
-    ClosureDay
+    ClosureDay,
+    OvertimeEntry
 )
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
@@ -174,60 +175,32 @@ class MonthlyReportAdmin(admin.ModelAdmin):
 class OvertimeAccountAdmin(admin.ModelAdmin):
     list_display = [
         'employee', 
-        'month_year', 
+        'year', 
+        'month', 
         'balance', 
         'hours_for_payment',
-        'payment_status'
+        'overtime_paid',
+        'payment_locked_until'
     ]
     list_filter = ['employee', 'year', 'month', 'overtime_paid']
     search_fields = ['employee__first_name', 'employee__last_name']
     ordering = ['-year', '-month', 'employee__first_name']
+    readonly_fields = ['last_update']
     
-    def month_year(self, obj):
-        return f"{obj.month}/{obj.year}"
-    month_year.short_description = _("Monat/Jahr")
+    def get_readonly_fields(self, request, obj=None):
+        if obj and obj.payment_locked_until:  # Wenn Eintrag gesperrt ist
+            return self.readonly_fields + ['hours_for_payment', 'payment_locked_until']
+        return self.readonly_fields
     
-    def payment_status(self, obj):
-        if obj.overtime_paid:
-            return _("Bezahlt am {}").format(
-                timezone.localtime(obj.overtime_paid_date).strftime("%d.%m.%Y")
-            )
-        elif obj.hours_for_payment > 0:
-            return _("Zur Auszahlung markiert")
-        return _("Offen")
-    payment_status.short_description = _("Zahlungsstatus")
-
     actions = ['mark_as_paid']
 
     def mark_as_paid(self, request, queryset):
-        updated = 0
         for account in queryset:
             if account.hours_for_payment > 0 and not account.overtime_paid:
                 account.overtime_paid = True
+                account.overtime_paid_date = timezone.now()
                 account.save()
-                updated += 1
-        
-        if updated == 0:
-            self.message_user(request, _("Keine Konten zur Auszahlung markiert"))
-        else:
-            self.message_user(
-                request, 
-                _("{} Konten wurden als bezahlt markiert").format(updated)
-            )
-    mark_as_paid.short_description = _("Als bezahlt markieren")
-
-    fieldsets = (
-        (None, {
-            'fields': ('employee', 'year', 'month')
-        }),
-        (_('Stunden'), {
-            'fields': ('balance', 'hours_for_payment')
-        }),
-        (_('Zahlungsstatus'), {
-            'fields': ('overtime_paid', 'overtime_paid_date')
-        })
-    )
-    readonly_fields = ['overtime_paid_date']
+    mark_as_paid.short_description = _("Als ausgezahlt markieren")
 
 @admin.register(UserDocument)
 class UserDocumentAdmin(admin.ModelAdmin):
@@ -250,3 +223,10 @@ class ClosureDayAdmin(ImportExportModelAdmin):
     search_fields = ['name', 'notes']
     date_hierarchy = 'date'
     resource_class = ClosureDayResource
+
+@admin.register(OvertimeEntry)
+class OvertimeEntryAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'date', 'hours', 'is_locked', 'created_at']
+    list_filter = ['employee', 'is_locked', 'date']
+    search_fields = ['employee__username', 'employee__first_name', 'employee__last_name']
+    date_hierarchy = 'date'
