@@ -264,12 +264,25 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                         if has_working_hours:
                             start = datetime.combine(date.min, has_working_hours.start_time)
                             end = datetime.combine(date.min, has_working_hours.end_time)
-                            entry['ist_hours'] = (end - start).total_seconds() / 3600
-                            
+                            entry['ist_hours'] = f"{has_working_hours.start_time.strftime('%H:%M')}-{has_working_hours.end_time.strftime('%H:%M')}"
+                            entry['ist_hours_value'] = (end - start).total_seconds() / 3600
                             if has_working_hours.break_duration:
-                                entry['ist_hours'] -= has_working_hours.break_duration.total_seconds() / 3600
+                                entry['ist_hours_value'] -= has_working_hours.break_duration.total_seconds() / 3600
                             
-                            total_ist += entry['ist_hours']
+                            # Addiere immer die ist_hours_value (auch wenn 0)
+                            total_ist += entry['ist_hours_value']
+
+                            #Wenn Ist-Stunden gelöscht werden anstatt verändert werden
+                        elif has_schedule and not has_working_hours:
+                            entry['ist_hours'] = '--:--'  # Zeige --:-- wenn Schedule aber keine Ist-Stunden
+                            entry['ist_hours_value'] = 0
+                            
+                            
+                            total_ist += entry['ist_hours_value']
+                        else:
+                            entry['ist_hours'] = ''  # Leerer String wenn kein Schedule
+
+                        entry['difference_value'] =  entry['ist_hours_value'] - entry['soll_hours']
 
                         day_entries.append(entry)
 

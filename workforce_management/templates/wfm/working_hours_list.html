@@ -216,7 +216,8 @@
                                     {{ date_entry.working_hours.start_time|time:"H:i" }} - {{ date_entry.working_hours.end_time|time:"H:i" }}
                                     ({% if date_entry.break_minutes %}
                                     <i class="bi bi-cup-hot" title="{% trans 'Pause' %}"></i> {{ date_entry.break_minutes }}min | 
-                               {% endif %}{{ date_entry.ist_hours|floatformat:1 }}h)
+                               {% endif %}{{ date_entry.ist_hours_value|floatformat:1 }}h)
+                               
                                 {% endif %}
                             </td>
                             <td>
@@ -264,7 +265,21 @@
                             <td>
                                 {% if date_entry.schedule or date_entry.working_hours %}
                                     {% if not date_entry.vacation and not date_entry.sick_leave %}
-                                        {{ date_entry.difference|floatformat:1 }}h
+                                        {% if date_entry.difference_value > 0 %}
+                                            <span class="badge bg-pistachio">
+                                                + {{ date_entry.difference_value|floatformat:1 }}h
+                                            </span>
+                                        {% else %}
+                                            {% if date_entry.difference_value < 0 %}
+                                                <span class="badge bg-red-salsa">
+                                                    {{ date_entry.difference_value|floatformat:1 }}h
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-asphalt">
+                                                    {{ date_entry.difference_value|floatformat:1 }}h
+                                                </span>
+                                            {% endif %}
+                                        {% endif %}
                                     {% endif %}
                                 {% endif %}
                             </td>
@@ -334,14 +349,7 @@
     <div class="card " style="margin-top: 20px;">
         <div class="card-header d-flex justify-content-between align-items-center bg-pistachio">
             <h4 class="mb-0">{% trans "Stundenbilanz" %}</h4>
-            <a href="{% url 'wfm:calculate_balances' %}" class="btn btn-primary">
-                <i class="fas fa-calculator"></i> 
-                {% if user.role == 'OWNER' %}
-                    {% trans "Alle Überstunden berechnen" %}
-                {% else %}
-                    {% trans "Meine Überstunden berechnen" %}
-                {% endif %}
-            </a>
+            
         </div>
         <div class="card-body">
             <div class="table-responsive">

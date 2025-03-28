@@ -13,6 +13,8 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 import decimal
 from django.db.models.functions import Extract
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 
 
 class CustomUser(AbstractUser):
@@ -332,6 +334,7 @@ class WorkingHours(models.Model):
 
             # Erstelle/Aktualisiere OvertimeEntry
             overtime_hours = ist_hours - template_hours
+            print(f"Overtimehours: {overtime_hours}")
             if overtime_hours != 0:
                 OvertimeEntry.objects.update_or_create(
                     employee=self.employee,
@@ -1071,5 +1074,34 @@ class ClosureDay(models.Model):
         verbose_name = _('Schließtag')
         verbose_name_plural = _('Schließtage')
         unique_together = ['date', 'type']  # Verhindert doppelte Einträge
+
+@receiver(pre_delete, sender=WorkingHours)
+def handle_working_hours_deletion(sender, instance, **kwargs):
+    """Handler für das Löschen von WorkingHours"""
+    # Hole das passende Template für diesen Tag
+    template = ScheduleTemplate.objects.filter(
+        employee=instance.employee,
+        weekday=instance.date.weekday(),
+        valid_from__lte=instance.date
+    ).order_by('-valid_from').first()
+    
+    if template:
+        # Berechne Soll-Stunden aus Template
+        template_start = datetime.combine(date.min, template.start_time)
+        template_end = datetime.combine(date.min, template.end_time)
+        template_duration = template_end - template_start
+        if template.break_duration:
+            template_duration -= template.break_duration
+        soll_hours = Decimal(str(template_duration.total_seconds() / 3600))
+        
+        # Erstelle OvertimeEntry mit negativen Stunden
+        OvertimeEntry.objects.update_or_create(
+            employee=instance.employee,
+            date=instance.date,
+            defaults={
+                'hours': -soll_hours,  # Negative Stunden da keine Arbeitszeit
+                'working_hours': None  # WorkingHours wird gelöscht
+            }
+        )
 
 
