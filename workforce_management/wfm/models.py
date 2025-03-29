@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 import decimal
 from django.db.models.functions import Extract
-from django.db.models.signals import pre_delete
+from django.db.models.signals import pre_delete, post_save, post_delete
 from django.dispatch import receiver
 
 
@@ -1103,5 +1103,77 @@ def handle_working_hours_deletion(sender, instance, **kwargs):
                 'working_hours': None  # WorkingHours wird gelöscht
             }
         )
+
+class MonthlyWage(models.Model):
+    employee = models.ForeignKey(
+        'CustomUser',
+        on_delete=models.CASCADE,
+        related_name='monthly_wages'
+    )
+    year = models.IntegerField()
+    month = models.IntegerField()
+    total_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0')
+    )
+    wage = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0')
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('Monatliches Gehalt')
+        verbose_name_plural = _('Monatliche Gehälter')
+        unique_together = ['employee', 'year', 'month']
+        ordering = ['-year', '-month', 'employee']
+
+    def calculate_wage(self):
+        """Berechnet den Monatslohn basierend auf den Arbeitsstunden"""
+        monthly_working_hours = WorkingHours.objects.filter(
+            employee=self.employee,
+            date__year=self.year,
+            date__month=self.month
+        ).aggregate(
+            total_hours=models.Sum(
+                models.ExpressionWrapper(
+                    models.F('end_time') - models.F('start_time'),
+                    output_field=models.DurationField()
+                )
+            )
+        )['total_hours'] or timedelta()
+
+        # Konvertiere zu Dezimalstunden
+        self.total_hours = Decimal(str(monthly_working_hours.total_seconds() / 3600))
+        # Berechne Gehalt
+        self.wage = self.total_hours * self.employee.hourly_rate
+        self.save()
+
+@receiver(post_save, sender=WorkingHours)
+def update_monthly_wage_on_working_hours_change(sender, instance, **kwargs):
+    """Aktualisiert das MonthlyWage wenn WorkingHours geändert werden"""
+    monthly_wage, created = MonthlyWage.objects.get_or_create(
+        employee=instance.employee,
+        year=instance.date.year,
+        month=instance.date.month
+    )
+    monthly_wage.calculate_wage()
+
+@receiver(post_delete, sender=WorkingHours)
+def update_monthly_wage_on_working_hours_delete(sender, instance, **kwargs):
+    """Aktualisiert das MonthlyWage wenn WorkingHours gelöscht werden"""
+    try:
+        monthly_wage = MonthlyWage.objects.get(
+            employee=instance.employee,
+            year=instance.date.year,
+            month=instance.date.month
+        )
+        monthly_wage.calculate_wage()
+    except MonthlyWage.DoesNotExist:
+        pass  # Wenn kein MonthlyWage existiert, muss nichts aktualisiert werden
+
 
 

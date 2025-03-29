@@ -17,7 +17,8 @@ from .models import (
     OvertimeAccount,
     ClosureDay,
     UserDocument,
-    OvertimeEntry
+    OvertimeEntry,
+    MonthlyWage
 )
 from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
@@ -195,7 +196,8 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     'closure': closure,
                     'soll_hours': 0,
                     'ist_hours': 0,
-                    'difference': 0
+                    'ist_hours_value': 0,
+                    'difference_value': 0,
                 }
                 days_data.append(entry)
             elif day.weekday() >= 5:  # Wochenende
@@ -211,7 +213,8 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     'closure': None,
                     'soll_hours': 0,
                     'ist_hours': 0,
-                    'difference': 0,
+                    'ist_hours_value': 0,
+                    'difference_value': 0,
                     'is_weekend': True
                 }
                 days_data.append(entry)
@@ -232,12 +235,18 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     # Nur wenn es tatsächlich Einträge gibt oder ein Schedule existiert
                     if has_working_hours or has_schedule or has_vacation or has_sick_leave:
                         entry = {
-                            'date': day,
                             'employee': employee,
-                            'working_hours': has_working_hours,
+                            'date': day,
+                            'weekday': day.strftime('%A'),
+                            'ist_hours': '--:--',  # Default Anzeige
+                            'ist_hours_value': 0,  # Default numerischer Wert
+                            'difference_value': 0,
+                            'soll_hours': None,
                             'schedule': has_schedule,
-                            'vacation': has_vacation,
+                            'working_hours': has_working_hours,
+                            'closure': None,
                             'sick_leave': has_sick_leave,
+                            'vacation': has_vacation,
                             'is_weekend': False,
                             'break_minutes': int(has_working_hours.break_duration.total_seconds() / 60) if has_working_hours and has_working_hours.break_duration else None
                         }
@@ -281,9 +290,15 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             total_ist += entry['ist_hours_value']
                         else:
                             entry['ist_hours'] = ''  # Leerer String wenn kein Schedule
+                            entry['ist_hours_value'] = 0
+                            total_ist += entry['ist_hours_value']
 
-                        entry['difference_value'] =  entry['ist_hours_value'] - entry['soll_hours']
-
+                        # Berechne die Differenz nur wenn beide Werte existieren
+                        if entry['ist_hours_value'] is not None and entry['soll_hours'] is not None:
+                            entry['difference_value'] = entry['ist_hours_value'] - entry['soll_hours']
+                        else:
+                            entry['difference_value'] = None
+                        print(entry['difference_value'])
                         day_entries.append(entry)
 
                 # Wenn keine Einträge für diesen Tag existieren, füge einen leeren Tag hinzu
@@ -299,6 +314,8 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                         'closure': None,
                         'soll_hours': 0,
                         'ist_hours': 0,
+                        'ist_hours_value': 0,
+                        'difference_value': 0,
                         'difference': 0,
                         'is_weekend': False
                     }
@@ -336,6 +353,28 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             ).aggregate(total=models.Sum('hours'))['total'] or Decimal('0')
             total_monthly_overtime += monthly_entries
 
+        # Berechne den Monatslohn für jeden Mitarbeiter
+        monthly_salaries = {}  # Dictionary für alle Mitarbeiter-Gehälter
+        total_monthly_salary = Decimal('0')
+
+        
+
+        # Hole oder erstelle MonthlyWage Einträge
+        monthly_wages = {}
+        total_monthly_wage = Decimal('0')
+
+        for employee in employees:
+            monthly_wage, created = MonthlyWage.objects.get_or_create(
+                employee=employee,
+                year=year,
+                month=month
+            )
+            if created or monthly_wage.updated_at.date() < timezone.now().date():
+                monthly_wage.calculate_wage()
+            
+            monthly_wages[employee.id] = monthly_wage.wage
+            total_monthly_wage += monthly_wage.wage
+
         context.update({
             'dates': days_data,
             'year': year,
@@ -353,6 +392,8 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             'total_diff': total_monthly_overtime,  # Jetzt aus OvertimeEntries
             'employee_balances': employee_balances,  # Einzelbilanzen pro Mitarbeiter
             'total_balance': total_balance,  # Gesamtbilanz aller gefilterten Mitarbeiter
+            'monthly_wages': monthly_wages,
+            'total_monthly_wage': total_monthly_wage,
             'colors': {
                 'primary': '#90BE6D',    # Pistachio
                 'secondary': '#577590',   # Queen Blue
@@ -363,6 +404,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 'orange': '#F3722C',      # Orange Red
                 'yellow': '#F8961E',      # Yellow Orange
             },
+
         })
 
         # Debug-Ausgaben

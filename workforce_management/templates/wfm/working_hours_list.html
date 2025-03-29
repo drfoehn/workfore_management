@@ -262,25 +262,14 @@
                                     </span>
                                 {% endif %}
                             </td>
-                            <td>
-                                {% if date_entry.schedule or date_entry.working_hours %}
-                                    {% if not date_entry.vacation and not date_entry.sick_leave %}
-                                        {% if date_entry.difference_value > 0 %}
-                                            <span class="badge bg-pistachio">
-                                                + {{ date_entry.difference_value|floatformat:1 }}h
-                                            </span>
-                                        {% else %}
-                                            {% if date_entry.difference_value < 0 %}
-                                                <span class="badge bg-red-salsa">
-                                                    {{ date_entry.difference_value|floatformat:1 }}h
-                                                </span>
-                                            {% else %}
-                                                <span class="badge bg-asphalt">
-                                                    {{ date_entry.difference_value|floatformat:1 }}h
-                                                </span>
-                                            {% endif %}
-                                        {% endif %}
-                                    {% endif %}
+                            <td class="text-end">
+                                {% if date_entry.difference_value != None %}
+                                    <span class="{% if date_entry.difference_value > 0 %}badge bg-pistachio
+                                                 {% elif date_entry.difference_value < 0 %}badge bg-red-salsa
+                                                 {% else %}badge bg-asphalt{% endif %}">
+                                        {% if date_entry.difference_value > 0 %}+{% endif %}
+                                        {{ date_entry.difference_value|floatformat:1 }}h
+                                    </span>
                                 {% endif %}
                             </td>
                             <td class="text-end">
@@ -330,9 +319,7 @@
                             <td class="bg-queen-blue">{% trans "Ist" %}: {{ total_ist|floatformat:2 }}</td>
                             <td class="bg-queen-blue"></td>
                             <td class="bg-queen-blue">
-                                
-                                    {% trans "Monatliches Gehalt" %}: {{ total_soll_wage|floatformat:2 }} €
-               
+                                {% trans "Monatliches Gehalt" %}: {{ total_monthly_wage|floatformat:2 }} €
                             </td>
                             <td class="bg-queen-blue"   ></td>
                             <td class="bg-queen-blue"></td>
@@ -378,9 +365,9 @@
                                 <td>
                                     <span class="{% if balance > 0 %}badge bg-pistachio{% elif balance < 0 %}badge bg-red-salsa{% elif balance == 0 %}badge bg-asphalt{% endif %}">
                                         {% if balance > 0 %}
-                                            + {{ balance|floatformat:2 }}h
+                                            +{{ balance|floatformat:2 }}h
                                         {% elif balance < 0 %}
-                                            - {{ balance|floatformat:2 }}h
+                                             {{ balance|floatformat:2 }}h
                                         {% else %}
                                             {{ balance|floatformat:2 }}h
                                         {% endif %}

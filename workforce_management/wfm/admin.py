@@ -15,7 +15,8 @@ from .models import (
     OvertimeAccount,
     UserDocument,
     ClosureDay,
-    OvertimeEntry
+    OvertimeEntry,
+    MonthlyWage
 )
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
@@ -230,3 +231,35 @@ class OvertimeEntryAdmin(admin.ModelAdmin):
     list_filter = ['employee', 'is_locked', 'date']
     search_fields = ['employee__username', 'employee__first_name', 'employee__last_name']
     date_hierarchy = 'date'
+
+@admin.register(MonthlyWage)
+class MonthlyWageAdmin(admin.ModelAdmin):
+    list_display = [
+        'employee', 
+        'year', 
+        'month', 
+        'total_hours',
+        'wage',
+        'updated_at'
+    ]
+    list_filter = ['year', 'month', 'employee']
+    search_fields = [
+        'employee__username', 
+        'employee__first_name', 
+        'employee__last_name'
+    ]
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['-year', '-month', 'employee__first_name']
+    
+    actions = ['recalculate_wages']
+    
+    def recalculate_wages(self, request, queryset):
+        """Neuberechnung der ausgewählten Monatslöhne"""
+        for wage in queryset:
+            wage.calculate_wage()
+        self.message_user(
+            request,
+            _(f'{queryset.count()} Monatslöhne wurden neu berechnet.'),
+            messages.SUCCESS
+        )
+    recalculate_wages.short_description = _("Ausgewählte Löhne neu berechnen")
