@@ -293,8 +293,8 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             entry['ist_hours_value'] = 0
                             total_ist += entry['ist_hours_value']
 
-                        # Berechne die Differenz nur wenn beide Werte existieren
-                        if entry['ist_hours_value'] is not None and entry['soll_hours'] is not None:
+                        # Berechne die Differenz nur wenn ein Schedule Template existiert und beide Werte vorhanden sind
+                        if entry.get('schedule') and entry['ist_hours_value'] is not None and entry['soll_hours'] is not None:
                             entry['difference_value'] = entry['ist_hours_value'] - entry['soll_hours']
                         else:
                             entry['difference_value'] = None

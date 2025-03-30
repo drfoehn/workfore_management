@@ -262,14 +262,16 @@
                                     </span>
                                 {% endif %}
                             </td>
-                            <td class="text-end">
-                                {% if date_entry.difference_value != None %}
-                                    <span class="{% if date_entry.difference_value > 0 %}badge bg-pistachio
-                                                 {% elif date_entry.difference_value < 0 %}badge bg-red-salsa
-                                                 {% else %}badge bg-asphalt{% endif %}">
-                                        {% if date_entry.difference_value > 0 %}+{% endif %}
-                                        {{ date_entry.difference_value|floatformat:1 }}h
-                                    </span>
+                            <td>
+                                {% if date_entry.schedule %}  {# Nur anzeigen wenn es ein Schedule Template gibt #}
+                                    {% if date_entry.difference_value != None %}
+                                        <span class="{% if date_entry.difference_value > 0 %}badge bg-pistachio
+                                                     {% elif date_entry.difference_value < 0 %}badge bg-red-salsa
+                                                     {% else %}badge bg-asphalt{% endif %}">
+                                            {% if date_entry.difference_value > 0 %}+{% endif %}
+                                            {{ date_entry.difference_value|floatformat:1 }}h
+                                        </span>
+                                    {% endif %}
                                 {% endif %}
                             </td>
                             <td class="text-end">
