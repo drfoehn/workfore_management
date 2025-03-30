@@ -313,20 +313,37 @@
                         </tbody>
                         <tfoot>
                         <!-- Summenzeile -->
+                        {% for employee_id, balance in employee_balances.items %}
                         <tr class="table-secondary fw-bold">
-                            <td class="bg-queen-blue">{% trans "Summe" %}</td>
-                            <td class="bg-queen-blue">{% trans "Soll" %}: {{ total_soll|floatformat:2 }}</td>
-                            <td class="bg-queen-blue">{% trans "Ist" %}: {{ total_ist|floatformat:2 }}</td>
+                            <td class="bg-queen-blue"><strong>{{ employees|get_item:employee_id }}</strong></td>
+                            <td class="bg-queen-blue">{% trans "Soll" %}: {{ total_soll_per_employee|get_item:employee_id|default:0|floatformat:2 }}h</td>
+                            <td class="bg-queen-blue">{% trans "Ist" %}: {{ total_ist_per_employee|get_item:employee_id|default:0|floatformat:2 }}h</td>
                             <td class="bg-queen-blue"></td>
                             <td class="bg-queen-blue">
-                                {% trans "Monatliches Gehalt" %}: {{ total_monthly_wage|floatformat:2 }} €
+                                {% trans "Monatsgehalt" %}: {{ monthly_wages_per_employee|get_item:employee_id|default:0|floatformat:2 }} €
                             </td>
-                            <td class="bg-queen-blue"   ></td>
+                            <td class="bg-queen-blue"></td>
                             <td class="bg-queen-blue"></td>
                             {% if user.role == 'OWNER' %}
                                 <td class="bg-queen-blue"></td>
                             {% endif %}
                         </tr>
+                        {% endfor %}
+                        <!-- Gesamtsumme -->
+                        {% if user.role == 'OWNER' %}
+                        <tr class="table-secondary fw-bold">
+                            <td class="bg-red-salsa">{% trans "Gesamtsumme" %}</td>
+                            <td class="bg-red-salsa">{% trans "Soll" %}: {{ total_soll|floatformat:2 }}h</td>
+                            <td class="bg-red-salsa">{% trans "Ist" %}: {{ total_ist|floatformat:2 }}h</td>
+                            <td class="bg-red-salsa"></td>
+                            <td class="bg-red-salsa">
+                                {% trans "Monatsgehälter" %}: {{ total_monthly_wage|floatformat:2 }} €
+                            </td>
+                            <td class="bg-red-salsa"></td>
+                            <td class="bg-red-salsa"></td>
+                            <td class="bg-red-salsa"></td>
+                        </tr>
+                        {% endif %}
                         </tfoot>
                    
                 </table>

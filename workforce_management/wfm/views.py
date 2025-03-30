@@ -322,6 +322,11 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     days_data.append(entry)
                 else:
                     days_data.extend(day_entries)
+        
+
+        
+
+
 
         # 9. Hole die Gesamtbilanz für jeden Mitarbeiter
         employee_balances = {}
@@ -375,6 +380,56 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             monthly_wages[employee.id] = monthly_wage.wage
             total_monthly_wage += monthly_wage.wage
 
+        # Initialisiere die Dictionaries für die Summen pro Mitarbeiter
+        total_soll_per_employee = {}
+        total_ist_per_employee = {}
+        monthly_wages_per_employee = {}  # Neu: Dictionary für Monatsgehälter
+
+        print("\n=== Debug: Berechnung der Summen pro Mitarbeiter ===")
+
+        # Berechne die Summen für jeden Mitarbeiter
+        for employee_id, balance in employee_balances.items():
+            total_soll = Decimal('0')
+            total_ist = Decimal('0')
+            
+            # Hole das MonthlyWage für diesen Mitarbeiter
+            monthly_wage = MonthlyWage.objects.filter(
+                employee_id=employee_id,
+                year=year,
+                month=month
+            ).first()
+            
+            # Speichere das Gehalt (oder 0 wenn keins gefunden)
+            monthly_wages_per_employee[employee_id] = monthly_wage.wage if monthly_wage else Decimal('0')
+            
+            print(f"\nMitarbeiter ID: {employee_id}")
+            
+            # Filtere die Einträge für diesen Mitarbeiter
+            employee_entries = [
+                entry for entry in days_data 
+                if entry.get('employee') and str(entry['employee'].id) == str(employee_id)
+            ]
+            print(f"Anzahl Einträge: {len(employee_entries)}")
+            
+            # Berechne die Summen für diesen Mitarbeiter
+            for entry in employee_entries:
+                soll = Decimal(str(entry.get('soll_hours', 0) or 0))
+                ist = Decimal(str(entry.get('ist_hours_value', 0) or 0))
+                total_soll += soll
+                total_ist += ist
+                print(f"Eintrag - Soll: {soll}, Ist: {ist}")
+            
+            # Speichere die Summen für diesen Mitarbeiter
+            total_soll_per_employee[employee_id] = total_soll
+            total_ist_per_employee[employee_id] = total_ist
+            print(f"Summen - Soll: {total_soll}, Ist: {total_ist}")
+
+        print("\n=== Debug: Finale Dictionaries ===")
+        print("total_soll_per_employee:", total_soll_per_employee)
+        print("total_ist_per_employee:", total_ist_per_employee)
+        print("employee_balances:", employee_balances)
+        print("days_data Beispiel:", days_data[0] if days_data else "Keine Einträge")
+
         context.update({
             'dates': days_data,
             'year': year,
@@ -404,7 +459,9 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 'orange': '#F3722C',      # Orange Red
                 'yellow': '#F8961E',      # Yellow Orange
             },
-
+            'total_soll_per_employee': total_soll_per_employee,
+            'total_ist_per_employee': total_ist_per_employee,
+            'monthly_wages_per_employee': monthly_wages_per_employee,  # Neu
         })
 
         # Debug-Ausgaben
@@ -3572,7 +3629,10 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
             'prev_month': (current_date - relativedelta(months=1)),
-            'next_month': (current_date + relativedelta(months=1))
+            'next_month': (current_date + relativedelta(months=1)),
+            'total_soll_per_employee': total_soll_per_employee,
+            'total_ist_per_employee': total_ist_per_employee,
+            'monthly_wages_per_employee': monthly_wages_per_employee,  # Neu
         })
         
         return context
