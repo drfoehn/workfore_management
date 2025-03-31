@@ -1207,7 +1207,7 @@ class TherapistMonthlyOverviewView(LoginRequiredMixin, TemplateView):
                 # Berechne ausstehende Zahlungen
                 pending_payment = bookings.filter(
                     actual_hours__gt=F('hours'),
-                    therapist_extra_hours_payment_status='PENDING'
+                    is_paid=False
                 ).aggregate(
                     total=Coalesce(Sum('difference_hours', output_field=DecimalField()), 0, output_field=DecimalField())
                 )['total'] * (therapist.room_rate or 0)  # Multipliziere mit dem Stundensatz
@@ -1564,7 +1564,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             context['pending_vacations'] = Vacation.objects.filter(status='PENDING').count()
             # context['pending_time_compensations'] = TimeCompensation.objects.filter(status='PENDING').count()
             context['pending_sick_leaves'] = SickLeave.objects.filter(status='PENDING').count()
-            context['pending_therapist_bookings'] = TherapistBooking.objects.filter(therapist_extra_hours_payment_status='PENDING').count()
+            context['pending_therapist_bookings'] = TherapistBooking.objects.filter(is_paid=False).count()
 
         if user.role == 'ASSISTANT' or user.role == 'CLEANING':
             # Kontext für Assistenz/Reinigung
@@ -2183,7 +2183,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         total_booked_amount = Decimal('0.00') # Gebuchte Stunden * room_rate
         extra_costs = Decimal('0.00')         # Mehrstunden * room_rate
         total_sum = Decimal('0.00')           # Gesamtkosten
-        therapist_extra_hours_payment_status = 'PENDING'    # Default Status bleibt PENDING
+        is_paid = False    # Default Status bleibt PENDING
 
         for booking in bookings:
             # Verwendete Stunden
@@ -2199,8 +2199,8 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
                 total_extra_hours += booking.difference_hours
                 extra_costs += booking.difference_hours * booking.therapist.room_rate
                 # Wenn alle Buchungen mit Mehrstunden PAID sind, setze Status auf PAID
-                if booking.therapist_extra_hours_payment_status == 'PAID':
-                    therapist_extra_hours_payment_status = 'PAID'
+                if booking.is_paid:
+                    is_paid = True
 
             # Gesamtkosten
             total_sum = total_booked_amount + extra_costs
@@ -2211,7 +2211,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             'total_booked_amount': total_booked_amount,
             'extra_costs': extra_costs,
             'total_sum': total_sum,
-            'payment_status': therapist_extra_hours_payment_status  # Schlüssel geändert
+            'is_paid': is_paid  # Schlüssel geändert
         }
 
         # Füge Therapeuten für Filter hinzu (nur für Owner)
@@ -2242,10 +2242,10 @@ def api_therapist_booking_update(request):
             if 'notes' in data:
                 booking.notes = data['notes']
             # Füge extra_hours_payment_status Update für OWNER hinzu
-            if 'therapist_extra_hours_payment_status' in data and booking.difference_hours:
-                booking.therapist_extra_hours_payment_status = data['therapist_extra_hours_payment_status']
-                if data['therapist_extra_hours_payment_status'] == 'PAID':
-                    booking.therapist_extra_hours_payment_date = timezone.now().date()
+            if 'is_paid' in data and booking.difference_hours:
+                booking.is_paid = data['is_paid']
+                if data['is_paid']:
+                    booking.paid_date = timezone.now().date()
         elif request.user == booking.therapist:
             # Therapeut darf nur actual_hours und notes ändern
             if 'actual_hours' in data and data['actual_hours']:
@@ -2272,7 +2272,7 @@ def api_therapist_booking_update(request):
                 'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
                 'difference_hours': float(booking.difference_hours) if booking.difference_hours else None,
                 'notes': booking.notes,
-                'therapist_extra_hours_payment_status': booking.therapist_extra_hours_payment_status
+                'is_paid': booking.is_paid
             }
         })
         
@@ -3149,7 +3149,7 @@ class EmployeeDetailView(LoginRequiredMixin, DetailView):
                     total=Sum('actual_hours')
                 )['total'] or 0
                 
-                pending_bookings = bookings.filter(therapist_extra_hours_payment_status='PENDING')
+                pending_bookings = bookings.filter(is_paid=False)
                 pending_hours = pending_bookings.aggregate(
                     total=Sum('actual_hours')
                 )['total'] or 0
@@ -3202,8 +3202,8 @@ def api_therapist_booking_mark_as_paid(request):
         booking_ids = data.get('booking_ids', [])
         
         TherapistBooking.objects.filter(id__in=booking_ids).update(
-            therapist_extra_hours_payment_status='PAID',
-            therapist_extra_hours_payment_date=timezone.now().date()
+            is_paid=True,
+            paid_date=timezone.now().date()
         )
         
         return JsonResponse({'success': True})
@@ -3238,8 +3238,8 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             'therapist__first_name',
             'therapist__last_name',
             'therapist__room_rate',
-            'therapist_extra_hours_payment_status',
-            'therapist_extra_hours_payment_date'  # Hinzugefügt für Datumsanzeige
+            'is_paid',  # Neue Felder
+            'paid_date'
         ).annotate(
             scheduled_hours=Coalesce(Sum('hours'), Value(0, output_field=DecimalField())),
             actual_hours=Coalesce(Sum('actual_hours'), Value(0, output_field=DecimalField())),
@@ -3260,25 +3260,23 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             )
         ).order_by('therapist__first_name', 'therapist__last_name')
 
-
         # Gruppiere die Ergebnisse nach Therapeut
         grouped_income = {}
         for booking in therapist_income:
             therapist_id = booking['therapist_id']
             if therapist_id not in grouped_income:
                 grouped_income[therapist_id] = {
-                    'therapist_id': therapist_id,  # Wichtig: ID für den Button
+                    'therapist_id': therapist_id,
                     'therapist_name': booking['therapist_name'],
                     'scheduled_hours': booking['scheduled_hours'],
                     'actual_hours': booking['actual_hours'],
                     'difference_hours': booking['difference_hours'],
                     'room_cost': booking['room_cost'],
                     'extra_cost': booking['extra_cost'],
-                    'therapist_extra_hours_payment_status': booking['therapist_extra_hours_payment_status'],
-                    'therapist_extra_hours_payment_date': booking['therapist_extra_hours_payment_date'],
+                    'is_paid': booking['is_paid'],  # Neue Felder
+                    'paid_date': booking['paid_date'],
                     'total': booking['room_cost'] + booking['extra_cost']
                 }
-
 
         context['grouped_income'] = grouped_income.values()
 
@@ -3473,24 +3471,43 @@ def api_mark_extra_hours_as_paid(request):
     try:
         data = json.loads(request.body)
         therapist_id = data.get('therapist_id')
-        month = data.get('month')
-        year = data.get('year')
+        month = int(data.get('month'))
+        year = int(data.get('year'))
+        set_paid = data.get('set_paid', True)
+        current_date = timezone.now().date()
         
-        # Markiere alle Mehrstunden als bezahlt
-        TherapistBooking.objects.filter(
+        # Hole alle relevanten Buchungen
+        bookings = TherapistBooking.objects.filter(
             therapist_id=therapist_id,
             date__year=year,
             date__month=month,
-            actual_hours__gt=F('hours'),
-            therapist_extra_hours_payment_status='PENDING'
-        ).update(
-            therapist_extra_hours_payment_status='PAID',
-            therapist_extra_hours_payment_date=timezone.now().date()
+            actual_hours__gt=F('hours')
         )
         
-        return JsonResponse({'success': True})
+        if not bookings.exists():
+            return JsonResponse({
+                'success': False,
+                'error': gettext('Keine Mehrstunden gefunden')
+            })
+        
+        # Aktualisiere den Status
+        bookings.update(
+            is_paid=set_paid,
+            paid_date=current_date if set_paid else None
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'is_paid': set_paid,
+            'paid_date': current_date.strftime('%d.%m.%Y') if set_paid else None
+        })
+        
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.error(f"Fehler beim Markieren der Therapeuten-Mehrstunden: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 @login_required
 def api_working_hours_create(request):
@@ -3590,32 +3607,39 @@ def api_mark_therapist_extra_hours_as_paid(request):
         month = int(data.get('month'))
         year = int(data.get('year'))
         set_paid = data.get('set_paid', True)
+        current_date = timezone.now().date()
         
         # Hole alle Buchungen für diesen Monat
         bookings = TherapistBooking.objects.filter(
             therapist_id=therapist_id,
             date__year=year,
             date__month=month,
-            actual_hours__gt=F('hours'),
-            therapist_extra_hours_payment_status='PENDING' if set_paid else 'PAID'
+            actual_hours__gt=F('hours')
         )
         
-        # Markiere alle als bezahlt/unbezahlt
-        new_status = 'PAID' if set_paid else 'PENDING'
-        new_date = timezone.now().date() if set_paid else None
+        if not bookings.exists():
+            return JsonResponse({
+                'success': False,
+                'error': gettext('Keine Mehrstunden gefunden')
+            })
+        
+        # Aktualisiere den Status - HIER ist der Fehler
+        new_status = 'PAID' if set_paid else 'PENDING'  # Diese Zeile entfernen!
+        new_date = current_date if set_paid else None
         
         updated_count = bookings.update(
-            therapist_extra_hours_payment_status=new_status,
-            therapist_extra_hours_payment_date=new_date
+            is_paid=set_paid,  # Direkt den Boolean verwenden
+            paid_date=new_date
         )
         
         return JsonResponse({
             'success': True,
-            'updated': updated_count
+            'is_paid': set_paid,
+            'paid_date': current_date.strftime('%d.%m.%Y') if set_paid else None
         })
         
     except Exception as e:
-        logger.error(f"Error in api_mark_therapist_extra_hours_as_paid: {str(e)}", exc_info=True)
+        logger.error(f"Fehler beim Markieren der Therapeuten-Mehrstunden: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -3681,9 +3705,17 @@ def api_mark_salary_as_paid(request):
     try:
         data = json.loads(request.body)
         employee_id = data.get('employee_id')
-        month = data.get('month')
-        year = data.get('year')
+        month = int(data.get('month'))
+        year = int(data.get('year'))
         set_paid = data.get('set_paid', True)
+        current_date = timezone.now().date()
+        
+        # Hole oder erstelle MonthlyWage für diesen Monat
+        monthly_wage, created = MonthlyWage.objects.get_or_create(
+            employee_id=employee_id,
+            year=year,
+            month=month
+        )
         
         # Aktualisiere alle Arbeitsstunden-Einträge für diesen Monat
         working_hours = WorkingHours.objects.filter(
@@ -3698,19 +3730,33 @@ def api_mark_salary_as_paid(request):
                 'error': gettext('Keine Arbeitsstunden gefunden')
             })
         
-        updated_count = working_hours.update(
+        # Aktualisiere den Bezahlstatus
+        working_hours.update(
             is_paid=set_paid,
-            paid_date=timezone.now().date() if set_paid else None
+            paid_date=current_date if set_paid else None
         )
+        
+        # Aktualisiere auch den MonthlyWage Eintrag
+        monthly_wage.is_paid = set_paid
+        monthly_wage.paid_date = current_date if set_paid else None
+        monthly_wage.save()
+        
+        # Hole den aktualisierten Status für die Antwort
+        updated_wage = MonthlyWage.objects.get(pk=monthly_wage.pk)
         
         return JsonResponse({
             'success': True,
-            'updated': updated_count
+            'is_paid': updated_wage.is_paid,
+            'paid_date': updated_wage.paid_date.strftime('%d.%m.%Y') if updated_wage.paid_date else None,
+            'employee_id': employee_id
         })
         
     except Exception as e:
         logger.error(f"Fehler beim Markieren des Gehalts: {str(e)}", exc_info=True)
-        return JsonResponse({'success': False, 'error': str(e)})
+        return JsonResponse({
+            'success': False, 
+            'error': str(e)
+        }, status=500)
 
 @login_required
 def api_overtime_overview(request):
@@ -3943,7 +3989,7 @@ class TherapistBookingCreateView(LoginRequiredMixin, CreateView):
                 # Wenn keine gebuchten Stunden vorliegen (hours=0), 
                 # sind die kompletten actual_hours Mehrstunden
                 booking.difference_hours = actual_hours
-                booking.therapist_extra_hours_payment_status = 'PENDING'
+                booking.is_paid = False
                 booking.save()
             
             return JsonResponse({
@@ -4006,7 +4052,7 @@ class TherapistBookingDetailView(LoginRequiredMixin, UserPassesTestMixin, Detail
             'hours': float(obj.hours) if obj.hours else None,
             'actual_hours': float(obj.actual_hours) if obj.actual_hours else None,
             'notes': obj.notes or '',
-            'therapist_extra_hours_payment_status': obj.therapist_extra_hours_payment_status
+            'is_paid': obj.is_paid
         })
 
 class TherapistBookingDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):

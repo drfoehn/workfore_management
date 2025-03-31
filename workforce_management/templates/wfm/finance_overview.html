@@ -83,18 +83,18 @@
                                     <td>{{ income.extra_cost|floatformat:2 }} €</td>
                                     <td>
                                         {% if income.difference_hours > 0 %}
-                                            {% if income.therapist_extra_hours_payment_status == 'PENDING' %}
-                                                <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
-                                            {% else %}
-                                                <span class="badge bg-success">{% trans "Bezahlt" %}</span>
-                                            {% endif %}
+                                        {% if not income.is_paid %}
+                                        <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                    {% else %}
+                                        <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                    {% endif %}
                                         {% else %}
                                             -
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if income.therapist_extra_hours_payment_date %}
-                                            {{ income.therapist_extra_hours_payment_date|date:"d.m.Y" }}
+                                        {% if income.paid_date %}
+                                            {{ income.paid_date|date:"d.m.Y" }}
                                         {% else %}
                                             -
                                         {% endif %}
@@ -102,11 +102,11 @@
                                     <td>
                                         {% if income.difference_hours > 0 %}
                                             <button type="button"
-                                                    class="btn btn-sm {% if income.therapist_extra_hours_payment_status == 'PAID' %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-therapist-paid-btn" 
+                                                    class="btn btn-sm {% if income.is_paid %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-therapist-paid-btn" 
                                                     data-therapist-id="{{ income.therapist_id }}"
                                                     data-month="{{ current_date.month }}"
                                                     data-year="{{ current_date.year }}">
-                                                {% if income.therapist_extra_hours_payment_status == 'PAID' %}
+                                                {% if income.is_paid %}
                                                     <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
                                                 {% else %}
                                                     <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
@@ -227,6 +227,9 @@
                                     <th>{% trans "Arbeitsstunden" %}</th>
                                     <th>{% trans "Abwesenheitsstunden" %}</th>
                                     <th>{% trans "Betrag" %}</th>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Bezahlt am" %}</th>
+                                    <th>{% trans "Aktionen" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -237,6 +240,33 @@
                                     <td>{{ expense.worked_hours|floatformat:1 }}h</td>
                                     <td>{{ expense.absence_hours|floatformat:1 }}h</td>
                                     <td>{{ expense.amount|floatformat:2 }}€</td>
+                                    <td>
+                                        {% if expense.is_paid %}
+                                            <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if expense.paid_date %}
+                                            {{ expense.paid_date|date:"d.m.Y" }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button type="button"
+                                                class="btn btn-sm {% if expense.is_paid %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-salary-paid-btn"
+                                                data-employee-id="{{ expense.employee__id }}"
+                                                data-month="{{ current_date.month }}"
+                                                data-year="{{ current_date.year }}">
+                                            {% if expense.is_paid %}
+                                                <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
+                                            {% else %}
+                                                <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
+                                            {% endif %}
+                                        </button>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             <tfoot>
@@ -400,13 +430,34 @@ $(document).ready(function() {
             }),
             success: function(response) {
                 if (response.success) {
-                    location.reload();
+                    const $row = $btn.closest('tr');
+                    const $statusBadge = $row.find('.badge');
+                    const $paidDateCell = $row.find('td:nth-child(7)');
+                    
+                    if (response.is_paid) {
+                        $btn.removeClass('bg-pistachio').addClass('btn-outline-success');
+                        $btn.html('<i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}');
+                        $statusBadge.removeClass('bg-warning').addClass('bg-success');
+                        $statusBadge.text('{% trans "Bezahlt" %}');
+                        $paidDateCell.text(response.paid_date);
+                    } else {
+                        $btn.removeClass('btn-outline-success').addClass('bg-pistachio');
+                        $btn.html('<i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}');
+                        $statusBadge.removeClass('bg-success').addClass('bg-warning');
+                        $statusBadge.text('{% trans "Ausstehend" %}');
+                        $paidDateCell.text('-');
+                    }
                 } else {
-                    alert('{% trans "Ein Fehler ist aufgetreten" %}');
+                    alert(response.error || '{% trans "Ein Fehler ist aufgetreten" %}');
                 }
             },
-            error: function() {
-                alert('{% trans "Ein Fehler ist aufgetreten" %}');
+            error: function(xhr) {
+                console.error('Error:', xhr);
+                let errorMessage = '{% trans "Ein Fehler ist aufgetreten" %}';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMessage = xhr.responseJSON.error;
+                }
+                alert(errorMessage);
             }
         });
     });
@@ -459,13 +510,6 @@ $(document).ready(function() {
         const year = $btn.data('year');
         const isPaid = $btn.hasClass('btn-outline-success');
         
-        console.log('Salary button clicked:', {
-            employeeId: employeeId,
-            month: month,
-            year: year,
-            isPaid: isPaid
-        });
-        
         $.ajax({
             url: '{% url "wfm:api-mark-salary-as-paid" %}',
             method: 'POST',
@@ -481,14 +525,34 @@ $(document).ready(function() {
             }),
             success: function(response) {
                 if (response.success) {
-                    location.reload();
+                    const $row = $btn.closest('tr');
+                    const $statusBadge = $row.find('.badge');
+                    const $paidDateCell = $row.find('td:nth-child(7)');
+                    
+                    if (response.is_paid) {
+                        $btn.removeClass('bg-pistachio').addClass('btn-outline-success');
+                        $btn.html('<i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}');
+                        $statusBadge.removeClass('bg-warning').addClass('bg-success');
+                        $statusBadge.text('{% trans "Bezahlt" %}');
+                        $paidDateCell.text(response.paid_date);
+                    } else {
+                        $btn.removeClass('btn-outline-success').addClass('bg-pistachio');
+                        $btn.html('<i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}');
+                        $statusBadge.removeClass('bg-success').addClass('bg-warning');
+                        $statusBadge.text('{% trans "Ausstehend" %}');
+                        $paidDateCell.text('-');
+                    }
                 } else {
-                    alert('{% trans "Ein Fehler ist aufgetreten" %}: ' + response.error);
+                    alert(response.error || '{% trans "Ein Fehler ist aufgetreten" %}');
                 }
             },
             error: function(xhr) {
                 console.error('Error:', xhr);
-                alert('{% trans "Ein Fehler ist aufgetreten" %}');
+                let errorMessage = '{% trans "Ein Fehler ist aufgetreten" %}';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMessage = xhr.responseJSON.error;
+                }
+                alert(errorMessage);
             }
         });
     });

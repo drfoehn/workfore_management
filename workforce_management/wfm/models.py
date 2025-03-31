@@ -289,20 +289,19 @@ class WorkingHours(models.Model):
         unique_together = ['employee', 'date']
 
     def save(self, *args, **kwargs):
-        is_new = self.pk is None
-        old_instance = None if is_new else WorkingHours.objects.get(pk=self.pk)
-        
-        # Prüfe ob Änderung erlaubt ist
-        if not is_new:
-            locked_entry = OvertimeEntry.objects.filter(
-                employee=self.employee,
-                date=self.date,
-                is_locked=True
-            ).exists()
-            if locked_entry:
-                raise ValidationError(_("Arbeitszeiten können nicht geändert werden - "
-                                     "Überstunden wurden bereits zur Auszahlung markiert"))
-
+        if not self._state.adding:  # Wenn es ein Update ist
+            original = WorkingHours.objects.get(pk=self.pk)
+            if original.is_paid:
+                # Erlaube nur Änderungen an is_paid und paid_date
+                protected_fields = ['start_time', 'end_time', 'break_duration', 'date', 'employee_id']
+                for field in protected_fields:
+                    if getattr(self, field) != getattr(original, field):
+                        raise ValidationError(_("Bezahlte Arbeitszeiten können nicht mehr geändert werden."))
+                
+                # Toggle is_paid und paid_date
+                if self.is_paid != original.is_paid:
+                    self.paid_date = timezone.now().date() if self.is_paid else None
+                
         super().save(*args, **kwargs)
 
         # Berechne Überstunden
@@ -658,11 +657,6 @@ class TimeCompensation(models.Model):
 
 class TherapistBooking(models.Model):
     """Raumbuchungen für Therapeuten"""
-    PAYMENT_STATUS_CHOICES = [
-        ('PENDING', 'Ausstehend'),
-        ('PAID', 'Bezahlt'),
-    ]
-    
     therapist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     date = models.DateField()
     start_time = models.TimeField()
@@ -677,17 +671,16 @@ class TherapistBooking(models.Model):
         verbose_name=_('Stundendifferenz'),
         help_text=_('Differenz zwischen geplanten und tatsächlichen Stunden')
     )
-    therapist_extra_hours_payment_status = models.CharField(
-        max_length=10,
-        choices=PAYMENT_STATUS_CHOICES,
-        default='PENDING',
-        verbose_name=_('Zahlungsstatus Mehrstunden'),
-        help_text=_('Zahlungsstatus nur für die Mehrstunden')
+    is_paid = models.BooleanField(
+        default=False,
+        verbose_name=_('Bezahlt'),
+        help_text=_('Gibt an, ob die Mehrstunden bezahlt wurden')
     )
-    therapist_extra_hours_payment_date = models.DateField(
-        null=True, 
+    paid_date = models.DateField(
+        null=True,
         blank=True,
-        verbose_name=_('Bezahlt am')
+        verbose_name=_('Bezahlt am'),
+        help_text=_('Datum der Bezahlung der Mehrstunden')
     )
     notes = models.TextField(blank=True)
 
@@ -708,10 +701,22 @@ class TherapistBooking(models.Model):
             if self.actual_hours > self.hours:
                 # Wenn mehr Stunden verwendet als gebucht wurden
                 self.difference_hours = self.actual_hours - self.hours
-                self.therapist_extra_hours_payment_status = 'PENDING'
+                self.is_paid = False
             else:
                 self.difference_hours = None  # Keine Differenz wenn actual_hours <= hours
-
+                
+        if not self._state.adding:  # Wenn es ein Update ist
+            original = TherapistBooking.objects.get(pk=self.pk)
+            if original.is_paid:
+                # Erlaube nur Änderungen an is_paid und paid_date
+                protected_fields = ['therapist', 'date', 'start_time', 'end_time', 'hours', 'actual_hours']
+                for field in protected_fields:
+                    if getattr(self, field) != getattr(original, field):
+                        raise ValidationError(_("Bezahlte Buchungen können nicht mehr geändert werden."))
+                
+                # Toggle is_paid und paid_date
+                if self.is_paid != original.is_paid:
+                    self.paid_date = timezone.now().date() if self.is_paid else None
         super().save(*args, **kwargs)
 
     def clean(self):
@@ -796,7 +801,8 @@ class TherapistScheduleTemplate(models.Model):
                         hours=hours,
                         actual_hours=hours,  # Initial gleich den gebuchten Stunden
                         difference_hours=0,
-                        therapist_extra_hours_payment_status='PENDING'
+                        is_paid=False,
+                        paid_date=None
                     )
             
             current_date += timedelta(days=1)
@@ -1125,6 +1131,8 @@ class MonthlyWage(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_paid = models.BooleanField(default=False)
+    paid_date = models.DateField(null=True, blank=True)
 
     class Meta:
         verbose_name = _('Monatliches Gehalt')
@@ -1157,6 +1165,22 @@ class MonthlyWage(models.Model):
             self.wage = Decimal('0.00')
         
         self.save()
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:  # Wenn es ein Update ist
+            original = MonthlyWage.objects.get(pk=self.pk)
+            if original.is_paid:
+                # Erlaube nur Änderungen an is_paid und paid_date
+                protected_fields = ['total_hours', 'wage', 'year', 'month', 'employee_id']
+                for field in protected_fields:
+                    if getattr(self, field) != getattr(original, field):
+                        raise ValidationError(_("Bezahlte Gehälter können nicht mehr geändert werden."))
+                
+                # Toggle is_paid und paid_date
+                if self.is_paid != original.is_paid:
+                    self.paid_date = timezone.now().date() if self.is_paid else None
+                
+        super().save(*args, **kwargs)
 
 @receiver(post_save, sender=WorkingHours)
 def update_monthly_wage_on_working_hours_change(sender, instance, **kwargs):

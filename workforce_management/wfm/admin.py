@@ -22,6 +22,7 @@ from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from django.utils import timezone
 from django.contrib import messages
+from django.db.models import F
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -89,17 +90,18 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(TherapistBooking)
 class TherapistBookingAdmin(admin.ModelAdmin):
-    list_display = ('therapist', 'date', 'start_time', 'end_time', 'therapist_extra_hours_payment_status', 'therapist_extra_hours_payment_date')
-    list_filter = ('therapist_extra_hours_payment_status', 'date', 'therapist')
+    list_display = ('therapist', 'date', 'start_time', 'end_time', 'hours', 'actual_hours', 'difference_hours', 'is_paid', 'paid_date')
+    list_filter = ('is_paid', 'date', 'therapist')
     search_fields = ('therapist__username', 'notes')
     date_hierarchy = 'date'
     ordering = ('-date', 'start_time')
-    actions = ['mark_as_paid']
+    actions = ['mark_as_paid', 'mark_as_unpaid']
 
-    def mark_as_paid(self, request, queryset):  
+    def mark_as_paid(self, request, queryset):
+        current_date = timezone.now().date()
         updated = queryset.update(
-            therapist_extra_hours_payment_status='PAID',
-            therapist_extra_hours_payment_date=timezone.now().date()
+            is_paid=True,
+            paid_date=current_date
         )
         self.message_user(
             request,
@@ -107,6 +109,22 @@ class TherapistBookingAdmin(admin.ModelAdmin):
             messages.SUCCESS
         )
     mark_as_paid.short_description = _('Als bezahlt markieren')
+
+    def mark_as_unpaid(self, request, queryset):
+        updated = queryset.update(
+            is_paid=False,
+            paid_date=None
+        )
+        self.message_user(
+            request,
+            _(f'{updated} Buchungen wurden als unbezahlt markiert.'),
+            messages.SUCCESS
+        )
+    mark_as_unpaid.short_description = _('Bezahlung zurücksetzen')
+
+    def get_queryset(self, request):
+        # Zeige nur Buchungen mit Mehrstunden
+        return super().get_queryset(request).filter(actual_hours__gt=F('hours'))
 
 @admin.register(TimeCompensation)
 class TimeCompensationAdmin(admin.ModelAdmin):
@@ -251,7 +269,7 @@ class MonthlyWageAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at']
     ordering = ['-year', '-month', 'employee__first_name']
     
-    actions = ['recalculate_wages']
+    actions = ['recalculate_wages', 'change_is_paid_true', 'change_is_paid_false']
     
     def recalculate_wages(self, request, queryset):
         """Neuberechnung der ausgewählten Monatslöhne"""
@@ -263,3 +281,27 @@ class MonthlyWageAdmin(admin.ModelAdmin):
             messages.SUCCESS
         )
     recalculate_wages.short_description = _("Ausgewählte Löhne neu berechnen")
+
+        #is_paid status auf true setzen  
+    def change_is_paid_true(self, request, queryset):
+        for wage in queryset:
+            wage.is_paid = True
+            wage.save()
+        self.message_user(
+            request,
+                _(f'{queryset.count()} Monatslöhne wurden als bezahlt markiert.'),
+            messages.SUCCESS
+        )
+    change_is_paid_true.short_description = _("Als bezahlt markieren")
+
+    #is_paid status auf false setzen 
+    def change_is_paid_false(self, request, queryset):
+        for wage in queryset:
+            wage.is_paid = False
+            wage.save()
+        self.message_user(
+            request,
+            _(f'{queryset.count()} Monatslöhne wurden als nicht bezahlt markiert.'),
+            messages.SUCCESS
+        )
+    change_is_paid_false.short_description = _("Als nicht bezahlt markieren")
