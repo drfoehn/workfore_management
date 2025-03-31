@@ -767,7 +767,8 @@ class TherapistScheduleTemplate(models.Model):
             
     def create_future_bookings(self):
         """Erstellt Buchungen für die nächsten 3 Jahre basierend auf diesem Template"""
-        start_date = max(self.valid_from, date.today())
+        # Verwende immer valid_from als Startdatum, unabhängig vom aktuellen Datum
+        start_date = self.valid_from
         end_date = start_date + timedelta(days=3*365)  # 3 Jahre
         current_date = start_date
         

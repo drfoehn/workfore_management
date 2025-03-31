@@ -202,8 +202,59 @@
             </div>
         </div>
         {% endif %}
+    
+    {% if employee.role == 'THERAPIST' %}
+    <!-- Für Therapeuten -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">{% trans "Standardbuchungszeiten" %}</h5>
+        </div>
+        <div class="card-body">
+            {% for period in schedule_history %}
+            <div class="mb-4">
+                <h6 class="border-bottom pb-2">
+                    {% trans "Gültig ab" %} {{ period.valid_from|date:"d.m.Y" }}
+                    {% if forloop.first %}
+                    <span class="badge bg-success">{% trans "Aktuell" %}</span>
+                    {% endif %}
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Wochentag" %}</th>
+                                <th>{% trans "Buchungszeit" %}</th>
+                                <th>{% trans "Stunden" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for day in period.schedule %}
+                            <tr>
+                                <td>{{ day.weekday }}</td>
+                                {% if day.schedule %}
+                                    <td>{{ day.schedule.start_time|time:"H:i" }} - {{ day.schedule.end_time|time:"H:i" }}</td>
+                                    <td>{{ day.schedule.hours|floatformat:2 }} h</td>
+                                {% else %}
+                                    <td colspan="2" class="text-muted">{% trans "Keine Buchungen" %}</td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light">
+                                <th>{% trans "Gesamt" %}</th>
+                                <th></th>
+                                <th>{{ period.total_hours|floatformat:2 }} h</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
-
+    {% endif %}
+</div>
     <div class="col-md-8">
         {% if employee.role == 'ASSISTANT' or employee.role == 'CLEANING' %}
         <!-- Urlaubsübersicht -->
@@ -365,57 +416,9 @@
             </div>
         </div>
         {% endif %}
+
+
         {% if employee.role == 'THERAPIST' %}
-        <!-- Für Therapeuten -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">{% trans "Standardbuchungszeiten" %}</h5>
-            </div>
-            <div class="card-body">
-                {% for period in schedule_history %}
-                <div class="mb-4">
-                    <h6 class="border-bottom pb-2">
-                        {% trans "Gültig ab" %} {{ period.valid_from|date:"d.m.Y" }}
-                        {% if forloop.first %}
-                        <span class="badge bg-success">{% trans "Aktuell" %}</span>
-                        {% endif %}
-                    </h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>{% trans "Wochentag" %}</th>
-                                    <th>{% trans "Buchungszeit" %}</th>
-                                    <th>{% trans "Stunden" %}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for day in period.schedule %}
-                                <tr>
-                                    <td>{{ day.weekday }}</td>
-                                    {% if day.schedule %}
-                                        <td>{{ day.schedule.start_time|time:"H:i" }} - {{ day.schedule.end_time|time:"H:i" }}</td>
-                                        <td>{{ day.schedule.hours|floatformat:2 }} h</td>
-                                    {% else %}
-                                        <td colspan="2" class="text-muted">{% trans "Keine Buchungen" %}</td>
-                                    {% endif %}
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                            <tfoot>
-                                <tr class="table-light">
-                                    <th>{% trans "Gesamt" %}</th>
-                                    <th></th>
-                                    <th>{{ period.total_hours|floatformat:2 }} h</th>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        
         <!-- Im Therapeuten-Bereich nach der Standardbuchungszeiten-Card -->
         <div class="card mb-4">
             <div class="card-header">

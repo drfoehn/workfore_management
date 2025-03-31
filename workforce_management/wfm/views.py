@@ -1746,13 +1746,14 @@ def api_therapist_booking_delete(request, pk):
             'error': str(e)
         }, status=500)
 
+@method_decorator(login_required, name='dispatch')
 class TherapistCalendarView(LoginRequiredMixin, TemplateView):
     template_name = 'wfm/therapist_calendar.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Get current month/year
+        # Get current month/year für Navigation
         month = self.request.GET.get('month')
         year = self.request.GET.get('year')
         if not month or not year:
@@ -1762,206 +1763,27 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
         
         current_date = date(int(year), int(month), 1)
         
-        # Hole alle Buchungen für den Monat, aber nur mit hours > 0
-        bookings = TherapistBooking.objects.filter(
-            date__year=int(year),
-            date__month=int(month)
-        ).exclude(
-            hours=None
-        ).exclude(
-            hours=Decimal('0.00')
-        ).select_related('therapist')
-
-        # Wenn Therapeut eingeloggt, zeige nur eigene Details
-        if self.request.user.role == 'THERAPIST':
-            # Eigene Buchungen mit vollen Details
-            own_bookings = [
-                {
-                    'id': str(booking.id),
-                    'title': f"{booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')}",
-                    'start': f"{booking.date}T{booking.start_time}",
-                    'end': f"{booking.date}T{booking.end_time}",
-                    'backgroundColor': booking.therapist.color,
-                    'extendedProps': {
-                        'therapist': {
-                            'id': booking.therapist.id,
-                            'name': booking.therapist.get_full_name()
-                        },
-                        'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
-                        'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
-                        'notes': booking.notes
-                    }
-                }
-                for booking in bookings.filter(therapist=self.request.user)
-            ]
-            
-            # Andere Buchungen nur als blockierte Zeit
-            other_bookings = [
-                {
-                    'title': 'Belegt',
-                    'start': f"{booking.date}T{booking.start_time}",
-                    'end': f"{booking.date}T{booking.end_time}",
-                    'backgroundColor': '#808080',  # Grau
-                    'className': 'blocked-time'
-                }
-                for booking in bookings.exclude(therapist=self.request.user)
-            ]
-            
-            calendar_events = own_bookings + other_bookings
-
-        else:  # OWNER und ASSISTANT sieht alle Details
-            calendar_events = [
-                {
-                    'id': str(booking.id),
-                    'title': f"{booking.therapist.get_full_name()} ({booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')})",
-                    'start': f"{booking.date}T{booking.start_time}",
-                    'end': f"{booking.date}T{booking.end_time}",
-                    'backgroundColor': booking.therapist.color,
-                    'extendedProps': {
-                        'therapist': {
-                            'id': booking.therapist.id,
-                            'name': booking.therapist.get_full_name()
-                        },
-                        'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
-                        'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
-                        'notes': booking.notes
-                    }
-                }
-                for booking in bookings
-            ]
-
-        # Berechne Summen für den Monat
-        total_actual_hours = Decimal('0.00')
-        total_extra_hours = Decimal('0.00')
-        total_booked_amount = Decimal('0.00')
-        extra_costs = Decimal('0.00')
-
-        for booking in bookings:
-            if self.request.user.role == 'THERAPIST' and booking.therapist != self.request.user:
-                continue  # Überspringe andere Therapeuten für die Summen
-                
-            if booking.actual_hours:
-                total_actual_hours += booking.actual_hours
-
-            if booking.hours and booking.therapist.room_rate:
-                total_booked_amount += booking.hours * booking.therapist.room_rate
-            
-            if booking.difference_hours and booking.therapist.room_rate:
-                total_extra_hours += booking.difference_hours
-                extra_costs += booking.difference_hours * booking.therapist.room_rate
-
         context.update({
-            'calendar_events': calendar_events,  # Nicht json.dumps() verwenden
             'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
             'prev_month': (current_date - relativedelta(months=1)),
             'next_month': (current_date + relativedelta(months=1)),
-            'totals': {
-                'total_actual_hours': float(total_actual_hours),  # Konvertiere zu float
-                'total_extra_hours': float(total_extra_hours),  # Konvertiere zu float
-                'total_sum': float(total_booked_amount),  # Konvertiere zu float
-                'extra_costs': float(extra_costs)  # Konvertiere zu float
-            }
         })
 
         # Füge Therapeuten-Filter hinzu für Owner
         if self.request.user.role == 'OWNER':
-            context['therapists'] = CustomUser.objects.filter(role='THERAPIST').order_by('first_name', 'last_name')
+            context['therapists'] = CustomUser.objects.filter(
+                role='THERAPIST'
+            ).order_by('first_name', 'last_name')
             
         # Hole den ausgewählten Therapeuten
         therapist_id = self.request.GET.get('therapist')
         if therapist_id:
-            context['selected_therapist'] = CustomUser.objects.filter(id=therapist_id).first()
+            context['selected_therapist'] = CustomUser.objects.filter(
+                id=therapist_id
+            ).first()
 
         return context
-
-@ensure_csrf_cookie
-def api_therapist_calendar_events(request):
-    """API-Endpunkt für Kalender-Events"""
-
-    
-    start = request.GET.get('start')
-    end = request.GET.get('end')
-    therapist_id = request.GET.get('therapist')  # Für Owner-Filter
-
-
-    # Basis-Query für alle Buchungen im Zeitraum
-    bookings = TherapistBooking.objects.filter(
-        date__range=[start.split('T')[0], end.split('T')[0]]
-    ).select_related('therapist')
-
-    # Filter für Owner wenn Therapeut ausgewählt
-    if request.user.role == 'OWNER' and therapist_id:
-        bookings = bookings.filter(therapist_id=therapist_id)
-
-
-
-    calendar_events = []
-    
-    if request.user.role == 'THERAPIST':
-        # Eigene Buchungen mit vollen Details
-        own_bookings = bookings.filter(therapist=request.user)
-        
-        calendar_events.extend([
-            {
-                'id': str(booking.id),
-                'title': f"{booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')}",
-                'start': f"{booking.date}T{booking.start_time}",
-                'end': f"{booking.date}T{booking.end_time}",
-                'backgroundColor': booking.therapist.color,
-                'borderColor': booking.therapist.color,
-                'extendedProps': {
-                    'therapist': {
-                        'id': booking.therapist.id,
-                        'name': booking.therapist.get_full_name()
-                    },
-                    'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
-                    'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
-                    'notes': booking.notes
-                }
-            }
-            for booking in own_bookings
-        ])
-        
-        # Andere Buchungen als blockierte Zeiten
-        other_bookings = bookings.exclude(therapist=request.user)
-        
-        calendar_events.extend([
-            {
-                'title': 'Belegt',
-                'start': f"{booking.date}T{booking.start_time}",
-                'end': f"{booking.date}T{booking.end_time}",
-                'backgroundColor': '#808080',
-                'borderColor': '#808080',
-                'className': 'blocked-time'
-            }
-            for booking in other_bookings
-        ])
-
-    else:  # OWNER oder ASSISTANT
-        # Alle Buchungen mit vollen Details
-        calendar_events = [
-            {
-                'id': str(booking.id),
-                'title': f"{booking.therapist.get_full_name()} ({booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')})",
-                'start': f"{booking.date}T{booking.start_time}",
-                'end': f"{booking.date}T{booking.end_time}",
-                'backgroundColor': booking.therapist.color,
-                'borderColor': booking.therapist.color,
-                'extendedProps': {
-                    'therapist': {
-                        'id': booking.therapist.id,
-                        'name': booking.therapist.get_full_name()
-                    },
-                    'hours': float(booking.hours) if booking.hours else None,  # Konvertiere zu float
-                    'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,  # Konvertiere zu float
-                    'notes': booking.notes
-                }
-            }
-            for booking in bookings
-        ]
-
-    return JsonResponse(calendar_events, safe=False)
 
 @method_decorator(login_required, name='dispatch')
 class AssistantCalendarEventsView(View):
@@ -4202,4 +4024,76 @@ class TherapistBookingDeleteView(LoginRequiredMixin, UserPassesTestMixin, Delete
                 'success': False,
                 'error': str(e)
             }, status=400)
+
+@method_decorator(login_required, name='dispatch')
+class TherapistCalendarEventsView(View):
+    def get(self, request):
+        # FullCalendar sendet start und end Parameter
+        start = request.GET.get('start')
+        end = request.GET.get('end')
+        
+        # Konvertiere die Strings zu Dates
+        start_date = parse_datetime(start).date()
+        end_date = parse_datetime(end).date()
+        
+        # Hole alle Buchungen im angefragten Zeitraum
+        bookings = TherapistBooking.objects.filter(
+            date__range=[start_date, end_date]
+        ).select_related('therapist')
+        
+        # Generiere Events basierend auf der Rolle
+        if request.user.role == 'THERAPIST':
+            own_bookings = bookings.filter(therapist=request.user)
+            other_bookings = bookings.exclude(therapist=request.user)
+            
+            events = [
+                {
+                    'id': str(booking.id),
+                    'title': f"{booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')}",
+                    'start': f"{booking.date}T{booking.start_time}",
+                    'end': f"{booking.date}T{booking.end_time}",
+                    'backgroundColor': booking.therapist.color,
+                    'extendedProps': {
+                        'therapist': {
+                            'id': booking.therapist.id,
+                            'name': booking.therapist.get_full_name()
+                        },
+                        'hours': float(booking.hours) if booking.hours else None,
+                        'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
+                        'notes': booking.notes
+                    }
+                }
+                for booking in own_bookings
+            ] + [
+                {
+                    'title': 'Belegt',
+                    'start': f"{booking.date}T{booking.start_time}",
+                    'end': f"{booking.date}T{booking.end_time}",
+                    'backgroundColor': '#808080',
+                    'className': 'blocked-time'
+                }
+                for booking in other_bookings
+            ]
+        else:
+            events = [
+                {
+                    'id': str(booking.id),
+                    'title': f"{booking.therapist.get_full_name()} ({booking.start_time.strftime('%H:%M')}-{booking.end_time.strftime('%H:%M')})",
+                    'start': f"{booking.date}T{booking.start_time}",
+                    'end': f"{booking.date}T{booking.end_time}",
+                    'backgroundColor': booking.therapist.color,
+                    'extendedProps': {
+                        'therapist': {
+                            'id': booking.therapist.id,
+                            'name': booking.therapist.get_full_name()
+                        },
+                        'hours': float(booking.hours) if booking.hours else None,
+                        'actual_hours': float(booking.actual_hours) if booking.actual_hours else None,
+                        'notes': booking.notes
+                    }
+                }
+                for booking in bookings
+            ]
+        
+        return JsonResponse(events, safe=False)
 
