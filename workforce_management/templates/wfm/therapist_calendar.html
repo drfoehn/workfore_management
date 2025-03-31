@@ -121,13 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         
         eventDidMount: function(info) {
-            // Debug-Ausgabe für jedes Event
-            console.log('Event mounted:', {
-                title: info.event.title,
-                start: info.event.start,
-                end: info.event.end,
-                extendedProps: info.event.extendedProps
-            });
+            
             
             // Tooltip mit Details
             const event = info.event;
@@ -158,8 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     calendar.render();
 
-    // Nach der events-Definition
-    console.log('Rohe Calendar Events:', {{ calendar_events|safe }});
+
 });
 </script>
 {% endblock %} 
