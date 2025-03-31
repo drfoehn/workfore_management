@@ -44,6 +44,7 @@ from calendar import monthrange
 from datetime import datetime, date as datetime_date  # Umbenennen des date imports
 import re
 from django.core.exceptions import ValidationError
+import decimal
 
 logger = logging.getLogger(__name__)
 
@@ -383,9 +384,9 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         # Initialisiere die Dictionaries für die Summen pro Mitarbeiter
         total_soll_per_employee = {}
         total_ist_per_employee = {}
-        monthly_wages_per_employee = {}  # Neu: Dictionary für Monatsgehälter
+        monthly_wages_per_employee = {}
 
-        print("\n=== Debug: Berechnung der Summen pro Mitarbeiter ===")
+
 
         # Berechne die Summen für jeden Mitarbeiter
         for employee_id, balance in employee_balances.items():
@@ -409,7 +410,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 entry for entry in days_data 
                 if entry.get('employee') and str(entry['employee'].id) == str(employee_id)
             ]
-            print(f"Anzahl Einträge: {len(employee_entries)}")
+
             
             # Berechne die Summen für diesen Mitarbeiter
             for entry in employee_entries:
@@ -424,11 +425,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
             total_ist_per_employee[employee_id] = total_ist
             print(f"Summen - Soll: {total_soll}, Ist: {total_ist}")
 
-        print("\n=== Debug: Finale Dictionaries ===")
-        print("total_soll_per_employee:", total_soll_per_employee)
-        print("total_ist_per_employee:", total_ist_per_employee)
-        print("employee_balances:", employee_balances)
-        print("days_data Beispiel:", days_data[0] if days_data else "Keine Einträge")
+
 
         context.update({
             'dates': days_data,
@@ -465,8 +462,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
         })
 
         # Debug-Ausgaben
-        print("\n=== Überstundenberechnung Debug ===")
-        print(f"Berechne für Jahr: {year}, Monat: {month}")
+
         for employee_id, balance in employee_balances.items():
             employee = employees_dict[employee_id]
             print(f"\nMitarbeiter: {employee.get_full_name()}")
@@ -486,7 +482,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                 is_locked=True
             ).aggregate(total=models.Sum('hours'))['total'] or Decimal('0')
             print(f"Gesperrte Stunden: {locked:+.2f}h")
-        print("=== Ende Debug ===\n")
+
 
         return context
 
@@ -3317,27 +3313,22 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                             'worked_hours': Decimal('0'),
                             'absence_hours': Decimal('0')
                         }
-                    # Addiere die Stunden
-                    assistant_expenses[employee.id]['total_soll'] += Decimal(str(date_data.get('soll_hours', 0)))
-                    assistant_expenses[employee.id]['worked_hours'] += Decimal(str(date_data.get('ist_hours', 0)))
-                    
-                    # In der FinanceOverviewView, bei der Berechnung der assistant_expenses und cleaning_expenses
-                    working_hours = WorkingHours.objects.filter(
-                        employee_id=employee.id,
-                        date__year=year,
-                        date__month=month
-                    ).values(
-                        'is_paid',
-                        'paid_date'
-                    ).first()
+                    # Sicherere Konvertierung der Stunden
+                    try:
+                        soll_hours = date_data.get('soll_hours', 0)
+                        if soll_hours is None:
+                            soll_hours = 0
+                        assistant_expenses[employee.id]['total_soll'] += Decimal(str(float(soll_hours)))
+                        
+                        ist_hours = date_data.get('ist_hours', 0)
+                        if ist_hours is None:
+                            ist_hours = 0
+                        assistant_expenses[employee.id]['worked_hours'] += Decimal(str(float(ist_hours)))
+                    except (TypeError, ValueError, decimal.InvalidOperation):
+                        # Falls die Konvertierung fehlschlägt, füge 0 hinzu
+                        assistant_expenses[employee.id]['total_soll'] += Decimal('0')
+                        assistant_expenses[employee.id]['worked_hours'] += Decimal('0')
 
-                    if working_hours:
-                        assistant_expenses[employee.id]['is_paid'] = working_hours['is_paid']
-                        assistant_expenses[employee.id]['paid_date'] = working_hours['paid_date']
-                    else:
-                        assistant_expenses[employee.id]['is_paid'] = False
-                        assistant_expenses[employee.id]['paid_date'] = None
-                    
                 elif employee.role == 'CLEANING':
                     if employee.id not in cleaning_expenses:
                         cleaning_expenses[employee.id] = {
@@ -3349,9 +3340,21 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                             'worked_hours': Decimal('0'),
                             'absence_hours': Decimal('0')
                         }
-                    # Addiere die Stunden
-                    cleaning_expenses[employee.id]['total_soll'] += Decimal(str(date_data.get('soll_hours', 0)))
-                    cleaning_expenses[employee.id]['worked_hours'] += Decimal(str(date_data.get('ist_hours', 0)))
+                    # Sicherere Konvertierung der Stunden
+                    try:
+                        soll_hours = date_data.get('soll_hours', 0)
+                        if soll_hours is None:
+                            soll_hours = 0
+                        cleaning_expenses[employee.id]['total_soll'] += Decimal(str(float(soll_hours)))
+                        
+                        ist_hours = date_data.get('ist_hours', 0)
+                        if ist_hours is None:
+                            ist_hours = 0
+                        cleaning_expenses[employee.id]['worked_hours'] += Decimal(str(float(ist_hours)))
+                    except (TypeError, ValueError, decimal.InvalidOperation):
+                        # Falls die Konvertierung fehlschlägt, füge 0 hinzu
+                        cleaning_expenses[employee.id]['total_soll'] += Decimal('0')
+                        cleaning_expenses[employee.id]['worked_hours'] += Decimal('0')
 
         # Berechne die finalen Werte für jeden Mitarbeiter
         for expense in assistant_expenses.values():
@@ -3452,9 +3455,9 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             'month_name': current_date.strftime('%B %Y'),
             'prev_month': (current_date - relativedelta(months=1)),
             'next_month': (current_date + relativedelta(months=1)),
-            'total_soll_per_employee': total_soll_per_employee,
-            'total_ist_per_employee': total_ist_per_employee,
-            'monthly_wages_per_employee': monthly_wages_per_employee,  # Neu
+            'total_soll_per_employee': working_hours_context['total_soll_per_employee'],
+            'total_ist_per_employee': working_hours_context['total_ist_per_employee'],
+            'monthly_wages_per_employee': working_hours_context['monthly_wages_per_employee'],
         })
         
         return context

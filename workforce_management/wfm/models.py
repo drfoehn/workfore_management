@@ -1149,8 +1149,13 @@ class MonthlyWage(models.Model):
 
         # Konvertiere zu Dezimalstunden
         self.total_hours = Decimal(str(monthly_working_hours.total_seconds() / 3600))
-        # Berechne Gehalt
-        self.wage = self.total_hours * self.employee.hourly_rate
+        
+        # Prüfe ob hourly_rate existiert
+        if self.employee.hourly_rate is not None:
+            self.wage = self.total_hours * self.employee.hourly_rate
+        else:
+            self.wage = Decimal('0.00')
+        
         self.save()
 
 @receiver(post_save, sender=WorkingHours)
