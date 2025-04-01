@@ -16,7 +16,8 @@ from .models import (
     UserDocument,
     ClosureDay,
     OvertimeEntry,
-    MonthlyWage
+    MonthlyWage,
+    OvertimePayment
 )
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
@@ -220,6 +221,15 @@ class OvertimeAccountAdmin(admin.ModelAdmin):
                 account.overtime_paid_date = timezone.now()
                 account.save()
     mark_as_paid.short_description = _("Als ausgezahlt markieren")
+
+
+@admin.register(OvertimePayment)
+class OvertimePaymentAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'hours_for_payment', 'amount', 'is_paid', 'paid_date']
+    list_filter = ['employee', 'is_paid']
+    search_fields = ['employee__username', 'employee__first_name', 'employee__last_name']
+    date_hierarchy = 'paid_date'
+
 
 @admin.register(UserDocument)
 class UserDocumentAdmin(admin.ModelAdmin):

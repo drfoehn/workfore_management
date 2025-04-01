@@ -11,17 +11,17 @@
                 <div class="mb-3">
                     <div class="alert alert-info">
                         <div class="row">
-                            <div class="col-8">{% trans "Aktuelle Stundenbilanz" %}:</div>
+                            <div class="col-8">{% trans "Verfügbare Überstunden" %}:</div>
                             <div class="col-4" id="currentBalance">0</div>
                         </div>
                         <div class="row">
-                            <div class="col-8">{% trans "Zur Auszahlung markiert" %}:</div>
+                            <div class="col-8">{% trans "Bereits zur Auszahlung markiert" %}:</div>
                             <div class="col-4" id="markedForPayment">0</div>
                         </div>
-                        {% comment %} <div class="row">
-                            <div class="col-8">{% trans "Verbleibende Stunden" %}:</div>
-                            <div class="col-4" id="remainingHours">0</div>
-                        </div> {% endcomment %}
+                        <div class="row">
+                            <div class="col-8">{% trans "Verbleibende Überstunden" %}:</div>
+                            <div class="col-4" id="remainingBalance">0</div>
+                        </div>
                     </div>
                 </div>
 
@@ -60,39 +60,6 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const overtimeModal = document.getElementById('overtimeModal');
-    if (overtimeModal) {
-        overtimeModal.addEventListener('show.bs.modal', loadOvertimeData);
-        
-        // Input Validierung und Live-Update
-        const hoursInput = document.getElementById('hoursForPayment');
-        hoursInput.addEventListener('input', function() {
-            updateRemainingHours();
-        });
-    }
-});
-
-// Neue Funktion zur Berechnung der verbleibenden Stunden
-function updateRemainingHours() {
-    const currentBalance = parseFloat(document.getElementById('currentBalance').textContent);
-    const markedHours = parseFloat(document.getElementById('markedForPayment').textContent);
-    const remainingHours = currentBalance - markedHours;
-    
-    document.getElementById('remainingHours').textContent = remainingHours.toFixed(1);
-    
-    // Validierung
-    const input = document.getElementById('hoursForPayment');
-    const inputValue = parseFloat(input.value) || 0;
-    if (inputValue > currentBalance) {
-        input.setCustomValidity('Nicht genügend Stunden verfügbar');
-        document.getElementById('remainingHours').classList.add('text-danger');
-    } else {
-        input.setCustomValidity('');
-        document.getElementById('remainingHours').classList.remove('text-danger');
-    }
-}
-
 function loadOvertimeData() {
     fetch('{% url "wfm:api-overtime-overview" %}', {
         headers: {
@@ -101,27 +68,16 @@ function loadOvertimeData() {
     })
     .then(response => response.json())
     .then(data => {
+        // Update all displays
+        document.getElementById('currentBalance').textContent = data.balance.toFixed(1);
+        document.getElementById('markedForPayment').textContent = data.hours_for_payment.toFixed(1);
+        document.getElementById('remainingBalance').textContent = data.remaining_balance.toFixed(1);
         
-        
-        const balance = parseFloat(data.balance);
-        const markedHours = parseFloat(data.hours_for_payment);
-        const remainingHours = balance - markedHours;
-        
-        
-
-        // Aktualisiere alle Anzeigen
-        document.getElementById('currentBalance').textContent = balance.toFixed(1);
-        document.getElementById('markedForPayment').textContent = markedHours.toFixed(1);
-        document.getElementById('remainingHours').textContent = remainingHours.toFixed(1);
-        
-        // Aktualisiere das Input-Feld
+        // Update input field
         const input = document.getElementById('hoursForPayment');
         if (input) {
-            input.max = balance;
-            input.value = markedHours;
-            input.disabled = data.is_paid;
-            
-            
+            input.max = data.balance;
+            input.value = data.hours_for_payment;
         }
     })
     .catch(error => {
@@ -155,20 +111,25 @@ function submitOvertimePayment() {
             hours_for_payment: hours
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
-            const balance = parseFloat(data.balance);
-            const markedHours = parseFloat(data.hours_for_payment);
-            const remainingHours = balance - markedHours;  // Berechne verbleibende Stunden
+            // Update the display values
+            document.getElementById('currentBalance').textContent = data.balance.toFixed(1);
+            document.getElementById('markedForPayment').textContent = data.hours_for_payment.toFixed(1);
+            document.getElementById('remainingBalance').textContent = 
+                (data.balance - data.hours_for_payment).toFixed(1);
             
-            document.getElementById('currentBalance').textContent = balance.toFixed(1);
-            document.getElementById('markedForPayment').textContent = markedHours.toFixed(1);
-            document.getElementById('remainingHours').textContent = remainingHours.toFixed(1);
-            
+            // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('overtimeModal'));
             modal.hide();
             
+            // Show success message
             alert('{% trans "Überstunden wurden erfolgreich zur Auszahlung markiert" %}');
         } else {
             alert(data.error || '{% trans "Ein Fehler ist aufgetreten" %}');
@@ -179,4 +140,12 @@ function submitOvertimePayment() {
         alert('{% trans "Fehler beim Speichern" %}');
     });
 }
+
+// Initialize when modal opens
+document.addEventListener('DOMContentLoaded', function() {
+    const overtimeModal = document.getElementById('overtimeModal');
+    if (overtimeModal) {
+        overtimeModal.addEventListener('show.bs.modal', loadOvertimeData);
+    }
+});
 </script>

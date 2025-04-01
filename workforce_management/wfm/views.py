@@ -18,7 +18,8 @@ from .models import (
     ClosureDay,
     UserDocument,
     OvertimeEntry,
-    MonthlyWage
+    MonthlyWage,
+    OvertimePayment,
 )
 from .forms import UserDocumentForm, WorkingHoursForm, VacationRequestForm
 from django.db.models import Sum, Count, F, Case, When, DecimalField, ExpressionWrapper, Value, CharField
@@ -628,24 +629,25 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             # Hole die aktuelle Gesamtbilanz
             total_balance = OvertimeAccount.get_current_balance(request.user)
             
-            # Hole das aktuelle Überstundenkonto
-            account = OvertimeAccount.objects.filter(
+            # Hole die Summe aller nicht bezahlten markierten Stunden
+            marked_hours = OvertimePayment.objects.filter(
                 employee=request.user,
-                year=year,
-                month=month
-            ).first()
+                is_paid=False
+            ).aggregate(
+                total=Coalesce(Sum('hours_for_payment'), Decimal('0'))
+            )['total']
             
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
-                    'balance': float(total_balance),  # Gesamtbilanz statt Monatsbilanz
-                    'hours_for_payment': float(account.hours_for_payment if account else 0),
-                    'is_paid': account.overtime_paid if account else False
+                    'balance': float(total_balance),
+                    'hours_for_payment': float(marked_hours),
+                    'remaining_balance': float(total_balance - marked_hours)
                 })
             
             context = {
-                'balance': total_balance,  # Gesamtbilanz statt Monatsbilanz
-                'hours_for_payment': account.hours_for_payment if account else 0,
-                'is_paid': account.overtime_paid if account else False,
+                'balance': total_balance,
+                'hours_for_payment': marked_hours,
+                'remaining_balance': total_balance - marked_hours,
                 'month_name': target_date.strftime('%B %Y')
             }
             
@@ -666,6 +668,7 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
                 raise PermissionDenied
             
             data = json.loads(request.body)
+            
             hours_for_payment = Decimal(str(data.get('hours_for_payment', 0)))
             
             today = timezone.now().date()
@@ -674,34 +677,40 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             else:
                 target_date = today
                 
-            # Hole oder erstelle das Überstundenkonto
+            # Hole die aktuelle Gesamtbilanz
             total_balance = OvertimeAccount.get_current_balance(request.user)
-            
-            account, created = OvertimeAccount.objects.get_or_create(
-                employee=request.user,
-                year=target_date.year,
-                month=target_date.month,
-                defaults={
-                    'balance': total_balance,
-                    'hours_for_payment': 0
-                }
-            )
             
             if hours_for_payment > total_balance:
                 return JsonResponse({
                     'success': False,
                     'error': gettext('Nicht genügend Überstunden verfügbar')
                 })
+
+            # Hole oder erstelle den OvertimePayment-Eintrag
+            payment = OvertimePayment.objects.filter(
+                employee=request.user,
+                is_paid=False
+            ).first()
+
+            if not payment:
+                payment = OvertimePayment(
+                    employee=request.user,
+                    paid_date=target_date,
+                    hours_for_payment=hours_for_payment,
+                    is_paid=False
+                )
+                # Berechne den Betrag vor dem Speichern
+                payment.calculate_amount()
+            else:
+                payment.hours_for_payment = hours_for_payment
+                payment.calculate_amount()
             
-            # Aktualisiere die zur Auszahlung markierten Stunden
-            account.hours_for_payment = hours_for_payment
-            account.balance = total_balance - hours_for_payment  # Reduziere die Balance
-            account.save()
+            payment.save()
             
             return JsonResponse({
                 'success': True,
-                'balance': float(account.balance),
-                'hours_for_payment': float(account.hours_for_payment)
+                'balance': float(total_balance),
+                'hours_for_payment': float(payment.hours_for_payment)
             })
             
         except Exception as e:
@@ -3655,42 +3664,36 @@ def api_mark_overtime_as_paid(request):
     
     try:
         data = json.loads(request.body)
-        
         employee_id = data.get('employee_id')
-        month = data.get('month')
-        year = data.get('year')
         set_paid = data.get('set_paid', True)
         
-        # Hole den Überstunden-Eintrag
-        overtime = OvertimeAccount.objects.filter(
+        # Hole den aktuellen unbezahlten Eintrag
+        payment = OvertimePayment.objects.get(
             employee_id=employee_id,
-            month=month,
-            year=year
+            is_paid=False
         )
         
-        if not overtime.exists():
-            return JsonResponse({
-                'success': False,
-                'error': gettext('Keine Überstunden gefunden')
-            })
-        
-        # Markiere als bezahlt/unbezahlt
-        updated_count = overtime.update(
-            overtime_paid=set_paid,
-            overtime_paid_date=timezone.now() if set_paid else None
-        )
+        payment.is_paid = set_paid
+        payment.paid_date = timezone.now().date() if set_paid else None
+        payment.save()
         
         return JsonResponse({
             'success': True,
-            'updated': updated_count,
-            'new_status': {
-                'paid': set_paid,
-                'paid_date': timezone.now().strftime('%Y-%m-%d') if set_paid else None
-            }
+            'is_paid': payment.is_paid,
+            'paid_date': payment.paid_date.strftime('%d.%m.%Y') if payment.paid_date else None
+        })
+        
+    except OvertimePayment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': gettext('Keine unbezahlten Überstunden gefunden')
         })
     except Exception as e:
-        logger.error(f"Fehler beim Markieren der Überstunden: {str(e)}", exc_info=True)
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.error(f"Error marking overtime as paid: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 @login_required
 def api_mark_salary_as_paid(request):
@@ -3763,46 +3766,52 @@ def api_overtime_overview(request):
     try:
         today = timezone.now().date()
         
-        # Hole das aktuelle Überstundenkonto
-        account = OvertimeAccount.objects.filter(
+        # Hole die aktuelle Gesamtbilanz
+        total_balance = OvertimeAccount.get_current_balance(request.user)
+        
+        # Hole den aktuellen OvertimePayment-Eintrag
+        payment = OvertimePayment.objects.filter(
             employee=request.user,
-            year=today.year,
-            month=today.month
+            is_paid=False  # Nur nicht bezahlte Einträge
         ).first()
 
         if request.method == 'GET':
             response_data = {
-                'balance': float(account.balance if account else 0),
-                'hours_for_payment': float(account.hours_for_payment if account else 0),
-                'is_paid': account.overtime_paid if account else False
+                'balance': float(total_balance),
+                'hours_for_payment': float(payment.hours_for_payment if payment else 0),
+                'is_paid': payment.is_paid if payment else False
             }
-            print("API Response:", response_data)  # Debug
             return JsonResponse(response_data)
 
         elif request.method == 'POST':
             data = json.loads(request.body)
             hours_for_payment = Decimal(str(data.get('hours_for_payment', 0)))
 
-            if not account or account.balance <= 0:
-                return JsonResponse({
-                    'success': False,
-                    'error': gettext('Keine Überstunden verfügbar')
-                })
-
-            if hours_for_payment > account.balance:
+            if hours_for_payment > total_balance:
                 return JsonResponse({
                     'success': False,
                     'error': gettext('Nicht genügend Überstunden verfügbar')
                 })
 
-            # Aktualisiere die zur Auszahlung markierten Stunden
-            account.hours_for_payment = hours_for_payment
-            account.save()
+            # Erstelle oder aktualisiere den OvertimePayment-Eintrag
+            if not payment:
+                payment = OvertimePayment(
+                    employee=request.user,
+                    hours_for_payment=hours_for_payment,
+                    is_paid=False
+                )
+                # Berechne den Betrag vor dem Speichern
+                payment.calculate_amount()
+                payment.save()
+            else:
+                payment.hours_for_payment = hours_for_payment
+                payment.calculate_amount()
+                payment.save()
 
             return JsonResponse({
                 'success': True,
-                'balance': float(account.balance),
-                'hours_for_payment': float(account.hours_for_payment)
+                'balance': float(total_balance),
+                'hours_for_payment': float(payment.hours_for_payment)
             })
 
     except Exception as e:

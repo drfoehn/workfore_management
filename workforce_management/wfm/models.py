@@ -1028,6 +1028,47 @@ class OvertimeAccount(models.Model):
         )
         return account
 
+class OvertimePayment(models.Model):
+    employee = models.ForeignKey(
+        'CustomUser',
+        on_delete=models.CASCADE,
+        related_name='overtime_payments'
+    )
+    hours_for_payment = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name=_('Stunden')
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Betrag'),
+        help_text=_('Berechneter Auszahlungsbetrag')
+    )
+    is_paid = models.BooleanField(
+        default=False,
+        verbose_name=_('Bezahlt')
+    )
+    paid_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name=_('Bezahlt am')
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = _('Überstunden-Auszahlung')
+        verbose_name_plural = _('Überstunden-Auszahlungen')
+        ordering = ['-paid_date', 'employee']
+        unique_together = ['employee', 'paid_date']  # Ein Eintrag pro Monat/Mitarbeiter
+
+    def calculate_amount(self):
+        """Berechnet den Auszahlungsbetrag basierend auf dem Stundenlohn"""
+        if self.employee.hourly_rate:
+            self.amount = self.hours_for_payment * self.employee.hourly_rate
+        else:
+            self.amount = Decimal('0.00')
+
 class ClosureDay(models.Model):
     CLOSURE_TYPES = [
         ('HOLIDAY', _('Gesetzlicher Feiertag')),
@@ -1204,6 +1245,8 @@ def update_monthly_wage_on_working_hours_delete(sender, instance, **kwargs):
         monthly_wage.calculate_wage()
     except MonthlyWage.DoesNotExist:
         pass  # Wenn kein MonthlyWage existiert, muss nichts aktualisiert werden
+
+
 
 
 
