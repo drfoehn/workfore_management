@@ -66,6 +66,7 @@ urlpatterns = [
     # Overtime
     path('api/overtime/overview/', views.OvertimeOverviewView.as_view(), name='api-overtime-overview'),
     path('overtime/', views.OvertimeOverviewView.as_view(), name='overtime-overview'),
+    path('calculate-balances/', views.calculate_balances, name='calculate_balances'),
 
     # Sick Leave Management
     path('sick-leave-management/', views.SickLeaveManagementView.as_view(), name='sick-leave-management'),
@@ -75,6 +76,7 @@ urlpatterns = [
     path('documents/upload/', views.upload_document, name='upload-document'),
     path('documents/<int:pk>/delete/', views.delete_document, name='delete-document'),
     path('documents/<int:pk>/update/', views.api_document_update, name='api-document-update'),
+    path('api/sick-leave/<int:sick_leave_id>/upload-document/', views.api_upload_sick_leave_document, name='api-upload-sick-leave-document'),
 
     # Mitarbeiter
     path('employees/', views.EmployeeListView.as_view(), name='employee-list'),
@@ -83,9 +85,6 @@ urlpatterns = [
     # Finance Overview
     path('finance-overview/', views.FinanceOverviewView.as_view(), name='finance-overview'),
 
-
-    path('api/sick-leave/<int:sick_leave_id>/upload-document/', views.api_upload_sick_leave_document, name='api-upload-sick-leave-document'),
-    path('calculate-balances/', views.calculate_balances, name='calculate_balances'),
 ]
 
 
