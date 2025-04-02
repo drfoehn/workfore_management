@@ -4169,3 +4169,265 @@ class TherapistCalendarEventsView(View):
         
         return JsonResponse(events, safe=False)
 
+class OvertimeYearlyReportView(LoginRequiredMixin, OwnerRequiredMixin, View):
+    template_name = 'wfm/overtime_yearly_report.html'
+
+    def get(self, request):
+        year = int(request.GET.get('year', timezone.now().year))
+        
+        # Hole alle Mitarbeiter mit Überstunden im gewählten Jahr
+        employees = CustomUser.objects.filter(
+            overtimeentry__date__year=year
+        ).distinct()
+        
+        yearly_data = []
+        for employee in employees:
+            monthly_data = []
+            yearly_total = Decimal('0.00')
+            yearly_paid = Decimal('0.00')
+            
+            for month in range(1, 13):
+                # Monatliche Überstunden
+                month_entries = OvertimeEntry.objects.filter(
+                    employee=employee,
+                    date__year=year,
+                    date__month=month
+                )
+                
+                # Ausgezahlte Überstunden
+                paid_entries = OvertimePayment.objects.filter(
+                    employee=employee,
+                    created_at__year=year,
+                    created_at__month=month,
+                    is_paid=True
+                )
+                
+                month_total = month_entries.aggregate(
+                    total=Coalesce(Sum('hours'), Decimal('0.00'))
+                )['total']
+                
+                month_paid = paid_entries.aggregate(
+                    total=Coalesce(Sum('hours_for_payment'), Decimal('0.00'))
+                )['total']
+                
+                monthly_data.append({
+                    'month': month,
+                    'month_name': calendar.month_name[month],
+                    'hours': month_total,
+                    'paid_hours': month_paid,
+                    'amount': month_paid * employee.hourly_rate if month_paid else Decimal('0.00')
+                })
+                
+                yearly_total += month_total
+                yearly_paid += month_paid
+            
+            yearly_data.append({
+                'employee': employee,
+                'monthly_data': monthly_data,
+                'yearly_total': yearly_total,
+                'yearly_paid': yearly_paid,
+                'yearly_amount': yearly_paid * employee.hourly_rate
+            })
+        
+        context = {
+            'year': year,
+            'yearly_data': yearly_data,
+            'prev_year': year - 1,
+            'next_year': year + 1
+        }
+        
+        return render(request, self.template_name, context)
+
+class FinanceYearlyReportView(LoginRequiredMixin, OwnerRequiredMixin, View):
+    template_name = 'wfm/finance_yearly_report.html'
+
+    def get_therapist_monthly_data(self, employee, year, month):
+        """Berechnet die monatlichen Daten für Therapeuten"""
+        print(f"\n=== Debug Therapeut {employee.get_full_name()} für {month}/{year} ===")
+        
+        # Alle Buchungen für den Monat
+        bookings = TherapistBooking.objects.filter(
+            therapist=employee,
+            date__year=year,
+            date__month=month
+        )
+        print(f"Gefundene Buchungen: {bookings.count()}")
+        
+        # Gebuchte Stunden
+        booked_hours = bookings.aggregate(
+            total=Coalesce(Sum('hours'), Decimal('0.00'))
+        )['total']
+        print(f"Gebuchte Stunden: {booked_hours}")
+        
+        # Mehrstunden (difference_hours)
+        extra_hours = bookings.aggregate(
+            total=Coalesce(Sum('difference_hours'), Decimal('0.00'))
+        )['total']
+        print(f"Mehrstunden: {extra_hours}")
+        
+        # Berechne Beträge
+        hourly_rate = employee.hourly_rate if employee.hourly_rate is not None else Decimal('0.00')
+        print(f"Stundensatz: {hourly_rate}")
+        
+        base_amount = booked_hours * hourly_rate if booked_hours else Decimal('0.00')
+        extra_amount = extra_hours * hourly_rate if extra_hours else Decimal('0.00')
+        total_amount = base_amount + extra_amount
+        print(f"Basis-Betrag: {base_amount}")
+        print(f"Mehrstunden-Betrag: {extra_amount}")
+        print(f"Gesamt-Betrag: {total_amount}")
+        
+        # Prüfe Zahlungsstatus
+        unpaid_bookings = bookings.filter(
+            difference_hours__gt=0,
+            is_paid=False
+        ).exists()
+        print(f"Unbezahlte Buchungen vorhanden: {unpaid_bookings}")
+
+        result = {
+            'month': month,
+            'month_name': calendar.month_name[month],
+            'booked_hours': booked_hours,
+            'base_amount': base_amount,
+            'extra_hours': extra_hours,
+            'extra_amount': extra_amount,
+            'total': total_amount,
+            'is_paid': not unpaid_bookings
+        }
+        print(f"Rückgabewert: {result}")
+        print("="*50)
+        return result
+
+    def get(self, request):
+        year = int(request.GET.get('year', timezone.now().year))
+        role_filter = request.GET.get('role')
+        employee_id = request.GET.get('employee')
+        
+        print(f"\n=== Debug View Parameters ===")
+        print(f"Jahr: {year}")
+        print(f"Rollen-Filter: {role_filter}")
+        print(f"Mitarbeiter-ID: {employee_id}")
+        
+        # Basis-Query für Mitarbeiter
+        if role_filter:
+            employees = CustomUser.objects.filter(role=role_filter)
+        else:
+            # Wenn kein Filter, zeige alle Mitarbeiter außer Owner
+            employees = CustomUser.objects.exclude(role='OWNER')
+                
+        if employee_id:
+            employees = employees.filter(id=employee_id)
+            
+        yearly_data = []
+        for employee in employees:
+            monthly_data = []
+            yearly_totals = {
+                'working_hours': Decimal('0.00'),
+                'salary': Decimal('0.00'),
+                'overtime': Decimal('0.00'),
+                'overtime_paid': Decimal('0.00'),
+                'overtime_amount': Decimal('0.00'),
+                'total_earnings': Decimal('0.00')
+            }
+            
+            for month in range(1, 13):
+                if employee.role == 'THERAPIST':
+                    month_data = self.get_therapist_monthly_data(employee, year, month)
+                    monthly_data.append(month_data)  # Füge die Monatsdaten zum Array hinzu
+                    
+                    # Aktualisiere Jahressummen
+                    yearly_totals['working_hours'] += month_data['booked_hours']
+                    yearly_totals['salary'] += month_data['base_amount']
+                    yearly_totals['overtime'] += month_data['extra_hours']
+                    yearly_totals['overtime_amount'] += month_data['extra_amount']
+                    yearly_totals['total_earnings'] += month_data['total']
+                else:
+                    # Arbeitsstunden
+                    working_hours = WorkingHours.objects.filter(
+                        employee=employee,
+                        date__year=year,
+                        date__month=month
+                    ).aggregate(
+                        total=Coalesce(Sum('ist_hours'), Decimal('0.00'))
+                    )['total']
+                    
+                    # Gehalt
+                    monthly_wage = MonthlyWage.objects.filter(
+                        employee=employee,
+                        year=year,
+                        month=month
+                    ).first()
+                    
+                    salary_amount = monthly_wage.wage if monthly_wage else Decimal('0.00')
+                    
+                    # Überstunden
+                    overtime_entries = OvertimeEntry.objects.filter(
+                        employee=employee,
+                        date__year=year,
+                        date__month=month
+                    )
+                    
+                    overtime_hours = overtime_entries.aggregate(
+                        total=Coalesce(Sum('hours'), Decimal('0.00'))
+                    )['total']
+                    
+                    # Ausgezahlte Überstunden
+                    paid_overtime = OvertimePayment.objects.filter(
+                        employee=employee,
+                        created_at__year=year,
+                        created_at__month=month,
+                        is_paid=True
+                    )
+                    
+                    paid_hours = paid_overtime.aggregate(
+                        total=Coalesce(Sum('hours_for_payment'), Decimal('0.00'))
+                    )['total']
+                    
+                    overtime_amount = paid_hours * employee.hourly_rate if paid_hours else Decimal('0.00')
+                    
+                    # Gesamteinnahmen für den Monat
+                    total_month = salary_amount + overtime_amount
+                    
+                    monthly_data.append({
+                        'month': month,
+                        'month_name': calendar.month_name[month],
+                        'working_hours': working_hours,
+                        'salary': salary_amount,
+                        'is_paid': monthly_wage.is_paid if monthly_wage else False,
+                        'overtime_hours': overtime_hours,
+                        'paid_overtime_hours': paid_hours,
+                        'overtime_amount': overtime_amount,
+                        'overtime_is_paid': bool(paid_overtime.exists()),
+                        'total': total_month
+                    })
+                    
+                    # Jahressummen aktualisieren
+                    yearly_totals['working_hours'] += working_hours
+                    yearly_totals['salary'] += salary_amount
+                    yearly_totals['overtime'] += overtime_hours
+                    yearly_totals['overtime_paid'] += paid_hours
+                    yearly_totals['overtime_amount'] += overtime_amount
+                    yearly_totals['total_earnings'] += total_month
+            
+            yearly_data.append({
+                'employee': employee,
+                'monthly_data': monthly_data,
+                'yearly_totals': yearly_totals
+            })
+        
+        context = {
+            'year': year,
+            'yearly_data': yearly_data,
+            'prev_year': year - 1,
+            'next_year': year + 1,
+            'roles': [
+                ('ASSISTANT', gettext('Assistenten')), 
+                ('CLEANING', gettext('Reinigung')),
+                ('THERAPIST', gettext('Therapeuten'))
+            ],
+            'selected_role': role_filter,
+            'employees': CustomUser.objects.exclude(role='OWNER'),
+            'selected_employee': employee_id
+        }
+        
+        return render(request, self.template_name, context)
+

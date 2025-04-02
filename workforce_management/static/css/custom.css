@@ -248,6 +248,11 @@ a:hover {
   color: white !important;
 }
 
+.bg-maize-crayola {
+  background-color: var(--maize-crayola) !important;
+  color: white !important
+}
+
 .bg-yellow-orange {
   background-color: var(--yellow-orange) !important;
   color: white !important;

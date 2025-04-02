@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Jahresaufstellung Finanzen" %} {{ year }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{% trans "Jahresaufstellung Finanzen" %} {{ year }}</h1>
+        
+        <!-- Filter und Navigation -->
+        <div class="d-flex gap-3">
+            <!-- Filter -->
+            <div class="btn-group">
+                <select class="form-select" id="roleFilter">
+                    <option value="">{% trans "Alle Rollen" %}</option>
+                    {% for role_id, role_name in roles %}
+                    <option value="{{ role_id }}" {% if selected_role == role_id %}selected{% endif %}>
+                        {{ role_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                
+                <select class="form-select ms-2" id="employeeFilter">
+                    <option value="">{% trans "Alle Mitarbeiter" %}</option>
+                    {% for emp in employees %}
+                    <option value="{{ emp.id }}" {% if selected_employee == emp.id|stringformat:"s" %}selected{% endif %}>
+                        {{ emp.get_full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Jahr Navigation -->
+            <div class="btn-group">
+                <a href="?year={{ prev_year }}" class="btn bg-queen-blue">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+                <button class="btn bg-queen-blue" disabled>
+                    {{ year }}
+                </button>
+                <a href="?year={{ next_year }}" class="btn bg-queen-blue">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+   
+
+    {% for data in yearly_data %}
+    <div class="card mb-4">
+        <div class="card-header 
+        {% if data.employee.role == 'THERAPIST'%}
+        bg-queen-blue 
+        {% elif data.employee.role == 'ASSISTANT' %}
+        bg-pistachio
+        {% else %}
+        bg-maize-crayola
+        {% endif %}
+        text-white d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">{{ data.employee.get_full_name }}</h5>
+            <span class="badge bg-light text-dark">{{ data.employee.get_role_display }}</span>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            {% if data.employee.role == 'THERAPIST' %}
+                            <th>{% trans "Monat" %}</th>
+                            <th class="text-end">{% trans "Gebucht" %}</th>
+                            <th class="text-end">{% trans "Betrag" %}</th>
+                            <th class="text-end">{% trans "Mehrstunden" %}</th>
+                            <th class="text-end">{% trans "Betrag Mehrstunden" %}</th>
+                            <th class="text-center">{% trans "Status" %}</th>
+                            <th class="text-end">{% trans "Gesamt" %}</th>
+                            <th class="text-center">{% trans "Details" %}</th>
+                            {% else %}
+                            <th>{% trans "Monat" %}</th>
+                            <th class="text-end">{% trans "Stunden" %}</th>
+                            <th class="text-end">{% trans "Gehalt" %}</th>
+                            <th class="text-center">{% trans "Status Gehalt" %}</th>
+                            <th class="text-end">{% trans "Überstunden" %}</th>
+                            <th class="text-end">{% trans "Überstundenbetrag" %}</th>
+                            <th class="text-center">{% trans "Status Überstunden" %}</th>
+                            <th class="text-end">{% trans "Gesamt" %}</th>
+                            <th class="text-center">{% trans "Details" %}</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in data.monthly_data %}
+                        <tr>
+                            {% if data.employee.role == 'THERAPIST' %}
+                            <td>{{ month.month_name }}</td>
+                            <td class="text-end">{{ month.booked_hours|floatformat:2 }} h</td>
+                            <td class="text-end">{{ month.base_amount|floatformat:2 }} €</td>
+                            {% if month.extra_hours > 0 %}
+                            <td class="text-end">{{ month.extra_hours|floatformat:2 }} h</td>
+                            <td class="text-end">{{ month.extra_amount|floatformat:2 }} €</td>
+                            <td class="text-center">
+                                {% if month.is_paid %}
+                                    <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                {% else %}
+                                    <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                {% endif %}
+                            </td>
+                            {% else %}
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            {% endif %}
+                            <td class="text-end">{{ month.total|floatformat:2 }} €</td>
+                            <td class="text-center">
+                                <a href="{% url 'wfm:finance-overview' %}?year={{ year }}&month={{ month.month }}&employee={{ data.employee.id }}" 
+                                   class="btn btn-sm bg-queen-blue" 
+                                   title="{% trans 'Details anzeigen' %}">
+                                    <i class="bi bi-search"></i>
+                                </a>
+                            </td>
+                            {% else %}
+                            <td>{{ month.month_name }}</td>
+                            <td class="text-end">{{ month.working_hours|default:0|floatformat:2 }} h</td>
+                            <td class="text-end">{{ month.salary|floatformat:2 }} €</td>
+                            <td class="text-center">
+                                {% if month.is_paid %}
+                                    <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                {% else %}
+                                    <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {%if month.overtime_hours > 0 %}
+                                {{ month.overtime_hours|floatformat:2 }} h</td>
+                            <td class="text-end">{{ month.overtime_amount|floatformat:2 }} €</td>
+                            <td class="text-center">
+                                {% if month.overtime_is_paid %}
+                                    <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                {% else %}
+                                    <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                {% endif %}
+                                {% else%}
+                                <td></td>
+                                <td></td>
+                                
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ month.total|floatformat:2 }} €</td>
+                            <td class="text-center">
+                                <a href="{% url 'wfm:finance-overview' %}?year={{ year }}&month={{ month.month }}&employee={{ data.employee.id }}" 
+                                   class="btn btn-sm bg-queen-blue" 
+                                   title="{% trans 'Details anzeigen' %}">
+                                    <i class="bi bi-search"></i>
+                                </a>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-sum">
+                            {% if data.employee.role == 'THERAPIST' %}
+                            <td><strong>{% trans "Gesamt" %}</strong></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.working_hours|floatformat:2 }} h</strong></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.salary|floatformat:2 }} €</strong></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.overtime|floatformat:2 }} h</strong></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.overtime_amount|floatformat:2 }} €</strong></td>
+                            <td></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.total_earnings|floatformat:2 }} €</strong></td>
+                            <td></td>
+                            {% else %}
+                            <td><strong>{% trans "Gesamt" %}</strong></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.working_hours|default:0|floatformat:2 }} h</strong></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.salary|floatformat:2 }} €</strong></td>
+                            <td></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.overtime|floatformat:2 }} h</strong></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.overtime_amount|floatformat:2 }} €</strong></td>
+                            <td></td>
+                            <td class="text-end"><strong>{{ data.yearly_totals.total_earnings|floatformat:2 }} €</strong></td>
+                            <td></td>
+                            {% endif %}
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Export Buttons -->
+    {% comment %} <div class="mt-4">
+        <a href="{% url 'wfm:export-finance-yearly-report' %}?year={{ year }}&format=pdf{% if selected_role %}&role={{ selected_role }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}" 
+           class="btn bg-queen-blue">
+            <i class="bi bi-file-pdf"></i> {% trans "Als PDF exportieren" %}
+        </a>
+        <a href="{% url 'wfm:export-finance-yearly-report' %}?year={{ year }}&format=excel{% if selected_role %}&role={{ selected_role }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}" 
+           class="btn bg-queen-blue ms-2">
+            <i class="bi bi-file-excel"></i> {% trans "Als Excel exportieren" %}
+        </a>
+    </div> {% endcomment %}
+</div>
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Filter-Handling
+    $('#roleFilter, #employeeFilter').change(function() {
+        const role = $('#roleFilter').val();
+        const employee = $('#employeeFilter').val();
+        const year = {{ year }};
+        
+        let url = `?year=${year}`;
+        if (role) url += `&role=${role}`;
+        if (employee) url += `&employee=${employee}`;
+        
+        window.location.href = url;
+    });
+});
+</script>
+{% endblock %}
+
+{% endblock %} 
