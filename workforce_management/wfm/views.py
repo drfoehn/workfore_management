@@ -324,7 +324,7 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                     days_data.append(entry)
                 else:
                     days_data.extend(day_entries)
-        
+
 
         
 
@@ -541,7 +541,7 @@ class WorkingHoursCreateView(LoginRequiredMixin, CreateView):
                 role__in=['ASSISTANT', 'CLEANING']
             ).order_by('first_name', 'last_name')
         return context
-    
+
     def form_valid(self, form):
         # Setze den Mitarbeiter
         if self.request.user.role == 'OWNER' and 'employee' in self.request.POST:
@@ -550,7 +550,7 @@ class WorkingHoursCreateView(LoginRequiredMixin, CreateView):
                 id=self.request.POST['employee']
             )
         else:
-            form.instance.employee = self.request.user
+            form.instance.employee = self.request.user  # Korrekte Einrückung nach else
             
         # Konvertiere das Datum aus der URL in ein date-Objekt
         date_str = self.kwargs['date']
@@ -587,7 +587,7 @@ class WorkingHoursUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView
                 role__in=['ASSISTANT', 'CLEANING']
             ).order_by('first_name', 'last_name')
         return context
-    
+
     def form_valid(self, form):
         if self.request.user.role == 'OWNER' and 'employee' in self.request.POST:
             form.instance.employee = get_object_or_404(
@@ -616,7 +616,7 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
     def get(self, request):
         try:
             today = timezone.now().date()
-            
+        
             # Bestimme den relevanten Monat für die Überstunden
             if today.day <= 7:
                 target_date = today - relativedelta(months=1)
@@ -636,14 +636,14 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             ).aggregate(
                 total=Coalesce(Sum('hours_for_payment'), Decimal('0'))
             )['total']
-            
+
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'balance': float(total_balance),
                     'hours_for_payment': float(marked_hours),
                     'remaining_balance': float(total_balance - marked_hours)
                 })
-            
+                
             context = {
                 'balance': total_balance,
                 'hours_for_payment': marked_hours,
@@ -668,15 +668,8 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
                 raise PermissionDenied
             
             data = json.loads(request.body)
-            
             hours_for_payment = Decimal(str(data.get('hours_for_payment', 0)))
             
-            today = timezone.now().date()
-            if today.day <= 7:
-                target_date = today - relativedelta(months=1)
-            else:
-                target_date = today
-                
             # Hole die aktuelle Gesamtbilanz
             total_balance = OvertimeAccount.get_current_balance(request.user)
             
@@ -692,24 +685,46 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
                 is_paid=False
             ).first()
 
+            # Speichere die alten Stunden für die Differenzberechnung
+            old_hours = payment.hours_for_payment if payment else Decimal('0')
+
             if not payment:
                 payment = OvertimePayment(
                     employee=request.user,
-                    paid_date=target_date,
                     hours_for_payment=hours_for_payment,
-                    is_paid=False
+                    is_paid=False,
+                    paid_date=None
                 )
                 # Berechne den Betrag vor dem Speichern
                 payment.calculate_amount()
             else:
                 payment.hours_for_payment = hours_for_payment
                 payment.calculate_amount()
+                payment.paid_date = None
             
             payment.save()
+
+            # Berechne die Differenz und aktualisiere die Balance
+            hours_difference = hours_for_payment - old_hours
+            
+            # Hole das aktuelle Überstundenkonto
+            today = timezone.now().date()
+            current_account = OvertimeAccount.objects.filter(
+                employee=request.user,
+                year=today.year,
+                month=today.month
+            ).first()
+            
+            if current_account:
+                current_account.balance -= hours_difference
+                current_account.save()
+            
+            # Aktualisiere die Gesamtbilanz für die Antwort
+            new_total_balance = OvertimeAccount.get_current_balance(request.user)
             
             return JsonResponse({
                 'success': True,
-                'balance': float(total_balance),
+                'balance': float(new_total_balance),
                 'hours_for_payment': float(payment.hours_for_payment)
             })
             
@@ -1085,9 +1100,9 @@ def api_vacation_request(request):
 
         
 
-
+        
         remaining_hours = entitlement.total_hours - used_hours
-
+        
         if needed_hours > remaining_hours:
             return JsonResponse({
                 'error': gettext('Nicht genügend Urlaubsstunden verfügbar')
@@ -1766,7 +1781,7 @@ class TherapistCalendarView(LoginRequiredMixin, TemplateView):
             year = today.year
         
         current_date = date(int(year), int(month), 1)
-        
+
         context.update({
             'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
@@ -1798,18 +1813,18 @@ class AssistantCalendarEventsView(View):
         show_absences_only = request.GET.get('absences') == '1'
         
         # Hole employee und role Filter
-        employee_id = request.GET.get('employee')
+        employee_id = request.GET.get('employee')  
         role = request.GET.get('role')
         
         # Basis-Filter für Mitarbeiter
         employee_filter = {}
-        if employee_id:
-            employee_filter['employee_id'] = employee_id
+        if employee_id:  
+            employee_filter['employee_id'] = employee_id  
         if role:
             employee_filter['employee__role'] = role
 
         events = []
-        
+
         # Lade IMMER die Abwesenheiten
         # Urlaub
         vacations = Vacation.objects.filter(
@@ -1825,8 +1840,8 @@ class AssistantCalendarEventsView(View):
             'end': (v.end_date + timedelta(days=1)).isoformat(),
             'backgroundColor': v.employee.color,
             'className': 'vacation-event',
-            'type': 'vacation',
-            'allDay': True
+                        'type': 'vacation',
+                        'allDay': True
         } for v in vacations])
         
 
@@ -1863,7 +1878,7 @@ class AssistantCalendarEventsView(View):
             'backgroundColor': sl.employee.color,
             'className': 'sick-leave-event',
             'type': 'sick_leave',
-            'allDay': True
+                        'allDay': True
         } for sl in sick_leaves])
 
         # Lade Arbeitsstunden nur wenn nicht nur Abwesenheiten angezeigt werden sollen
@@ -1887,7 +1902,7 @@ class AssistantCalendarEventsView(View):
                 }
             } for wh in working_hours])
 
-        return JsonResponse(events, safe=False)
+            return JsonResponse(events, safe=False)
 
 
 
@@ -2053,7 +2068,7 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
 
         # Debug: Print filter
         print("DEBUG: Employee filter:", employee_filter)
-
+        
         if show_absences_only:
             events = []
             
@@ -2101,8 +2116,8 @@ class AssistantCalendarView(LoginRequiredMixin, TemplateView):
                     'start': vacation.start_date.isoformat(),
                     'end': (vacation.end_date + timedelta(days=1)).isoformat(),
                     'className': 'bg-warning' if vacation.status == 'REQUESTED' else 'bg-success',
-                    'type': 'vacation',
-                    'allDay': True
+                'type': 'vacation',
+                'allDay': True
                 }
                 events.append(event)
                 # Debug: Print created event
@@ -2297,7 +2312,7 @@ class AbsenceListView(LoginRequiredMixin, ListView):
     template_name = 'wfm/absence_list.html'
     model = SickLeave
     context_object_name = 'sick_leaves'
-    
+
     def get_queryset(self):
         # Verwende select_related wie in der SickLeaveManagementView
         return SickLeave.objects.filter(
@@ -2308,7 +2323,7 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
         today = timezone.now().date()
-
+        
         # Hole die Urlaubsanträge und berechne die Stunden
         vacations = Vacation.objects.filter(
             employee=user
@@ -2317,13 +2332,13 @@ class AbsenceListView(LoginRequiredMixin, ListView):
         # Berechne die Stunden für jeden Urlaub
         for vacation in vacations:
             vacation.hours = vacation.calculate_vacation_hours()
-
+        
         # Urlaubsübersicht
         entitlement = VacationEntitlement.objects.filter(
             employee=user,
             year=today.year
         ).first()
-
+        
         if entitlement:
             # Genehmigte Urlaubsstunden
             approved_vacations = Vacation.objects.filter(
@@ -2365,7 +2380,7 @@ class AbsenceListView(LoginRequiredMixin, ListView):
                     )
                 )
                 last_year_remaining = max(
-                    last_year_entitlement.total_hours - last_year_used,
+                    last_year_entitlement.total_hours - last_year_used, 
                     Decimal('0')
                 )
             
@@ -2399,7 +2414,7 @@ class AbsenceListView(LoginRequiredMixin, ListView):
 
         # Für das Upload-Modal
         context['users'] = [user]
-
+        
         return context
 
     # def get_timecomp_info(self, user):
@@ -2745,7 +2760,7 @@ class SickLeaveManagementView(LoginRequiredMixin, OwnerRequiredMixin, ListView):
     template_name = 'wfm/sick_leave_management.html'
     model = SickLeave
     context_object_name = 'sick_leaves'  # Wichtig für das Template
-    
+
     def get_queryset(self):
         # Verwende select_related für effiziente Datenbankabfragen
         return SickLeave.objects.all().select_related('employee', 'document').order_by('-start_date')
@@ -2847,7 +2862,7 @@ def upload_document(request):
                 display_name=display_name,
                 notes=notes
             )
-
+            
             # Bestimme die Redirect-URL basierend auf Dokumenttyp und Benutzerrolle
             if sick_leave_id:
                 try:
@@ -3383,43 +3398,37 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         total_cleaning_amount = sum(expense['amount'] for expense in cleaning_expenses.values())
 
         # c) Überstunden-Ausgaben
-        overtime_expenses = OvertimeAccount.objects.filter(
-            year=year,
-            month=month,
+        overtime_expenses = OvertimePayment.objects.filter(
+            created_at__year=year,
+            created_at__month=month,
             hours_for_payment__gt=0  # Nur Einträge mit zu bezahlenden Stunden
         ).select_related('employee').values(
+            'id',  # Stelle sicher, dass die ID hier mit ausgewählt wird
             'employee__id',
             'employee__first_name',
             'employee__last_name',
             'employee__role',
             'employee__hourly_rate',
-            'overtime_paid',
-            'overtime_paid_date'
+            'is_paid',
+            'paid_date',
+            'created_at'
         ).annotate(
-            overtime_hours=Sum('hours_for_payment'),
+            overtime_hours=F('hours_for_payment'),
             amount=ExpressionWrapper(
-                Sum('hours_for_payment') * F('employee__hourly_rate'),
+                F('hours_for_payment') * F('employee__hourly_rate'),
                 output_field=DecimalField(max_digits=10, decimal_places=2)
             )
         ).order_by('employee__first_name', 'employee__last_name')
-
-
-        # Berechne Summen
-        total_income = sum(
-            income['total']
-            for income in grouped_income.values()
-        )
-
         
         # Berechne die Summen für Überstunden
         total_overtime_hours = overtime_expenses.aggregate(
-            total=Coalesce(Sum('overtime_hours'), Decimal('0.00'))
+            total=Coalesce(Sum('hours_for_payment'), Decimal('0.00'))
         )['total']
         total_overtime_amount = overtime_expenses.aggregate(
             total=Coalesce(Sum('amount'), Decimal('0.00'))
         )['total']
 
-        # Füge die Rollen-Anzeige und Summen zum Context hinzu
+        # Füge die Rollen-Anzeige hinzu
         for expense in overtime_expenses:
             expense['role_display'] = {
                 'OWNER': gettext('Inhaber'),
@@ -3428,12 +3437,18 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                 'CLEANING': gettext('Reinigungskraft')
             }.get(expense['employee__role'], expense['employee__role'])
 
+        # Berechne Summen
+        total_income = sum(
+            income['total']
+            for income in grouped_income.values()
+        )
+
 
         # Berechne die Summen für die Ausgaben
         total_expenses = sum(
             a['amount'] for a in assistant_expenses.values()) + sum(c['amount'] for c in cleaning_expenses.values()) + total_overtime_amount
         
-
+        
         
         context.update({
             'grouped_income': grouped_income.values(),
@@ -3654,46 +3669,40 @@ def api_mark_therapist_extra_hours_as_paid(request):
         }, status=500)
 
 @login_required
+@ensure_csrf_cookie
+@require_http_methods(["POST"])
 def api_mark_overtime_as_paid(request):
-    """API-Endpoint zum Markieren von Überstunden als bezahlt"""
-    if request.user.role != 'OWNER':
-        return JsonResponse({'success': False, 'error': gettext('Keine Berechtigung')})
-    
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': gettext('Ungültige Anfrage')})
-    
     try:
         data = json.loads(request.body)
-        employee_id = data.get('employee_id')
-        set_paid = data.get('set_paid', True)
-        
-        # Hole den aktuellen unbezahlten Eintrag
-        payment = OvertimePayment.objects.get(
-            employee_id=employee_id,
-            is_paid=False
-        )
-        
+        payment_id = data.get('id')
+        set_paid = data.get('set_paid', False)
+
+        if not payment_id:
+            return JsonResponse({'success': False, 'error': gettext('Überstunden ID fehlt')}, status=400)
+
+        payment = OvertimePayment.objects.get(id=payment_id)
         payment.is_paid = set_paid
-        payment.paid_date = timezone.now().date() if set_paid else None
+        payment.paid_date = timezone.now() if set_paid else None
         payment.save()
-        
+
         return JsonResponse({
             'success': True,
             'is_paid': payment.is_paid,
-            'paid_date': payment.paid_date.strftime('%d.%m.%Y') if payment.paid_date else None
+            'paid_date': payment.paid_date.strftime('%d.%m.%Y') if payment.paid_date else None  # Hier das Format korrigiert
         })
-        
+
     except OvertimePayment.DoesNotExist:
         return JsonResponse({
-            'success': False,
-            'error': gettext('Keine unbezahlten Überstunden gefunden')
-        })
+            'success': False, 
+            'error': gettext('Überstundeneintrag nicht gefunden')
+        }, status=404)
     except Exception as e:
-        logger.error(f"Error marking overtime as paid: {str(e)}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        logger.error(f"Fehler beim Markieren der Überstunden als bezahlt: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+
+
 
 @login_required
 def api_mark_salary_as_paid(request):

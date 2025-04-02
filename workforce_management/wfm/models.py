@@ -1030,14 +1030,14 @@ class OvertimeAccount(models.Model):
 
 class OvertimePayment(models.Model):
     employee = models.ForeignKey(
-        'CustomUser',
+        CustomUser,
         on_delete=models.CASCADE,
         related_name='overtime_payments'
     )
     hours_for_payment = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        verbose_name=_('Stunden')
+        default=0
     )
     amount = models.DecimalField(
         max_digits=10,
@@ -1049,18 +1049,18 @@ class OvertimePayment(models.Model):
         default=False,
         verbose_name=_('Bezahlt')
     )
-    paid_date = models.DateField(
+    paid_date = models.DateTimeField(
         null=True,
         blank=True,
         verbose_name=_('Bezahlt am')
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         verbose_name = _('Überstunden-Auszahlung')
         verbose_name_plural = _('Überstunden-Auszahlungen')
         ordering = ['-paid_date', 'employee']
-        unique_together = ['employee', 'paid_date']  # Ein Eintrag pro Monat/Mitarbeiter
+        unique_together = []
 
     def calculate_amount(self):
         """Berechnet den Auszahlungsbetrag basierend auf dem Stundenlohn"""

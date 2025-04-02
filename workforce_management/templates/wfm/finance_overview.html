@@ -287,72 +287,77 @@
                     <!-- Überstunden-Ausgaben -->
                     <h4>{% trans "Überstunden-Ausgaben" %}</h4>
                     
-                            {% if overtime_expenses %}
-                            <div class="table-responsive mb-4">
-                                <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>{% trans "Mitarbeiter" %}</th>
-                                            <th>{% trans "Position" %}</th>
-                                            <th>{% trans "Überstunden" %}</th>
-                                            <th>{% trans "Betrag" %}</th>
-                                            <th>{% trans "Status" %}</th>
-                                            <th>{% trans "Bezahlt am" %}</th>
-                                            <th>{% trans "Aktionen" %}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for expense in overtime_expenses %}
-                                        <tr>
-                                            <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
-                                            <td>{{ expense.role_display }}</td>
-                                            <td>{{ expense.overtime_hours|floatformat:1 }} h</td>
-                                            <td>{{ expense.amount|floatformat:2 }} €</td>
-                                            <td>
-                                                {% if expense.overtime_paid %}
-                                                    <span class="badge bg-success">{% trans "Bezahlt" %}</span>
-                                                {% else %}
-                                                    <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                {% if expense.overtime_paid_date %}
-                                                    {{ expense.overtime_paid_date|date:"d.m.Y" }}
-                                                {% else %}
-                                                    -
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                <button type="button"
-                                                        class="btn btn-sm {% if expense.overtime_paid %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-overtime-paid-btn"
-                                                        data-employee-id="{{ expense.employee__id }}"
-                                                        data-month="{{ current_date.month }}"
-                                                        data-year="{{ current_date.year }}">
-                                                    {% if expense.overtime_paid %}
-                                                        <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
-                                                    {% else %}
-                                                        <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
-                                                    {% endif %}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                    <tfoot>
-                                        <tr class="table">
-                                            <td colspan="2" class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
-                                            <td class="table-sum"><strong>{{ total_overtime_hours|floatformat:1 }} h</strong></td>
-                                            <td class="table-sum"><strong>{{ total_overtime_amount|floatformat:2 }} €</strong></td>
-                                            <td class="table-sum"></td>
-                                            <td class="table-sum"></td>
-                                            <td class="table-sum"></td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                            {% else %}
-                            <p class="text-muted mb-0">{% trans "Keine Überstunden im ausgewählten Zeitraum" %}</p>
-                            {% endif %}
+{% if overtime_expenses %}
+<div class="table-responsive mb-4">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>{% trans "Mitarbeiter" %}</th>
+                <th>{% trans "Position" %}</th>
+                <th>{% trans "Überstunden" %}</th>
+                <th>{% trans "Betrag" %}</th>
+                <th>{% trans "Status" %}</th>
+                <th>{% trans "Markiert am" %}</th>
+                <th>{% trans "Bezahlt am" %}</th>
+                <th>{% trans "Aktionen" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for expense in overtime_expenses %}
+            <tr>
+                <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
+                <td>{{ expense.role_display }}</td>
+                <td>{{ expense.overtime_hours|floatformat:1 }} h</td>
+                <td>{{ expense.amount|floatformat:2 }} €</td>
+                <td>
+                    {% if expense.is_paid %}
+                        <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                    {% else %}
+                        <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                    {% endif %}
+                </td>
+                <td>{{ expense.created_at|date:"d.m.Y" }}</td>
+                <td>
+                    {% if expense.paid_date %}
+                        {{ expense.paid_date|date:"d.m.Y" }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    <button type="button"
+                            class="btn btn-sm {% if expense.is_paid %}btn-outline-success{% else %}bg-pistachio{% endif %} mark-overtime-paid-btn"
+                            data-id="{{ expense.id }}"
+                            data-paid="{% if expense.is_paid %}true{% else %}false{% endif %}">
+                        {% if expense.is_paid %}
+                            <i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}
+                        {% else %}
+                            <i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}
+                        {% endif %}
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+            
+        
+        </tbody>
+        <tfoot>
+            <tr class="table">
+                <td colspan="2" class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
+                <td class="table-sum"><strong>{{ total_overtime_hours|floatformat:1 }} h</strong></td>
+                <td class="table-sum"><strong>{{ total_overtime_amount|floatformat:2 }} €</strong></td>
+                <td class="table-sum"></td>
+                <td class="table-sum"></td>
+                <td class="table-sum"></td>
+                <td class="table-sum"></td>
+                <td class="table-sum"></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% else %}
+<p class="text-muted mb-0">{% trans "Keine Überstunden im ausgewählten Zeitraum" %}</p>
+{% endif %}
                         
                 </div>
             </div>
@@ -462,15 +467,14 @@ $(document).ready(function() {
         });
     });
 
-    // Neuer Überstunden Handler
+
+    // Überstunden Handler
     $(document).on('click', '.mark-overtime-paid-btn', function(e) {
         e.preventDefault();
         e.stopPropagation();
         
         const $btn = $(this);
-        const employeeId = $btn.data('employee-id');
-        const month = $btn.data('month');
-        const year = $btn.data('year');
+        const paymentId = $btn.data('id');
         const isPaid = $btn.hasClass('btn-outline-success');
         
         $.ajax({
@@ -481,20 +485,39 @@ $(document).ready(function() {
                 'Content-Type': 'application/json'
             },
             data: JSON.stringify({
-                employee_id: employeeId,
-                month: month,
-                year: year,
+                id: paymentId,
                 set_paid: !isPaid
             }),
             success: function(response) {
                 if (response.success) {
-                    location.reload();
+                    const $row = $btn.closest('tr');
+                    const $statusBadge = $row.find('.badge');
+                    const $paidDateCell = $row.find('td:nth-child(7)');
+                    
+                    if (response.is_paid) {
+                        $btn.removeClass('bg-pistachio').addClass('btn-outline-success');
+                        $btn.html('<i class="bi bi-x-lg"></i> {% trans "Bezahlung zurücksetzen" %}');
+                        $statusBadge.removeClass('bg-warning').addClass('bg-success');
+                        $statusBadge.text('{% trans "Bezahlt" %}');
+                        $paidDateCell.text(response.paid_date);
+                    } else {
+                        $btn.removeClass('btn-outline-success').addClass('bg-pistachio');
+                        $btn.html('<i class="bi bi-check-lg"></i> {% trans "Als bezahlt markieren" %}');
+                        $statusBadge.removeClass('bg-success').addClass('bg-warning');
+                        $statusBadge.text('{% trans "Ausstehend" %}');
+                        $paidDateCell.text('-');
+                    }
                 } else {
-                    alert('{% trans "Ein Fehler ist aufgetreten" %}');
+                    alert(response.error || '{% trans "Ein Fehler ist aufgetreten" %}');
                 }
             },
-            error: function() {
-                alert('{% trans "Ein Fehler ist aufgetreten" %}');
+            error: function(xhr) {
+                console.error('Error:', xhr);
+                let errorMessage = '{% trans "Ein Fehler ist aufgetreten" %}';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMessage = xhr.responseJSON.error;
+                }
+                alert(errorMessage);
             }
         });
     });

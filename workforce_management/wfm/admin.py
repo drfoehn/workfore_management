@@ -225,7 +225,7 @@ class OvertimeAccountAdmin(admin.ModelAdmin):
 
 @admin.register(OvertimePayment)
 class OvertimePaymentAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'hours_for_payment', 'amount', 'is_paid', 'paid_date']
+    list_display = ['employee', 'hours_for_payment', 'created_at', 'amount', 'is_paid', 'paid_date']
     list_filter = ['employee', 'is_paid']
     search_fields = ['employee__username', 'employee__first_name', 'employee__last_name']
     date_hierarchy = 'paid_date'
