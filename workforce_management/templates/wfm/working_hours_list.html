@@ -56,7 +56,7 @@
                         </li>
                         <li>
                             <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#overtimeModal">
-                                <i class="bi bi-arrow-right-circle"></i> {% trans "Überstunden umbuchen" %}
+                                <i class="bi bi-arrow-right-circle"></i> {% trans "Überstunden auszahlen" %}
                             </button>
                         </li>
                         <li>
@@ -365,6 +365,7 @@
                             <th class="text-nowrap">{% trans "Mitarbeiter" %}</th>
                             <th class="text-nowrap">{% trans "Bilanz im" %} {{ month_name }}</th>
                             <th class="text-nowrap">{% trans "Bilanz gesamt" %}</th>
+                            <th class="text-nowrap"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -391,6 +392,14 @@
                                             {{ balance|floatformat:2 }}h
                                         {% endif %}
                                     </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#overtimeModal"
+                                            title="{% trans 'Überstunden auszahlen' %}">
+                                       {% trans "Überstunden auszahlen" %}
+                                    </button>
                                 </td>
                             </tr>
                         {% endfor %}
