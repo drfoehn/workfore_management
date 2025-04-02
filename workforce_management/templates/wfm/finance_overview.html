@@ -507,6 +507,11 @@ $(document).ready(function() {
                         $statusBadge.text('{% trans "Ausstehend" %}');
                         $paidDateCell.text('-');
                     }
+                    
+                    // Aktualisiere die Überstundenbilanz, falls angezeigt
+                    if (response.current_balance !== undefined) {
+                        $('.overtime-balance').text(response.current_balance.toFixed(2));
+                    }
                 } else {
                     alert(response.error || '{% trans "Ein Fehler ist aufgetreten" %}');
                 }

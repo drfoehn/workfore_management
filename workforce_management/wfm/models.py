@@ -15,6 +15,7 @@ import decimal
 from django.db.models.functions import Extract
 from django.db.models.signals import pre_delete, post_save, post_delete
 from django.dispatch import receiver
+from django.db.models.functions import Coalesce
 
 
 class CustomUser(AbstractUser):
@@ -934,40 +935,28 @@ class OvertimeEntry(models.Model):
 class OvertimeAccount(models.Model):
     """Überstundenkonto für Auszahlungen und Gesamtübersicht"""
     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    year = models.IntegerField()
     month = models.IntegerField()
-    balance = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
+    year = models.IntegerField()
+    balance = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    current_balance = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
         default=0,
-        help_text=_("Positive Werte = Überstunden, Negative = Minderstunden")
+        help_text=_("Aktuelle Gesamtbilanz inklusive aller Änderungen")
     )
     hours_for_payment = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    overtime_paid = models.BooleanField(default=False)
-    overtime_paid_date = models.DateTimeField(null=True, blank=True)
     payment_locked_until = models.DateField(null=True, blank=True)
-    last_update = models.DateField(null=True, blank=True)
-
-    class Meta:
-        ordering = ['-year', '-month']
-        verbose_name = _("Überstundenkonto")
-        verbose_name_plural = _("Überstundenkonten")
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
 
     @classmethod
-    def get_current_balance(cls, employee, year=None, month=None):
-        """Holt die aktuelle Gesamtbilanz aus den OvertimeEntries"""
-        if year is None or month is None:
-            today = timezone.now().date()
-            year = today.year
-            month = today.month
-
-        # Summiere alle nicht gesperrten Überstunden
-        balance = OvertimeEntry.objects.filter(
-            employee=employee,
-            is_locked=False
-        ).aggregate(total=models.Sum('hours'))['total'] or Decimal('0')
-
-        return balance
+    def get_current_balance(cls, employee):
+        """Holt die aktuelle Überstundenbilanz des Mitarbeiters"""
+        latest_account = cls.objects.filter(
+            employee=employee
+        ).order_by('-year', '-month').first()
+        
+        return latest_account.current_balance if latest_account else Decimal('0.00')
 
     @classmethod
     def get_monthly_balance(cls, employee, year, month):
@@ -976,7 +965,7 @@ class OvertimeAccount(models.Model):
             employee=employee,
             date__year=year,
             date__month=month
-        ).aggregate(total=models.Sum('hours'))['total'] or Decimal('0')
+        ).aggregate(total=Sum('hours'))['total'] or Decimal('0')
 
     def mark_for_payment(self, hours_to_pay, payment_date=None):
         """Markiert Überstunden zur Auszahlung"""
@@ -1024,9 +1013,26 @@ class OvertimeAccount(models.Model):
             employee=employee,
             year=year,
             month=month,
-            defaults={'balance': total_hours}
+            defaults={
+                'balance': total_hours,
+                'current_balance': total_hours  # Setze initial gleich
+            }
         )
         return account
+
+    def save(self, *args, **kwargs):
+        if not self.current_balance:
+            self.current_balance = self.balance
+        if not self.id:  # Wenn neuer Eintrag
+            self.created_at = timezone.now()
+        self.updated_at = timezone.now()  # Immer aktualisieren
+        super().save(*args, **kwargs)
+
+    class Meta:
+        unique_together = ('employee', 'month', 'year')
+        ordering = ['-year', '-month']
+        verbose_name = _("Überstundenkonto")
+        verbose_name_plural = _("Überstundenkonten")
 
 class OvertimePayment(models.Model):
     employee = models.ForeignKey(
@@ -1245,6 +1251,82 @@ def update_monthly_wage_on_working_hours_delete(sender, instance, **kwargs):
         monthly_wage.calculate_wage()
     except MonthlyWage.DoesNotExist:
         pass  # Wenn kein MonthlyWage existiert, muss nichts aktualisiert werden
+
+@receiver(post_save, sender=OvertimeEntry)
+def update_overtime_account(sender, instance, created, **kwargs):
+    """Aktualisiert das OvertimeAccount wenn ein OvertimeEntry erstellt/geändert wird"""
+    entry_date = instance.date  # Nutze das Datum des Eintrags
+    
+    # Hole oder erstelle OvertimeAccount für den Monat des Eintrags
+    account, created = OvertimeAccount.objects.get_or_create(
+        employee=instance.employee,
+        year=entry_date.year,
+        month=entry_date.month,
+        defaults={
+            'balance': Decimal('0.00'),
+            'current_balance': Decimal('0.00')
+        }
+    )
+    
+    # Berechne die neue Gesamtbilanz für alle nicht gesperrten Einträge
+    total_balance = OvertimeEntry.objects.filter(
+        employee=instance.employee,
+        is_locked=False  # Nur nicht gesperrte Einträge
+    ).aggregate(
+        total=Coalesce(Sum('hours'), Decimal('0.00'))
+    )['total']
+    
+    # Berechne die Monatsbilanz
+    month_balance = OvertimeEntry.objects.filter(
+        employee=instance.employee,
+        date__year=entry_date.year,
+        date__month=entry_date.month,
+        is_locked=False
+    ).aggregate(
+        total=Coalesce(Sum('hours'), Decimal('0.00'))
+    )['total']
+    
+    # Aktualisiere die Bilanzen
+    account.balance = month_balance  # Monatliche Bilanz
+    account.current_balance = total_balance  # Gesamtbilanz
+    account.save()
+
+@receiver(post_delete, sender=OvertimeEntry)
+def update_overtime_account_on_delete(sender, instance, **kwargs):
+    """Aktualisiert das OvertimeAccount wenn ein OvertimeEntry gelöscht wird"""
+    entry_date = instance.date  # Nutze das Datum des gelöschten Eintrags
+    
+    try:
+        account = OvertimeAccount.objects.get(
+            employee=instance.employee,
+            year=entry_date.year,
+            month=entry_date.month
+        )
+        
+        # Berechne die neue Gesamtbilanz
+        total_balance = OvertimeEntry.objects.filter(
+            employee=instance.employee,
+            is_locked=False
+        ).aggregate(
+            total=Coalesce(Sum('hours'), Decimal('0.00'))
+        )['total']
+        
+        # Berechne die neue Monatsbilanz
+        month_balance = OvertimeEntry.objects.filter(
+            employee=instance.employee,
+            date__year=entry_date.year,
+            date__month=entry_date.month,
+            is_locked=False
+        ).aggregate(
+            total=Coalesce(Sum('hours'), Decimal('0.00'))
+        )['total']
+        
+        # Aktualisiere die Bilanzen
+        account.balance = month_balance  # Monatliche Bilanz
+        account.current_balance = total_balance  # Gesamtbilanz
+        account.save()
+    except OvertimeAccount.DoesNotExist:
+        pass  # Wenn kein Account existiert, muss nichts aktualisiert werden
 
 
 

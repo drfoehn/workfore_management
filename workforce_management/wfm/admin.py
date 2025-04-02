@@ -198,14 +198,12 @@ class OvertimeAccountAdmin(admin.ModelAdmin):
         'year', 
         'month', 
         'balance', 
-        'hours_for_payment',
-        'overtime_paid',
-        'payment_locked_until'
+        'current_balance',
+
     ]
-    list_filter = ['employee', 'year', 'month', 'overtime_paid']
+    list_filter = ['employee', 'year', 'month']
     search_fields = ['employee__first_name', 'employee__last_name']
     ordering = ['-year', '-month', 'employee__first_name']
-    readonly_fields = ['last_update']
     
     def get_readonly_fields(self, request, obj=None):
         if obj and obj.payment_locked_until:  # Wenn Eintrag gesperrt ist

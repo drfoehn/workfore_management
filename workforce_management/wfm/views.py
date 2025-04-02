@@ -3681,6 +3681,31 @@ def api_mark_overtime_as_paid(request):
             return JsonResponse({'success': False, 'error': gettext('Überstunden ID fehlt')}, status=400)
 
         payment = OvertimePayment.objects.get(id=payment_id)
+        
+        # Hole oder erstelle OvertimeAccount für den aktuellen Monat
+        today = timezone.now()
+        overtime_account, created = OvertimeAccount.objects.get_or_create(
+            employee=payment.employee,
+            month=today.month,
+            year=today.year,
+            defaults={
+                'balance': Decimal('0.00'),
+                'current_balance': Decimal('0.00')
+            }
+        )
+        
+        # Wenn als bezahlt markiert wird, ziehe Stunden ab
+        if set_paid and not payment.is_paid:  # Nur wenn vorher nicht bezahlt
+            overtime_account.balance -= payment.hours_for_payment
+            overtime_account.current_balance -= payment.hours_for_payment
+        # Wenn Bezahlung zurückgesetzt wird, addiere Stunden wieder
+        elif not set_paid and payment.is_paid:  # Nur wenn vorher bezahlt
+            overtime_account.balance += payment.hours_for_payment
+            overtime_account.current_balance += payment.hours_for_payment
+            
+        overtime_account.save()
+        
+        # Aktualisiere den Payment-Status
         payment.is_paid = set_paid
         payment.paid_date = timezone.now() if set_paid else None
         payment.save()
@@ -3688,7 +3713,8 @@ def api_mark_overtime_as_paid(request):
         return JsonResponse({
             'success': True,
             'is_paid': payment.is_paid,
-            'paid_date': payment.paid_date.strftime('%d.%m.%Y') if payment.paid_date else None  # Hier das Format korrigiert
+            'paid_date': payment.paid_date.strftime('%d.%m.%Y') if payment.paid_date else None,
+            'current_balance': float(overtime_account.current_balance)  # Sende aktuelle Balance zurück
         })
 
     except OvertimePayment.DoesNotExist:
