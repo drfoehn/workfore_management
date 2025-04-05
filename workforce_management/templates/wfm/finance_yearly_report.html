@@ -46,10 +46,63 @@
         </div>
     </div>
 
+
+    <div class="card mt-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Jahresübersicht {{ year }}</h5>
+        </div>
+        <div class="card-body">
+            <!-- Jahresübersicht -->
+            <div class="table-responsive mb-4">
+                <table class="table table-hover">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>{% trans "Einnahmen" %}</th>
+                            <th>{% trans "Stunden" %}</th>
+                            <th>{% trans "Betrag" %}</th>
+                            <th>{% trans "Ausgaben" %}</th>
+                            <th>{% trans "Stunden" %}</th>
+                            <th>{% trans "Betrag" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{% trans "Gebuchte Stunden" %}</td>
+                            <td>{{ yearly_totals.booked_hours|floatformat:2 }} h</td>  
+                            <td>{{ yearly_totals.booked_amount|floatformat:2 }} €</td>
+                            <td>{% trans "Gearbeitete Stunden" %}</td>
+                            <td>{{ yearly_totals.working_hours|floatformat:2 }} h</td>
+                            <td>{{ yearly_totals.salary|floatformat:2 }} €</td>
+                        </tr>
+                        <tr>
+                            <td>{% trans "Mehrstunden" %}</td>
+                            <td>{{ yearly_totals.extra_hours|floatformat:2 }} h</td>  
+                            <td>{{ yearly_totals.extra_amount|floatformat:2 }} €</td>
+                            <td>{% trans "Überstunden" %}</td>
+                            <td>{{ yearly_totals.overtime|floatformat:2 }} h</td>
+                            <td>{{ yearly_totals.overtime_amount|floatformat:2 }} €</td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td>{% trans "Gesamt" %}</td> 
+                            <td>{{ yearly_totals.total_booked_hours|floatformat:2 }} h</td>
+                            <td>{{ yearly_totals.total_earnings|floatformat:2 }} €</td>
+                            <td>{% trans "Gesamt" %}</td>
+                            <td>{{ yearly_totals.total_working_hours|floatformat:2 }} h</td>
+                            <td>{{ yearly_totals.total_spendings|floatformat:2 }} €</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
    
 
     {% for data in yearly_data %}
-    <div class="card mb-4">
+
+
+    <div class="card mb-4 mt-4">
         <div class="card-header 
         {% if data.employee.role == 'THERAPIST'%}
         bg-queen-blue 
@@ -187,6 +240,8 @@
         </div>
     </div>
     {% endfor %}
+
+ 
 
     <!-- Export Buttons -->
     {% comment %} <div class="mt-4">
