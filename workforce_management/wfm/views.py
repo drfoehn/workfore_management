@@ -3212,6 +3212,7 @@ class EmployeeListView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         
         return context
 
+
 @login_required
 def api_therapist_booking_mark_as_paid(request):
     if request.user.role != 'OWNER':

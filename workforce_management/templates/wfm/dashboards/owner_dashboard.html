@@ -6,7 +6,18 @@
 
     <!-- Owner Dashboard -->
     <h1 class="mb-4">{% trans "Dashboard" %}</h1>
-    <div class="row g-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card h-100">
+                <div class="card-body">
+                    <a href="{% url 'wfm:employee-list' %}" class="btn btn-success w-100">
+                        <i class="bi bi-people"></i> {% trans "Mitarbeiterübersicht" %}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row g-4 mt-4">
         <!-- Mitarbeiter-Verwaltung -->
         <div class="col-md-6">
             <div class="card h-100">
@@ -16,11 +27,7 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <div class="card-body">
-                        <a href="{% url 'wfm:employee-list' %}" class="btn btn-primary w-100">
-                            <i class="bi bi-people"></i> {% trans "Mitarbeiterübersicht" %}
-                        </a>
-                    </div>
+
                     <div class="list-group">
                         <a href="{% url 'wfm:working-hours-list' %}" class="list-group-item list-group-item-action">
                             <i class="bi bi-list-ul"></i> {% trans "Arbeitszeiten-Liste" %}
@@ -32,7 +39,27 @@
                 </div>
             </div>
         </div>
-
+        <!-- Therapeuten -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-heart-pulse"></i> {% trans "Therapeuten" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{% url 'wfm:therapist-booking-list' %}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-journal-check"></i> {% trans "Therapeuten-Buchungen" %}
+                        </a>
+                        <a href="{% url 'wfm:therapist-calendar' %}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-calendar-week"></i> {% trans "Therapeuten-Kalender" %}
+                        </a>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
         <!-- Anträge & Genehmigungen -->
         <div class="col-md-6">
             <div class="card h-100">
@@ -93,29 +120,7 @@
             </div>
         </div>
 
-        <!-- Therapeuten -->
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-heart-pulse"></i> {% trans "Therapeuten" %}
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="list-group">
-                        <a href="{% url 'wfm:therapist-booking-list' %}" class="list-group-item list-group-item-action">
-                            <i class="bi bi-journal-check"></i> {% trans "Therapeuten-Buchungen" %}
-                        </a>
-                        <a href="{% url 'wfm:therapist-calendar' %}" class="list-group-item list-group-item-action">
-                            <i class="bi bi-calendar-week"></i> {% trans "Therapeuten-Kalender" %}
-                        </a>
-                        <a href="{% url 'wfm:therapist-monthly-overview' %}" class="list-group-item list-group-item-action">
-                            <i class="bi bi-graph-up"></i> {% trans "Therapeuten-Jahresüberblick" %}
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
+       
 
         
     </div>
