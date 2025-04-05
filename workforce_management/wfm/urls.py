@@ -84,11 +84,6 @@ urlpatterns = [
 
     # Finance Overview
     path('finance-overview/', views.FinanceOverviewView.as_view(), name='finance-overview'),
-
-    # Overtime Yearly Report
-    path('overtime/yearly-report/', views.OvertimeYearlyReportView.as_view(), name='overtime-yearly-report'),
-
-    # Finance Yearly Report
     path('finance/yearly-report/', views.FinanceYearlyReportView.as_view(), name='finance-yearly-report'),
 
 ]

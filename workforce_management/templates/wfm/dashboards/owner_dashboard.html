@@ -76,7 +76,10 @@
                 <div class="card-body">
                     <div class="list-group">
                         <a href="{% url 'wfm:finance-overview' %}" class="list-group-item list-group-item-action">
-                            <i class="bi bi-cash-coin"></i> {% trans "Finanzen" %}
+                            <i class="bi bi-cash-coin"></i> {% trans "Finanzen-Monatsansicht (inkl. Bezahlungen verwalten)" %}
+                        </a>
+                        <a href="{% url 'wfm:finance-yearly-report' %}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-cash-coin"></i> {% trans "Finanzen-Jahresansicht" %}
                         </a>
                         <a href="{% url 'wfm:user-documents' %}" class="list-group-item list-group-item-action">
                             <i class="bi bi-file-earmark-text"></i> {% trans "Dokumente" %}
