@@ -546,28 +546,28 @@ class VacationEntitlement(models.Model):
 
 
 
-class MonthlyReport(models.Model):
-    """Monatlicher Abrechnungsbericht"""
-    employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    month = models.IntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(12)],
-        verbose_name="Monat"
-    )
-    year = models.IntegerField(verbose_name="Jahr")
-    total_hours = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        verbose_name="Gesamtstunden"
-    )
-    total_amount = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        verbose_name="Gesamtbetrag"
-    )
-    generated_at = models.DateTimeField(auto_now_add=True)
+# class MonthlyReport(models.Model):
+#     """Monatlicher Abrechnungsbericht"""
+#     employee = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+#     month = models.IntegerField(
+#         validators=[MinValueValidator(1), MaxValueValidator(12)],
+#         verbose_name="Monat"
+#     )
+#     year = models.IntegerField(verbose_name="Jahr")
+#     total_hours = models.DecimalField(
+#         max_digits=6,
+#         decimal_places=2,
+#         verbose_name="Gesamtstunden"
+#     )
+#     total_amount = models.DecimalField(
+#         max_digits=8,
+#         decimal_places=2,
+#         verbose_name="Gesamtbetrag"
+#     )
+#     generated_at = models.DateTimeField(auto_now_add=True)
     
-    class Meta:
-        unique_together = ['employee', 'month', 'year']
+#     class Meta:
+#         unique_together = ['employee', 'month', 'year']
 
 class TimeCompensation(models.Model):
     """Zeitausgleich"""

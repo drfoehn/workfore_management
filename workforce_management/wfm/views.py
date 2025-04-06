@@ -2192,6 +2192,29 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
             year = today.year
         
         current_date = date(int(year), int(month), 1)
+        
+        # Hole alle Schließtage für den aktuellen Monat
+        closure_days = ClosureDay.objects.filter(
+            date__year=int(year),
+            date__month=int(month)
+        )
+        
+        # Erstelle ein Dictionary mit Schließtagen
+        closure_dict = {closure.date: closure for closure in closure_days}
+        
+        # Füge Schließtage-Info zu den Buchungen hinzu
+        bookings = list(context['bookings'])
+        modified_bookings = []
+        
+        for booking in bookings:
+            if booking.date in closure_dict:
+                # Wenn es ein Schließtag ist, erstelle ein "Pseudo-Booking" mit den Schließtag-Informationen
+                closure = closure_dict[booking.date]
+                booking.is_closure = True
+                booking.closure_info = closure
+                booking.title = f"{closure.get_type_display()}: {closure.name}"
+            modified_bookings.append(booking)
+        
         context.update({
             'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
@@ -2208,33 +2231,30 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
         total_sum = Decimal('0.00')           # Gesamtkosten
         is_paid = False    # Default Status bleibt PENDING
 
-        for booking in bookings:
-            # Verwendete Stunden
-            if booking.actual_hours:
-                total_actual_hours += booking.actual_hours
+        for booking in modified_bookings:
+            if not hasattr(booking, 'is_closure'):  # Nur echte Buchungen berücksichtigen
+                if booking.actual_hours:
+                    total_actual_hours += booking.actual_hours
 
-            # Gebuchte Stunden * room_rate
-            if booking.hours and booking.therapist.room_rate:
-                total_booked_amount += booking.hours * booking.therapist.room_rate
-            
-            # Mehrstunden und deren Kosten
-            if booking.difference_hours and booking.therapist.room_rate:
-                total_extra_hours += booking.difference_hours
-                extra_costs += booking.difference_hours * booking.therapist.room_rate
-                # Wenn alle Buchungen mit Mehrstunden PAID sind, setze Status auf PAID
-                if booking.is_paid:
-                    is_paid = True
+                if booking.hours and booking.therapist.room_rate:
+                    total_booked_amount += booking.hours * booking.therapist.room_rate
+                
+                if booking.difference_hours and booking.therapist.room_rate:
+                    total_extra_hours += booking.difference_hours
+                    extra_costs += booking.difference_hours * booking.therapist.room_rate
+                    if booking.is_paid:
+                        is_paid = True
 
-            # Gesamtkosten
-            total_sum = total_booked_amount + extra_costs
+        total_sum = total_booked_amount + extra_costs
 
+        context['bookings'] = modified_bookings
         context['totals'] = {
             'total_actual_hours': total_actual_hours,
             'total_extra_hours': total_extra_hours,
             'total_booked_amount': total_booked_amount,
             'extra_costs': extra_costs,
             'total_sum': total_sum,
-            'is_paid': is_paid  # Schlüssel geändert
+            'is_paid': is_paid
         }
 
         # Füge Therapeuten für Filter hinzu (nur für Owner)
@@ -4444,5 +4464,6 @@ class FinanceYearlyReportView(LoginRequiredMixin, OwnerRequiredMixin, View):
         }
         
         return render(request, self.template_name, context)
+
 
 

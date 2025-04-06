@@ -94,38 +94,48 @@
                 </thead>
                 <tbody>
                     {% for booking in bookings %}
-                        <tr>
-                            <td>{{ booking.date|date:"d.m.Y" }}</td>
+                        <tr {% if booking.is_closure %}class="table-danger"{% endif %}>
                             <td>
-                                <span class="badge" style="background-color: {{ booking.therapist.color }}">
-                                    {{ booking.therapist.get_full_name|default:booking.therapist.username }}
-                                </span>
+                                {{ booking.date|date:"d.m.Y" }}
+
                             </td>
-                            <td>{{ booking.start_time|time:"H:i" }}</td>
-                            <td>{{ booking.end_time|time:"H:i" }}</td>
-                            <td>{{ booking.hours|floatformat:2 }}</td>
-                            <td>{{ booking.actual_hours|default_if_none:"-"|floatformat:2 }}</td>
+                            <td>
+                                {% if booking.is_closure %}
+                                    <span class="badge bg-danger">
+                                        {{ booking.closure_info.get_type_display }}: {{ booking.closure_info.name }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge" style="background-color: {{ booking.therapist.color }}">
+                                        {{ booking.therapist.get_full_name|default:booking.therapist.username }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>{% if not booking.is_closure %}{{ booking.start_time|time:"H:i" }}{% else %}-{% endif %}</td>
+                            <td>{% if not booking.is_closure %}{{ booking.end_time|time:"H:i" }}{% else %}-{% endif %}</td>
+                            <td>{% if not booking.is_closure %}{{ booking.hours|floatformat:2 }}{% else %}-{% endif %}</td>
+                            <td>{% if not booking.is_closure %}{{ booking.actual_hours|default_if_none:"-"|floatformat:2 }}{% else %}-{% endif %}</td>
                             <td class="{% if booking.difference_hours %}text-danger{% endif %}">
-                                {{ booking.difference_hours|default_if_none:"-"|floatformat:2 }}
+                                {% if not booking.is_closure %}{{ booking.difference_hours|default_if_none:"-"|floatformat:2 }}{% else %}-{% endif %}
                             </td>
-                        
-                            <td>{{ booking.notes|default:"-" }}</td>
+                            <td>{% if not booking.is_closure %}{{ booking.notes|default:"-" }}{% else %}{{ booking.closure_info.notes|default:"-" }}{% endif %}</td>
                             <td>
-                                <div class="btn-group">
-                                    <button class="btn btn-sm btn-outline-secondary" 
-                                            onclick="openBookingModal({{ booking.id }})"
-                                            title="{% trans 'Bearbeiten' %}">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    {% if user.role == 'OWNER' %}
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-danger"
-                                                onclick="deleteBooking({{ booking.id }})"
-                                                title="{% trans 'Löschen' %}">
-                                            <i class="bi bi-trash"></i>
+                                {% if not booking.is_closure %}
+                                    <div class="btn-group">
+                                        <button class="btn btn-sm btn-outline-secondary" 
+                                                onclick="openBookingModal({{ booking.id }})"
+                                                title="{% trans 'Bearbeiten' %}">
+                                            <i class="bi bi-pencil"></i>
                                         </button>
-                                    {% endif %}
-                                </div>
+                                        {% if user.role == 'OWNER' %}
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    onclick="deleteBooking({{ booking.id }})"
+                                                    title="{% trans 'Löschen' %}">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
                             </td>
                         </tr>
                     {% empty %}

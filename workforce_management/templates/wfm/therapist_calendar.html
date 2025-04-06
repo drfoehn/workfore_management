@@ -121,8 +121,6 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         
         eventDidMount: function(info) {
-            
-            
             // Tooltip mit Details
             const event = info.event;
             const props = event.extendedProps;
@@ -147,12 +145,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 placement: 'top',
                 container: 'body'
             });
+            
+            // Spezielle Styling für Schließtage
+            if (info.event.classNames.includes('closure-day-event')) {
+                // Mache den Tag im Kalender nicht klickbar
+                info.el.style.cursor = 'not-allowed';
+                
+                // Füge Tooltip hinzu
+                new bootstrap.Tooltip(info.el, {
+                    title: info.event.title,
+                    placement: 'top',
+                    container: 'body'
+                });
+            }
         }
     });
     
     calendar.render();
-
-
 });
 </script>
 {% endblock %} 

@@ -363,3 +363,19 @@ a:hover {
     margin-top: 2px;
     white-space: pre-wrap;
 }
+
+.closure-day-event {
+    background-color: #f8d7da !important;
+    border-color: #f5c6cb !important;
+    color: #721c24 !important;
+    cursor: not-allowed !important;
+    opacity: 0.8;
+}
+
+.fc-day.closure-day {
+    background-color: #fff3f3;
+}
+
+.table-secondary.closure-day {
+    background-color: #f8d7da;
+}

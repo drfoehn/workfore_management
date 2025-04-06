@@ -11,7 +11,7 @@ from .models import (
     TimeCompensation,
     TherapistBooking,
     TherapistScheduleTemplate,
-    MonthlyReport,
+    # MonthlyReport,
     OvertimeAccount,
     UserDocument,
     ClosureDay,
@@ -184,12 +184,12 @@ class TherapistScheduleTemplateAdmin(admin.ModelAdmin):
     list_filter = ('weekday', 'therapist')
     search_fields = ('therapist__username',)
 
-@admin.register(MonthlyReport)
-class MonthlyReportAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'month', 'year', 'total_hours', 'total_amount')
-    list_filter = ('year', 'month', 'employee')
-    search_fields = ('employee__username',)
-    date_hierarchy = 'generated_at'
+# @admin.register(MonthlyReport)
+# class MonthlyReportAdmin(admin.ModelAdmin):
+#     list_display = ('employee', 'month', 'year', 'total_hours', 'total_amount')
+#     list_filter = ('year', 'month', 'employee')
+#     search_fields = ('employee__username',)
+#     date_hierarchy = 'generated_at'
 
 @admin.register(OvertimeAccount)
 class OvertimeAccountAdmin(admin.ModelAdmin):
