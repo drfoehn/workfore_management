@@ -84,10 +84,10 @@
                                     <td>
                                         {% if income.difference_hours > 0 %}
                                         {% if not income.is_paid %}
-                                        <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
-                                    {% else %}
-                                        <span class="badge bg-success">{% trans "Bezahlt" %}</span>
-                                    {% endif %}
+                                                <span class="badge bg-warning">{% trans "Ausstehend" %}</span>
+                                            {% else %}
+                                                <span class="badge bg-success">{% trans "Bezahlt" %}</span>
+                                            {% endif %}
                                         {% else %}
                                             -
                                         {% endif %}
@@ -287,28 +287,28 @@
                     <!-- Überstunden-Ausgaben -->
                     <h4>{% trans "Überstunden-Ausgaben" %}</h4>
                     
-{% if overtime_expenses %}
+                            {% if overtime_expenses %}
 <div class="table-responsive mb-4">
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>{% trans "Mitarbeiter" %}</th>
-                <th>{% trans "Position" %}</th>
-                <th>{% trans "Überstunden" %}</th>
-                <th>{% trans "Betrag" %}</th>
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>{% trans "Mitarbeiter" %}</th>
+                                            <th>{% trans "Position" %}</th>
+                                            <th>{% trans "Überstunden" %}</th>
+                                            <th>{% trans "Betrag" %}</th>
                 <th>{% trans "Status" %}</th>
                 <th>{% trans "Markiert am" %}</th>
                 <th>{% trans "Bezahlt am" %}</th>
                 <th>{% trans "Aktionen" %}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for expense in overtime_expenses %}
-            <tr>
-                <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
-                <td>{{ expense.role_display }}</td>
-                <td>{{ expense.overtime_hours|floatformat:1 }} h</td>
-                <td>{{ expense.amount|floatformat:2 }} €</td>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for expense in overtime_expenses %}
+                                        <tr>
+                                            <td>{{ expense.employee__first_name }} {{ expense.employee__last_name }}</td>
+                                            <td>{{ expense.role_display }}</td>
+                                            <td>{{ expense.overtime_hours|floatformat:1 }} h</td>
+                                            <td>{{ expense.amount|floatformat:2 }} €</td>
                 <td>
                     {% if expense.is_paid %}
                         <span class="badge bg-success">{% trans "Bezahlt" %}</span>
@@ -336,12 +336,12 @@
                         {% endif %}
                     </button>
                 </td>
-            </tr>
-            {% endfor %}
+                                        </tr>
+                                        {% endfor %}
             
         
-        </tbody>
-        <tfoot>
+                                    </tbody>
+                                    <tfoot>
             <tr class="table">
                 <td colspan="2" class="table-sum"><strong>{% trans "Gesamt" %}</strong></td>
                 <td class="table-sum"><strong>{{ total_overtime_hours|floatformat:1 }} h</strong></td>
@@ -351,13 +351,13 @@
                 <td class="table-sum"></td>
                 <td class="table-sum"></td>
                 <td class="table-sum"></td>
-            </tr>
-        </tfoot>
-    </table>
-</div>
-{% else %}
-<p class="text-muted mb-0">{% trans "Keine Überstunden im ausgewählten Zeitraum" %}</p>
-{% endif %}
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted mb-0">{% trans "Keine Überstunden im ausgewählten Zeitraum" %}</p>
+                            {% endif %}
                         
                 </div>
             </div>

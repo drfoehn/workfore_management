@@ -223,17 +223,12 @@ class WorkingHours(models.Model):
     # Soll-Zeiten
     # soll_start = models.TimeField(null=True, blank=True)
     # soll_end = models.TimeField(null=True, blank=True)
-
-    # Stunden
-    ist_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     # soll_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
-    # Füge related_names hinzu
+    ist_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     vacation = models.ForeignKey('Vacation', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
     time_comp = models.ForeignKey('TimeCompensation', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
     sick_leave = models.ForeignKey('SickLeave', on_delete=models.SET_NULL, null=True, blank=True, related_name='working_hours')
-
-    # Neues Feld
     is_paid = models.BooleanField(default=False)
     paid_date = models.DateField(null=True, blank=True)
 
@@ -1166,7 +1161,17 @@ class MonthlyWage(models.Model):
     )
     year = models.IntegerField()
     month = models.IntegerField()
+    total_scheduled_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0')
+    )
     total_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0')
+    )
+    difference_hours = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=Decimal('0')
@@ -1205,6 +1210,25 @@ class MonthlyWage(models.Model):
         # Konvertiere zu Dezimalstunden
         self.total_hours = Decimal(str(monthly_working_hours.total_seconds() / 3600))
         
+        # monthly_scheduled_hours = ScheduleTemplate.objects.filter(
+        #     employee=self.employee,
+        #     valid_from__year=self.year,
+        #     valid_from__month=self.month
+        # ).aggregate(
+        #     total_hours=models.Sum(
+        #         models.ExpressionWrapper(
+        #             models.F('end_time') - models.F('start_time'),
+        #             output_field=models.DurationField()
+        #         )
+        #     )
+        # )['total_scheduled_hours'] or timedelta()
+
+        # # Konvertiere zu Dezimalstunden
+        # self.total_scheduled_hours = Decimal(str(monthly_scheduled_hours.total_seconds() / 3600))
+
+        # # Berechne die Differenz zwischen geplanten und tatsächlichen Stunden
+        # self.difference_hours = self.total_scheduled_hours - self.total_hours   
+
         # Prüfe ob hourly_rate existiert
         if self.employee.hourly_rate is not None:
             self.wage = self.total_hours * self.employee.hourly_rate

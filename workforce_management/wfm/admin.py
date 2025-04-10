@@ -263,9 +263,13 @@ class MonthlyWageAdmin(admin.ModelAdmin):
     list_display = [
         'employee', 
         'year', 
-        'month', 
+        'month',
+        'total_scheduled_hours',
         'total_hours',
+        'difference_hours',
         'wage',
+        'is_paid',
+        'paid_date',
         'updated_at'
     ]
     list_filter = ['year', 'month', 'employee']
@@ -274,7 +278,7 @@ class MonthlyWageAdmin(admin.ModelAdmin):
         'employee__first_name', 
         'employee__last_name'
     ]
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'total_scheduled_hours', 'difference_hours']
     ordering = ['-year', '-month', 'employee__first_name']
     
     actions = ['recalculate_wages', 'change_is_paid_true', 'change_is_paid_false']

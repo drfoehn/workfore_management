@@ -259,15 +259,12 @@ class WorkingHoursListView(LoginRequiredMixin, ListView):
                             start = datetime.combine(date.min, has_schedule.start_time)
                             end = datetime.combine(date.min, has_schedule.end_time)
                             duration = end - start  # Berechne duration hier
-                            
                             if has_schedule.break_duration:
                                 entry['break_minutes'] = int(has_schedule.break_duration.total_seconds() / 60)
                                 duration = duration - has_schedule.break_duration  # Ziehe Pause von duration ab
-
                             else:
                                 entry['break_minutes'] = None
-                            if has_schedule.break_duration:
-                                duration = duration - has_schedule.break_duration
+                            
                             entry['soll_hours'] = duration.total_seconds() / 3600
                             total_soll += entry['soll_hours']
 
@@ -628,10 +625,10 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
             
             # Hole die aktuelle Gesamtbilanz
             total_balance = OvertimeAccount.get_current_balance(request.user)
-            
+        
             # Hole die Summe aller nicht bezahlten markierten Stunden
             marked_hours = OvertimePayment.objects.filter(
-                employee=request.user,
+            employee=request.user,
                 is_paid=False
             ).aggregate(
                 total=Coalesce(Sum('hours_for_payment'), Decimal('0'))
@@ -639,15 +636,15 @@ class OvertimeOverviewView(LoginRequiredMixin, View):
 
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
-                    'balance': float(total_balance),
-                    'hours_for_payment': float(marked_hours),
-                    'remaining_balance': float(total_balance - marked_hours)
+                            'balance': float(total_balance),
+                            'hours_for_payment': float(marked_hours),
+                            'remaining_balance': float(total_balance - marked_hours)
                 })
                 
             context = {
-                'balance': total_balance,
-                'hours_for_payment': marked_hours,
-                'remaining_balance': total_balance - marked_hours,
+                        'balance': total_balance,
+                        'hours_for_payment': marked_hours,
+                        'remaining_balance': total_balance - marked_hours,
                 'month_name': target_date.strftime('%B %Y')
             }
             
@@ -1571,7 +1568,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         templates = {
             'OWNER': 'wfm/dashboards/owner_dashboard.html',
             'ASSISTANT': 'wfm/dashboards/assistant_dashboard.html',
-            'CLEANING': 'wfm/dashboards/cleaning_dashboard.html',
+            'CLEANING': 'wfm/dashboards/assistant_dashboard.html',
             'THERAPIST': 'wfm/dashboards/therapist_dashboard.html'
         }
         return [templates.get(self.request.user.role, 'wfm/dashboards/assistant_dashboard.html')]
@@ -1813,17 +1810,17 @@ class AssistantCalendarEventsView(View):
         show_absences_only = request.GET.get('absences') == '1'
         
         # Hole employee und role Filter
-        employee_id = request.GET.get('employee')  
+        employee_id = request.GET.get('employee')
         role = request.GET.get('role')
         
         # Basis-Filter für Mitarbeiter
         employee_filter = {}
-        if employee_id:  
+        if employee_id:
             employee_filter['employee_id'] = employee_id  
         if role:
             employee_filter['employee__role'] = role
 
-        events = []
+            events = []
 
         # Lade IMMER die Abwesenheiten
         # Urlaub
@@ -2245,7 +2242,7 @@ class TherapistBookingListView(LoginRequiredMixin, ListView):
                     if booking.is_paid:
                         is_paid = True
 
-        total_sum = total_booked_amount + extra_costs
+            total_sum = total_booked_amount + extra_costs
 
         context['bookings'] = modified_bookings
         context['totals'] = {
@@ -2873,7 +2870,7 @@ def upload_document(request):
             # Überprüfe Berechtigungen
             if request.user.role != 'OWNER' and str(request.user.id) != user_id:
                 messages.error(request, gettext('Keine Berechtigung'))
-                return redirect('wfm:user-documents')
+            return redirect('wfm:user-documents')
             
             # Erstelle das Dokument
             document = UserDocument.objects.create(
@@ -3260,6 +3257,7 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
+        # Get current month/year
         month = self.request.GET.get('month')
         year = self.request.GET.get('year')
         if not month or not year:
@@ -3270,10 +3268,54 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             month = int(month)
             year = int(year)
 
-        # Create current_date for navigation
         current_date = datetime_date(year, month, 1)
 
-        # 1. Einnahmen von Therapeuten
+        # --- START DER KORREKTUR FÜR SOLL-STUNDEN BERECHNUNG ---
+        # Berechne die Soll-Stunden für den Monat pro Mitarbeiter
+        first_day_of_month = date(int(year), int(month), 1)
+        last_day_of_month = (first_day_of_month + relativedelta(months=1)) - timedelta(days=1)
+
+        # Hole alle potenziell relevanten Templates für Assistenten/Reinigung
+        relevant_templates = ScheduleTemplate.objects.filter(
+            employee__role__in=['ASSISTANT', 'CLEANING'],
+            valid_from__lte=last_day_of_month
+        ).select_related('employee').order_by('employee', '-valid_from')
+
+        monthly_scheduled_hours_per_employee = {} # Dict zum Speichern der Soll-Stunden
+
+        # Gehe durch jeden Tag des Monats
+        d = first_day_of_month
+        while d <= last_day_of_month:
+            weekday = d.weekday() # 0 = Montag, ..., 6 = Sonntag
+
+            # Finde das passende Template für jeden Mitarbeiter für diesen Tag
+            current_templates_for_day = {}
+            for template in relevant_templates:
+                # Nur das neueste gültige Template pro Mitarbeiter berücksichtigen
+                if template.employee_id not in current_templates_for_day and template.valid_from <= d:
+                    current_templates_for_day[template.employee_id] = template
+
+            # Addiere die Stunden des gültigen Templates zum Monatstotal
+            for employee_id, template in current_templates_for_day.items():
+                 if template.weekday == weekday: # Prüfe ob das Template für diesen Wochentag gilt
+                    if employee_id not in monthly_scheduled_hours_per_employee:
+                        monthly_scheduled_hours_per_employee[employee_id] = Decimal('0.00')
+
+                    # Berechne die Stunden für dieses Template
+                    duration = (
+                        datetime.combine(date.min, template.end_time) -
+                        datetime.combine(date.min, template.start_time)
+                    ).total_seconds() / 3600
+                    print(duration)
+                    if template.break_duration:
+                        duration -= template.break_duration.total_seconds() / 3600
+                    print(duration)
+                    monthly_scheduled_hours_per_employee[employee_id] += Decimal(str(duration))
+
+            d += timedelta(days=1)
+        # --- ENDE DER KORREKTUR FÜR SOLL-STUNDEN BERECHNUNG ---
+
+        # 1. Einnahmen von Therapeuten (BLEIBT UNVERÄNDERT)
         therapist_income = TherapistBooking.objects.filter(
             date__year=year,
             date__month=month
@@ -3282,7 +3324,7 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
             'therapist__first_name',
             'therapist__last_name',
             'therapist__room_rate',
-            'is_paid',  # Neue Felder
+            'is_paid',
             'paid_date'
         ).annotate(
             scheduled_hours=Coalesce(Sum('hours'), Value(0, output_field=DecimalField())),
@@ -3317,7 +3359,7 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                     'difference_hours': booking['difference_hours'],
                     'room_cost': booking['room_cost'],
                     'extra_cost': booking['extra_cost'],
-                    'is_paid': booking['is_paid'],  # Neue Felder
+                    'is_paid': booking['is_paid'],
                     'paid_date': booking['paid_date'],
                     'total': booking['room_cost'] + booking['extra_cost']
                 }
@@ -3328,86 +3370,60 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         total_therapist_room_cost = sum(income['room_cost'] for income in grouped_income.values())
         total_therapist_difference_hours = sum(income['difference_hours'] for income in grouped_income.values())
         total_therapist_extra_cost = sum(income['extra_cost'] for income in grouped_income.values())
+        total_income = sum(income['total'] for income in grouped_income.values())
+
 
         # 2. Ausgaben für Mitarbeiter
-        # Hole die Daten aus der WorkingHoursListView
-        working_hours_view = WorkingHoursListView()
-        working_hours_view.request = self.request
-        working_hours_view.kwargs = {'year': year, 'month': month}
-        working_hours_view.object_list = working_hours_view.get_queryset()  # Setze object_list
-        working_hours_context = working_hours_view.get_context_data()
+        # Hole die MonthlyWage Einträge für den ausgewählten Monat (BLEIBT UNVERÄNDERT)
+        monthly_wages_data = MonthlyWage.objects.filter(
+            month=month,
+            year=year,
+            employee__role__in=['ASSISTANT', 'CLEANING']
+        ).select_related('employee')
 
-        # Extrahiere die relevanten Daten für Assistenten und Reinigungskräfte
-        assistant_expenses = {}  # Verwende ein Dict statt Liste für eindeutige Einträge
-        cleaning_expenses = {}   # Verwende ein Dict statt Liste für eindeutige Einträge
+        # Erstelle assistant_expenses und cleaning_expenses
+        assistant_expenses = {}
+        cleaning_expenses = {}
 
-        for date_data in working_hours_context['dates']:
-            if date_data.get('employee'):
-                employee = date_data['employee']
-                if employee.role == 'ASSISTANT':
-                    if employee.id not in assistant_expenses:
-                        assistant_expenses[employee.id] = {
-                            'employee__id': employee.id,
-                            'employee__first_name': employee.first_name,
-                            'employee__last_name': employee.last_name,
-                            'employee__hourly_rate': employee.hourly_rate,
-                            'total_soll': Decimal('0'),
-                            'worked_hours': Decimal('0'),
-                            'absence_hours': Decimal('0')
-                        }
-                    # Sicherere Konvertierung der Stunden
-                    try:
-                        soll_hours = date_data.get('soll_hours', 0)
-                        if soll_hours is None:
-                            soll_hours = 0
-                        assistant_expenses[employee.id]['total_soll'] += Decimal(str(float(soll_hours)))
-                        
-                        ist_hours = date_data.get('ist_hours', 0)
-                        if ist_hours is None:
-                            ist_hours = 0
-                        assistant_expenses[employee.id]['worked_hours'] += Decimal(str(float(ist_hours)))
-                    except (TypeError, ValueError, decimal.InvalidOperation):
-                        # Falls die Konvertierung fehlschlägt, füge 0 hinzu
-                        assistant_expenses[employee.id]['total_soll'] += Decimal('0')
-                        assistant_expenses[employee.id]['worked_hours'] += Decimal('0')
+        for wage_entry in monthly_wages_data:
+            employee = wage_entry.employee
+            employee_id = employee.id
 
-                elif employee.role == 'CLEANING':
-                    if employee.id not in cleaning_expenses:
-                        cleaning_expenses[employee.id] = {
-                            'employee__id': employee.id,
-                            'employee__first_name': employee.first_name,
-                            'employee__last_name': employee.last_name,
-                            'employee__hourly_rate': employee.hourly_rate,
-                            'total_soll': Decimal('0'),
-                            'worked_hours': Decimal('0'),
-                            'absence_hours': Decimal('0')
-                        }
-                    # Sicherere Konvertierung der Stunden
-                    try:
-                        soll_hours = date_data.get('soll_hours', 0)
-                        if soll_hours is None:
-                            soll_hours = 0
-                        cleaning_expenses[employee.id]['total_soll'] += Decimal(str(float(soll_hours)))
-                        
-                        ist_hours = date_data.get('ist_hours', 0)
-                        if ist_hours is None:
-                            ist_hours = 0
-                        cleaning_expenses[employee.id]['worked_hours'] += Decimal(str(float(ist_hours)))
-                    except (TypeError, ValueError, decimal.InvalidOperation):
-                        # Falls die Konvertierung fehlschlägt, füge 0 hinzu
-                        cleaning_expenses[employee.id]['total_soll'] += Decimal('0')
-                        cleaning_expenses[employee.id]['worked_hours'] += Decimal('0')
+            # --- ANPASSUNG: Nutze die berechneten Soll-Stunden ---
+            total_scheduled = monthly_scheduled_hours_per_employee.get(employee_id, Decimal('0.00'))
+            # --- ENDE ANPASSUNG ---
 
-        # Berechne die finalen Werte für jeden Mitarbeiter
-        for expense in assistant_expenses.values():
-            expense['absence_hours'] = expense['total_soll'] - expense['worked_hours']
-            expense['amount'] = expense['total_soll'] * expense['employee__hourly_rate']
+            # Hole Ist-Stunden aus MonthlyWage (BLEIBT UNVERÄNDERT)
+            total_worked = wage_entry.total_hours or Decimal('0.00')
 
-        for expense in cleaning_expenses.values():
-            expense['absence_hours'] = expense['total_soll'] - expense['worked_hours']
-            expense['amount'] = expense['total_soll'] * expense['employee__hourly_rate']
+            # Berechne Differenz (BLEIBT UNVERÄNDERT)
+            difference = total_scheduled - total_worked
 
-        # Berechne die Summen für die Ausgaben
+            # Berechne den Lohn basierend auf Soll-Stunden (BLEIBT UNVERÄNDERT)
+            amount = total_scheduled * employee.hourly_rate if employee.hourly_rate else Decimal('0.00')
+
+            # Hole Bezahlstatus (BLEIBT UNVERÄNDERT)
+            salary_payment = monthly_wages_data.filter(employee=employee, month=month, year=year).first()
+
+            expense_data = {
+                'employee__id': employee_id,
+                'employee__first_name': employee.first_name,
+                'employee__last_name': employee.last_name,
+                'employee__hourly_rate': employee.hourly_rate,
+                'total_soll': total_scheduled.quantize(Decimal("0.01")), # Verwende berechneten Wert
+                'worked_hours': total_worked.quantize(Decimal("0.01")),
+                'absence_hours': difference.quantize(Decimal("0.01")),
+                'amount': amount.quantize(Decimal("0.01")),
+                'is_paid': salary_payment.is_paid if salary_payment else False,
+                'paid_date': salary_payment.paid_date if salary_payment else None
+            }
+
+            if employee.role == 'ASSISTANT':
+                assistant_expenses[employee_id] = expense_data
+            elif employee.role == 'CLEANING':
+                cleaning_expenses[employee_id] = expense_data
+
+        # Berechne die Summen für die Ausgaben (BLEIBT UNVERÄNDERT)
         total_assistant_soll_hours = sum(expense['total_soll'] for expense in assistant_expenses.values())
         total_assistant_ist_hours = sum(expense['worked_hours'] for expense in assistant_expenses.values())
         total_assistant_absence_hours = sum(expense['absence_hours'] for expense in assistant_expenses.values())
@@ -3418,13 +3434,14 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
         total_cleaning_absence_hours = sum(expense['absence_hours'] for expense in cleaning_expenses.values())
         total_cleaning_amount = sum(expense['amount'] for expense in cleaning_expenses.values())
 
-        # c) Überstunden-Ausgaben
+
+        # 3. Überstunden-Ausgaben (BLEIBT UNVERÄNDERT)
         overtime_expenses = OvertimePayment.objects.filter(
             created_at__year=year,
             created_at__month=month,
-            hours_for_payment__gt=0  # Nur Einträge mit zu bezahlenden Stunden
+            hours_for_payment__gt=0
         ).select_related('employee').values(
-            'id',  # Stelle sicher, dass die ID hier mit ausgewählt wird
+            'id',
             'employee__id',
             'employee__first_name',
             'employee__last_name',
@@ -3458,48 +3475,36 @@ class FinanceOverviewView(LoginRequiredMixin, OwnerRequiredMixin, TemplateView):
                 'CLEANING': gettext('Reinigungskraft')
             }.get(expense['employee__role'], expense['employee__role'])
 
-        # Berechne Summen
-        total_income = sum(
-            income['total']
-            for income in grouped_income.values()
-        )
+        # 4. Gesamtausgaben berechnen (BLEIBT UNVERÄNDERT)
+        total_expenses = total_assistant_amount + total_cleaning_amount + total_overtime_amount
 
-
-        # Berechne die Summen für die Ausgaben
-        total_expenses = sum(
-            a['amount'] for a in assistant_expenses.values()) + sum(c['amount'] for c in cleaning_expenses.values()) + total_overtime_amount
-        
-        
-        
+        # 5. Kontext zusammenstellen (BLEIBT UNVERÄNDERT)
         context.update({
             'grouped_income': grouped_income.values(),
-            'total_therapist_hours': total_therapist_hours,
-            'total_therapist_room_cost': total_therapist_room_cost,
-            'total_therapist_difference_hours': total_therapist_difference_hours,
-            'total_therapist_extra_cost': total_therapist_extra_cost,
-            'assistant_expenses': assistant_expenses.values(),
-            'cleaning_expenses': cleaning_expenses.values(),
-            'overtime_expenses': overtime_expenses,
-            'total_overtime_hours': total_overtime_hours,
-            'total_overtime_amount': total_overtime_amount,
-            'total_income': total_income,
-            'total_expenses': total_expenses,
-            'total_assistant_soll_hours': total_assistant_soll_hours,
-            'total_assistant_ist_hours': total_assistant_ist_hours,
-            'total_assistant_absence_hours': total_assistant_absence_hours,
-            'total_assistant_amount': total_assistant_amount,
-
-            'total_cleaning_soll_hours': total_cleaning_soll_hours,
-            'total_cleaning_ist_hours': total_cleaning_ist_hours,
-            'total_cleaning_absence_hours': total_cleaning_absence_hours,
-            'total_cleaning_amount': total_cleaning_amount,
             'current_date': current_date,
             'month_name': current_date.strftime('%B %Y'),
             'prev_month': (current_date - relativedelta(months=1)),
             'next_month': (current_date + relativedelta(months=1)),
-            'total_soll_per_employee': working_hours_context['total_soll_per_employee'],
-            'total_ist_per_employee': working_hours_context['total_ist_per_employee'],
-            'monthly_wages_per_employee': working_hours_context['monthly_wages_per_employee'],
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'grouped_income': list(grouped_income.values()), # In Liste umwandeln
+            'assistant_expenses': list(assistant_expenses.values()), # In Liste umwandeln
+            'cleaning_expenses': list(cleaning_expenses.values()),   # In Liste umwandeln
+            'overtime_expenses': overtime_expenses,
+            'total_therapist_hours': total_therapist_hours,
+            'total_therapist_room_cost': total_therapist_room_cost,
+            'total_therapist_difference_hours': total_therapist_difference_hours,
+            'total_therapist_extra_cost': total_therapist_extra_cost,
+            'total_assistant_soll_hours': total_assistant_soll_hours,
+            'total_assistant_ist_hours': total_assistant_ist_hours,
+            'total_assistant_absence_hours': total_assistant_absence_hours,
+            'total_assistant_amount': total_assistant_amount,
+            'total_cleaning_soll_hours': total_cleaning_soll_hours,
+            'total_cleaning_ist_hours': total_cleaning_ist_hours,
+            'total_cleaning_absence_hours': total_cleaning_absence_hours,
+            'total_cleaning_amount': total_cleaning_amount,
+            'total_overtime_hours': total_overtime_hours,
+            'total_overtime_amount': total_overtime_amount,
         })
         
         return context
