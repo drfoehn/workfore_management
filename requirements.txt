@@ -1,10 +1,14 @@
-asgiref==3.8.1
 crispy-bootstrap5==2024.10
+diff-match-patch==20241021
 Django==5.1.6
 django-crispy-forms==2.3
+django-import-export==4.3.6
+holidays==0.69
+mysqlclient==2.2.7
 pillow==11.1.0
 python-dateutil==2.9.0.post0
+python-dotenv==1.1.0
 six==1.17.0
 sqlparse==0.5.3
+tablib==3.8.0
 tzdata==2025.1
-django-import-export>=3.3.1

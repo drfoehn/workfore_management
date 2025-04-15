@@ -19,7 +19,18 @@ var/
 .installed.cfg
 *.egg
 
-# Django
+*.py[cod]
+*$py.class
+
+# Static files
+/staticfiles/
+/media/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
 *.log
 *.pot
 *.pyc
@@ -33,6 +44,11 @@ staticfiles/
 venv/
 ENV/
 .env
+# Environment
+.env
+.env.*
+!.env.example
+
 
 # IDE
 .idea/
@@ -40,6 +56,10 @@ ENV/
 *.swp
 *.swo
 .DS_Store
+
+# Database
+*.sqlite3
+*.sqlite3-journal
 
 # Local development settings
 local_settings.py
